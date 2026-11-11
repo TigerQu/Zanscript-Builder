@@ -1,0 +1,4105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zantiks MWP Script Builder</title>
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --surface: #ffffff;
+    --surface-subtle: #f8fafc;
+    --border: #d0d7de;
+    --border-muted: #e5e9f0;
+    --text: #1f2328;
+    --text-muted: #59636e;
+    --accent: #0969da;
+    --accent-hover: #0550ae;
+    --accent-soft: #ddf4ff;
+    --accent-border: #54aeff;
+    --success: #1a7f37;
+    --success-soft: #dafbe1;
+    --warn: #9a6700;
+    --warn-soft: #fff8c5;
+    --code-bg: #0d1117;
+    --code-text: #e6edf3;
+    --radius: 8px;
+    --radius-sm: 6px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .topbar-title h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .badge-hw {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid rgba(9, 105, 218, 0.25);
+  }
+
+  .badge-custom {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--success-soft);
+    color: var(--success);
+    border: 1px solid rgba(26, 127, 55, 0.28);
+  }
+
+  .badge-warn {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--warn-soft);
+    color: var(--warn);
+    border: 1px solid rgba(154, 103, 0, 0.28);
+  }
+
+  .topbar-title p {
+    margin: 3px 0 0;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 13px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  .btn:hover {
+    background: #f3f4f6;
+    border-color: #afb8c1;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+
+  .btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .btn-xs {
+    padding: 2px 7px;
+    font-size: 11px;
+  }
+
+  /* Main Layout */
+  .container {
+    max-width: 1420px;
+    margin: 0 auto;
+    padding: 20px 24px 40px;
+    display: grid;
+    grid-template-columns: minmax(430px, 550px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  @media (max-width: 1024px) {
+    .container {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .card-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--text);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .card-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* Researcher Name Preview Bar */
+  .name-preview-bar {
+    margin-top: 10px;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-muted);
+    font-size: 11.5px;
+    color: var(--text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    align-items: center;
+  }
+
+  .name-preview-bar code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .name-warn {
+    margin-top: 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--warn-soft);
+    border: 1px solid rgba(154, 103, 0, 0.35);
+    color: var(--warn);
+    font-size: 11.5px;
+    display: none;
+  }
+
+  .name-warn.show {
+    display: block;
+  }
+
+  /* Organism Presets */
+  .preset-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  @media (max-width: 560px) {
+    .preset-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .chip {
+    width: 100%;
+    height: 34px;
+    padding: 0 10px;
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+
+  .chip:hover {
+    border-color: #8c959f;
+    background: var(--surface-subtle);
+  }
+
+  .chip.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  .preset-summary {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    background: var(--surface-subtle);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Plate Selector Grid */
+  .plate-layout-wrap {
+    display: grid;
+    grid-template-columns: 1fr 136px;
+    gap: 12px;
+    align-items: center;
+  }
+
+  @media (max-width: 560px) {
+    .plate-layout-wrap {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .plate-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 7px;
+  }
+
+  .option-tile {
+    position: relative;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    padding: 8px 9px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.12s;
+  }
+
+  .option-tile:hover {
+    border-color: #8c959f;
+    background: var(--surface-subtle);
+  }
+
+  .option-tile.active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  .option-tile .tile-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .option-tile.active .tile-name {
+    color: var(--accent);
+  }
+
+  .tile-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    flex-shrink: 0;
+  }
+
+  .option-tile .tile-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 1px;
+  }
+
+  .plate-preview-box {
+    border: 1px solid var(--border-muted);
+    background: var(--surface-subtle);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .plate-preview-caption {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    margin-top: 4px;
+    text-align: center;
+  }
+
+  /* Inline Plate Geometry Editor */
+  details.geo-inline-box {
+    margin-top: 12px;
+    border: 1px solid var(--border-muted);
+    background: var(--surface-subtle);
+    border-radius: var(--radius-sm);
+    padding: 8px 11px;
+  }
+
+  details.geo-inline-box summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  details.geo-inline-box summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .geo-summary-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  .geo-inline-body {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-muted);
+  }
+
+  .geo-inline-actions {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* Stimulus Selector */
+  .stim-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+
+  .params-box {
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-muted);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 12px;
+  }
+
+  .form-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  @media (max-width: 560px) {
+    .form-grid,
+    .form-grid-3 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .field label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .field input[type="number"],
+  .field input[type="text"],
+  .field select {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-family: var(--font-sans);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .field input:disabled {
+    background: #eaeef2;
+    color: var(--text-muted);
+  }
+
+  .field input:focus,
+  .field select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
+  }
+
+  /* Timeline Preview */
+  .timeline-wrap {
+    margin-top: 12px;
+  }
+
+  .timeline-bar {
+    height: 18px;
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    border: 1px solid var(--border);
+    background: #eaeef2;
+  }
+
+  .tl-seg {
+    height: 100%;
+    font-size: 9.5px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .tl-acclim { background: #d8dee4; color: #24292f; }
+  .tl-light  { background: #fff8c5; color: #7d4e00; }
+  .tl-dark   { background: #24292f; color: #f0f6fc; }
+  .tl-pulse  { background: #ff818266; color: #82071e; }
+  .tl-vib    { background: #ddf4ff; color: #0550ae; }
+
+  .timeline-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Checkboxes for Measurements */
+  .check-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-muted);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+  }
+
+  .check-item:hover {
+    border-color: var(--border);
+  }
+
+  .check-item.checked {
+    border-color: var(--accent-border);
+    background: #f0f8ff;
+  }
+
+  .check-item input[type="checkbox"] {
+    margin-top: 2px;
+    accent-color: var(--accent);
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .check-body {
+    flex: 1;
+  }
+
+  .check-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .check-desc {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  .code-pill {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: rgba(175, 184, 193, 0.2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--text);
+  }
+
+  /* Collapsible Advanced Section */
+  details.advanced-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 18px;
+  }
+
+  details.advanced-card summary {
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-muted);
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  details.advanced-card summary::-webkit-details-marker {
+    display: none;
+  }
+
+  details.advanced-card summary::after {
+    content: "+ Expand";
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  details.advanced-card[open] summary::after {
+    content: "− Collapse";
+  }
+
+  .advanced-body {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .inline-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  /* Right Output Panel */
+  .output-panel {
+    position: sticky;
+    top: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .summary-strip {
+    padding: 12px 16px;
+    background: var(--surface-subtle);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .metrics-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .metric-stat {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .metric-stat .stat-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .metric-stat .stat-val {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text);
+  }
+
+  /* Step Tabs */
+  .tabs-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--border);
+    background: #f3f5f8;
+  }
+
+  @media (max-width: 680px) {
+    .tabs-bar {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .tab-btn {
+    padding: 10px 12px;
+    border: none;
+    border-right: 1px solid var(--border-muted);
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background 0.12s;
+  }
+
+  .tab-btn:last-child {
+    border-right: none;
+  }
+
+  .tab-btn:hover {
+    background: rgba(255, 255, 255, 0.65);
+  }
+
+  .tab-btn.active {
+    background: var(--surface);
+    border-bottom-color: var(--accent);
+  }
+
+  .tab-step {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .tab-btn.active .tab-step {
+    color: var(--accent);
+  }
+
+  .tab-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 2px;
+    display: block;
+  }
+
+  .tab-tag {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #eaeef2;
+    color: var(--text-muted);
+  }
+
+  .tab-btn.active .tab-tag {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* Step Info Banner */
+  .step-banner {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-muted);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .step-banner-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .filename-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .filename-box:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .step-instructions {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  .step-instructions strong {
+    color: var(--text);
+  }
+
+  .csv-schema-box {
+    font-size: 11.5px;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-muted);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    color: var(--text-muted);
+  }
+
+  .csv-schema-box code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  /* Code Viewer */
+  .code-container {
+    background: var(--code-bg);
+    color: var(--code-text);
+    max-height: 580px;
+    overflow: auto;
+    padding: 14px 16px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .code-container pre {
+    margin: 0;
+    white-space: pre;
+  }
+
+  .zs-comment { color: #8b949e; }
+  .zs-kw      { color: #ff7b72; font-weight: 600; }
+  .zs-cmd     { color: #d2a8ff; }
+  .zs-str     { color: #a5d6ff; }
+  .zs-num     { color: #79c0ff; }
+  .zs-var     { color: #ffa657; }
+
+  /* Footer Safety Bar */
+  .safety-footer {
+    padding: 10px 16px;
+    background: var(--warn-soft);
+    border-top: 1px solid #d4a72c55;
+    font-size: 12px;
+    color: #5c3c00;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  /* Plate Config Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.48);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 90;
+  }
+
+  .modal-backdrop.open {
+    display: flex;
+  }
+
+  .modal-dialog {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 980px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22);
+    overflow: hidden;
+  }
+
+  .modal-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .modal-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .modal-header p {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .modal-toolbar {
+    padding: 10px 20px;
+    background: var(--surface-subtle);
+    border-bottom: 1px solid var(--border-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .modal-profile-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .modal-profile-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .modal-profile-group input {
+    padding: 5px 8px;
+    font-size: 12.5px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    width: 180px;
+  }
+
+  .modal-body {
+    padding: 14px 20px;
+    overflow: auto;
+    flex: 1;
+  }
+
+  .cfg-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+
+  .cfg-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .cfg-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-muted);
+    vertical-align: middle;
+  }
+
+  .cfg-table tr.active-row {
+    background: #f0f8ff;
+  }
+
+  .cfg-table input[type="number"] {
+    width: 78px;
+    padding: 4px 6px;
+    font-size: 12.5px;
+    font-family: var(--font-mono);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  .cfg-table input[type="number"]:disabled {
+    background: #eaeef2;
+    color: var(--text-muted);
+  }
+
+  .cfg-plate-label {
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .cfg-plate-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .modal-footer {
+    padding: 11px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--surface-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #1f2328;
+    color: #ffffff;
+    padding: 9px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.18s, transform 0.18s;
+    z-index: 120;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-title">
+    <h1>
+      Zantiks MWP Script Builder
+      <span class="badge-hw" id="hwBadge">MWP Z3</span>
+    </h1>
+    <p>Configure researcher tag, plate geometry, stimulus protocol, and CSV metrics. Generates standalone Zanscript (<code>.zs</code>) files for each step.</p>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn" type="button" id="openConfigModalBtn">
+      <span>Plate Config</span>
+      <span class="badge-custom" id="topCustomCountBadge" style="display:none;">0 custom</span>
+    </button>
+    <button class="btn" type="button" id="resetBtn">Reset Assay</button>
+    <button class="btn btn-primary" type="button" id="downloadZipBtn">Download All 4 Scripts (.zip)</button>
+  </div>
+</header>
+
+<main class="container">
+  <!-- LEFT COLUMN: CONFIGURATION -->
+  <section class="config-col">
+
+    <!-- Researcher & Session Info -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Researcher &amp; Study Tag</h2>
+        <span class="card-hint">Appends last name &amp; tag to folders &amp; scripts</span>
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label for="userName">Full Name</label>
+          <input type="text" id="userName" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="expPrefix">Study Tag (Optional)</label>
+          <input type="text" id="expPrefix" autocomplete="off">
+        </div>
+      </div>
+      <div class="name-warn" id="nameAsciiWarn">
+        Use English letters (A-Z) and digits for names so Zantiks Build accepts the script filenames.
+      </div>
+      <div class="name-preview-bar">
+        <span>Bundle folder: <code id="previewFolderName">mwp_ld_transitions_24well/</code></span>
+        <span>Main script: <code id="previewMainScript">04_mwp_ld_transitions_24well.zs</code></span>
+      </div>
+    </div>
+
+    <!-- Quick Organism Presets -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Organism Preset</h2>
+        <span class="card-hint">Sets tracking size, threshold &amp; temp</span>
+      </div>
+      <div class="preset-row" id="organismPresets"></div>
+      <div class="preset-summary" id="presetSummary"></div>
+    </div>
+
+    <!-- Step 1: Plate Size -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title"><span class="step-num">1</span> Plate Format</h2>
+        <span class="card-hint" id="plateAssetHint">Assets: a24.bmp, dz24.bmp</span>
+      </div>
+      <div class="plate-layout-wrap">
+        <div class="plate-grid" id="plateGrid"></div>
+        <div class="plate-preview-box">
+          <svg id="plateSvg" width="118" height="80" viewBox="-2 -3 136 92"></svg>
+          <div class="plate-preview-caption" id="platePreviewLabel">4 x 6 (A1-D6)</div>
+        </div>
+      </div>
+
+      <!-- Inline Plate Calibration Fine-Tuning -->
+      <details class="geo-inline-box" id="inlineGeoDetails">
+        <summary>
+          <span id="inlineGeoSummaryText">Tune 24-Well Offsets &amp; Radius (mm)</span>
+          <span class="geo-summary-right">
+            <span class="badge-custom" id="inlineGeoCustomBadge" style="display:none;">Custom</span>
+            <span>Edit</span>
+          </span>
+        </summary>
+        <div class="geo-inline-body">
+          <div class="form-grid-3">
+            <div class="field">
+              <label for="geoX">X_OFFSET (mm)</label>
+              <input type="number" id="geoX" step="0.05">
+            </div>
+            <div class="field">
+              <label for="geoY">Y_OFFSET (mm)</label>
+              <input type="number" id="geoY" step="0.05">
+            </div>
+            <div class="field">
+              <label for="geoR" id="geoRLabel">RADIUS (mm)</label>
+              <input type="number" id="geoR" step="0.05">
+            </div>
+            <div class="field">
+              <label for="geoColStep" id="geoColLabel">COL_STEP (mm)</label>
+              <input type="number" id="geoColStep" step="0.05">
+            </div>
+            <div class="field">
+              <label for="geoRowStep" id="geoRowLabel">ROW_STEP (mm)</label>
+              <input type="number" id="geoRowStep" step="0.05">
+            </div>
+            <div class="field">
+              <label for="geoRdz" id="geoRdzLabel">INNER_ZONE (mm)</label>
+              <input type="number" id="geoRdz" step="0.05">
+            </div>
+          </div>
+          <div class="geo-inline-actions">
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-xs" id="auto50InlineBtn" title="Calculate exact 50% area inner zone">Auto 50% Inner Zone</button>
+              <button type="button" class="btn btn-xs" id="resetPlateInlineBtn">Reset This Plate</button>
+            </div>
+            <button type="button" class="btn btn-xs" id="openConfigFromStep1Btn">All Plates &amp; Config File...</button>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Step 2: Stimulus Protocol -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title"><span class="step-num">2</span> Stimulus Protocol</h2>
+        <span class="card-hint">Select assay schedule</span>
+      </div>
+      <div class="stim-grid" id="stimGrid"></div>
+      <div class="params-box" id="stimParamsBox"></div>
+      <div class="timeline-wrap">
+        <div class="timeline-bar" id="timelineBar"></div>
+        <div class="timeline-legend">
+          <span id="timelineDesc">Acclimation + Recording</span>
+          <span id="timelineTotal">Total: 11 min 00 sec</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Data & Video Outputs -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title"><span class="step-num">3</span> Recorded Data &amp; Video</h2>
+        <span class="card-hint">Combine any metrics</span>
+      </div>
+      <div class="check-list">
+        <label class="check-item checked" id="lbl_dist">
+          <input type="checkbox" id="chk_dist" checked>
+          <div class="check-body">
+            <div class="check-title">Arena Distance (mm) <span class="code-pill">ARENA_DISTANCES</span></div>
+            <div class="check-desc">Centroid distance traveled per well during each time bin (<code>DIST_A1</code> ...).</div>
+          </div>
+        </label>
+
+        <label class="check-item" id="lbl_msd">
+          <input type="checkbox" id="chk_msd">
+          <div class="check-body">
+            <div class="check-title">Pixel Activity / Motility <span class="code-pill">MSD_MODE</span></div>
+            <div class="check-desc">Mean pixel change per well (<code>MSD_A1</code> ...). Captures in-place thrashing or twitching.</div>
+          </div>
+        </label>
+
+        <label class="check-item" id="lbl_zones">
+          <input type="checkbox" id="chk_zones">
+          <div class="check-body">
+            <div class="check-title">Inner / Outer Zones (50/50 Split) <span class="code-pill">ZONE_TIMERS</span></div>
+            <div class="check-desc">Wall-hugging (thigmotaxis): logs distance, entries, and time in outer ring (<code>Z1</code>) vs. center (<code>Z2</code>).</div>
+          </div>
+        </label>
+
+        <label class="check-item" id="lbl_xy">
+          <input type="checkbox" id="chk_xy">
+          <div class="check-body">
+            <div class="check-title">Raw XY Coordinates (Per-Frame CSV) <span class="code-pill">LOG_STREAM 1</span></div>
+            <div class="check-desc">Writes frame-by-frame millimeter coordinates (<code>X_A1, Y_A1</code> ...) to a second <code>_XY</code> CSV file.</div>
+          </div>
+        </label>
+      </div>
+
+      <div class="form-grid" style="margin-top: 12px;">
+        <div class="field">
+          <label for="videoMode">Video Recording</label>
+          <select id="videoMode">
+            <option value="1fps" selected>1 fps Timelapse (Recommended)</option>
+            <option value="0.2fps">0.2 fps Long-Run Timelapse (1 frame / 5s)</option>
+            <option value="full">Full 30 fps Video (Large files)</option>
+            <option value="off">No Video Recording</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Visual Overlays</label>
+          <div style="display:flex; gap:12px; padding-top:6px;">
+            <label class="inline-check"><input type="checkbox" id="chk_tracks" checked> Track Traces</label>
+            <label class="inline-check"><input type="checkbox" id="chk_heatmap"> End Heatmap</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Advanced Settings -->
+    <details class="advanced-card">
+      <summary>Advanced Tracking, Thermostat &amp; Hardware</summary>
+      <div class="advanced-body">
+        <div class="form-grid">
+          <div class="field">
+            <label for="hwVersion">MWP Hardware Revision</label>
+            <select id="hwVersion">
+              <option value="Z3" selected>MWP Z3 (Newer units - X_LED_DRIVE)</option>
+              <option value="Z2">MWP Z2 / Z2S (Legacy GPO6-8)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="autorefTimeout">AUTOREF_TIMEOUT (s)</label>
+            <input type="number" id="autorefTimeout" min="0" max="600" step="5" value="60">
+          </div>
+        </div>
+
+        <div class="form-grid-3">
+          <div class="field">
+            <label for="targetSize">TARGET_SIZE (mm)</label>
+            <input type="number" id="targetSize" min="0.5" max="30" step="0.5" value="2">
+          </div>
+          <div class="field">
+            <label for="detThreshold">DETECTOR_THRESHOLD</label>
+            <input type="number" id="detThreshold" min="1" max="50" step="1" value="6">
+          </div>
+          <div class="field">
+            <label for="msdThreshold">MSD_THRESHOLD</label>
+            <input type="number" id="msdThreshold" min="1" max="50" step="1" value="6">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="thermostatTemp">Temperature (°C)</label>
+            <input type="number" id="thermostatTemp" min="10" max="40" step="0.5" value="22">
+          </div>
+          <div class="field">
+            <label>Thermostat Control</label>
+            <div style="padding-top:6px;">
+              <label class="inline-check"><input type="checkbox" id="chk_thermostat" checked> Enable Thermostat</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="ledBrightness">Z3 Overhead Light Brightness (%)</label>
+            <input type="number" id="ledBrightness" min="5" max="100" step="5" value="100">
+          </div>
+          <div class="field">
+            <label>Z3 Underneath Light</label>
+            <div style="padding-top:6px;">
+              <label class="inline-check"><input type="checkbox" id="chk_underlight"> Drive Underneath LED (Ch 12)</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+  </section>
+
+  <!-- RIGHT COLUMN: GENERATED STEP SCRIPTS -->
+  <section class="output-panel">
+    <div class="summary-strip">
+      <div class="metrics-row">
+        <div class="metric-stat">
+          <span class="stat-label">Plate Wells</span>
+          <span class="stat-val" id="statWells">24 (A1-D6)</span>
+        </div>
+        <div class="metric-stat">
+          <span class="stat-label">Assay Runtime</span>
+          <span class="stat-val" id="statRuntime">11m 00s</span>
+        </div>
+        <div class="metric-stat">
+          <span class="stat-label">CSV Rows</span>
+          <span class="stat-val" id="statRows">600 rows</span>
+        </div>
+        <div class="metric-stat">
+          <span class="stat-label">CSV Files</span>
+          <span class="stat-val" id="statFiles">1 Summary CSV</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 Separate Script Tabs -->
+    <div class="tabs-bar" id="stepTabs">
+      <button type="button" class="tab-btn" data-step="1">
+        <span class="tab-step">Step 1 <span class="tab-tag">Once</span></span>
+        <span class="tab-title">1. Calibration</span>
+      </button>
+      <button type="button" class="tab-btn" data-step="2">
+        <span class="tab-step">Step 2 <span class="tab-tag">Empty Plate</span></span>
+        <span class="tab-title">2. Plate Assets</span>
+      </button>
+      <button type="button" class="tab-btn" data-step="3">
+        <span class="tab-step">Step 3 <span class="tab-tag">Optional</span></span>
+        <span class="tab-title">3. Track Check</span>
+      </button>
+      <button type="button" class="tab-btn active" data-step="4">
+        <span class="tab-step">Step 4 <span class="tab-tag">Main Run</span></span>
+        <span class="tab-title">4. Assay Script</span>
+      </button>
+    </div>
+
+    <div class="step-banner">
+      <div class="step-banner-top">
+        <div class="filename-box" id="copyFilenameBtn" title="Click to copy safe script name">
+          <span id="currentFilename">04_mwp_ld_transitions_24well.zs</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-sm" id="copyCodeBtn">Copy Script</button>
+          <button type="button" class="btn btn-sm btn-primary" id="downloadSingleBtn">Download .zs</button>
+        </div>
+      </div>
+      <p class="step-instructions" id="stepInstructionText"></p>
+      <div class="csv-schema-box" id="csvSchemaBox"></div>
+    </div>
+
+    <div class="code-container">
+      <pre id="codePreview"></pre>
+    </div>
+
+    <div class="safety-footer">
+      <span><strong>Console Checklist:</strong> Click <strong>Save</strong> before <strong>Build</strong> in the web editor.</span>
+      <span><strong>Filenames:</strong> Never add spaces or parentheses.</span>
+      <span><strong>Shutdown:</strong> Always shut down from Control Console before flipping power off.</span>
+    </div>
+  </section>
+</main>
+
+<!-- PLATE CALIBRATION CONFIG MODAL -->
+<div class="modal-backdrop" id="configModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="configModalTitle">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div>
+        <h2 id="configModalTitle">
+          Plate Calibration Config
+          <span class="badge-custom" id="cfgSyncBadge">Auto-saved in browser</span>
+        </h2>
+        <p>Edit millimeter offsets, spacing, and radii for every plate format. Used directly when generating Step 2 asset scripts.</p>
+      </div>
+      <button type="button" class="btn btn-sm" id="closeConfigModalBtn">Done</button>
+    </div>
+
+    <div class="modal-toolbar">
+      <div class="modal-profile-group">
+        <label for="cfgProfileName">Unit / Profile Label:</label>
+        <input type="text" id="cfgProfileName" autocomplete="off">
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input type="file" id="cfgFileInput" accept=".js,.json" style="display:none;">
+        <button type="button" class="btn btn-sm" id="loadCfgFileBtn">Load Config File (.js / .json)</button>
+        <button type="button" class="btn btn-sm" id="exportCfgJsonBtn">Export .json</button>
+        <button type="button" class="btn btn-sm btn-primary" id="saveCfgJsBtn">Save zantiks_plate_config.js</button>
+      </div>
+    </div>
+
+    <div class="modal-body">
+      <table class="cfg-table">
+        <thead>
+          <tr>
+            <th>Plate Format</th>
+            <th>X_OFFSET (mm)</th>
+            <th>Y_OFFSET (mm)</th>
+            <th>COL_STEP (mm)</th>
+            <th>ROW_STEP (mm)</th>
+            <th>RADIUS / SIDE (mm)</th>
+            <th>INNER_ZONE (mm)</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="cfgTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="modal-footer">
+      <span>Edits persist automatically in this browser. To update the shared folder config file, click <strong>Save zantiks_plate_config.js</strong> and keep it next to this HTML file.</span>
+      <button type="button" class="btn btn-sm" id="resetAllPlatesBtn">Reset All to Factory</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied to clipboard</div>
+
+<!-- Optional external config file in the same folder (loads cleanly on file:// without a server) -->
+<script src="zantiks_plate_config.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  const STORAGE_KEY_PLATES = "zantiks_mwp_plate_config_v1";
+
+  // ---------------------------------------------------------------------------
+  // 1. Reference Catalogs (Derived from official Zantiks MWP .zs scripts)
+  // ---------------------------------------------------------------------------
+  const ORGANISM_PRESETS = [
+    {
+      id: "daphnia",
+      label: "Daphnia magna",
+      targetSize: 4,
+      detThreshold: 8,
+      msdThreshold: 6,
+      temp: 22,
+      thermostat: true,
+      suggestMsd: true
+    },
+    {
+      id: "drosophila",
+      label: "Drosophila (Adult)",
+      targetSize: 5,
+      detThreshold: 3,
+      msdThreshold: 15,
+      temp: 23,
+      thermostat: true,
+      suggestMsd: false
+    },
+    {
+      id: "celegans",
+      label: "C. elegans",
+      targetSize: 1,
+      detThreshold: 5,
+      msdThreshold: 5,
+      temp: 20,
+      thermostat: true,
+      suggestMsd: true
+    },
+    {
+      id: "planaria",
+      label: "Planaria",
+      targetSize: 3,
+      detThreshold: 6,
+      msdThreshold: 6,
+      temp: 21,
+      thermostat: false,
+      suggestMsd: false
+    },
+    {
+      id: "zebrafish",
+      label: "Zebrafish Larvae",
+      targetSize: 2,
+      detThreshold: 6,
+      msdThreshold: 6,
+      temp: 28,
+      thermostat: true,
+      suggestMsd: false
+    },
+    {
+      id: "custom",
+      label: "Custom",
+      targetSize: 2,
+      detThreshold: 6,
+      msdThreshold: 6,
+      temp: 22,
+      thermostat: true,
+      suggestMsd: false
+    }
+  ];
+
+  const FACTORY_PLATES = {
+    "6well": {
+      id: "6well", name: "6-Well", meta: "2 x 3 round",
+      rows: 2, cols: 3, shape: "DISC",
+      xOffset: 24.76, yOffset: 23.16, colStep: 39.12, rowStep: 39.12, r: 17.72, rDz: 12.73,
+      arenaBmp: "a6", zoneBmp: "dz6", drawDelay: 0.3
+    },
+    "12well": {
+      id: "12well", name: "12-Well", meta: "3 x 4 round",
+      rows: 3, cols: 4, shape: "DISC",
+      xOffset: 24.94, yOffset: 16.79, colStep: 26.01, rowStep: 26.01, r: 11.4, rDz: 8.5,
+      arenaBmp: "a12", zoneBmp: "dz12", drawDelay: 0.3
+    },
+    "24well": {
+      id: "24well", name: "24-Well", meta: "4 x 6 standard",
+      rows: 4, cols: 6, shape: "DISC",
+      xOffset: 15.2, yOffset: 13.5, colStep: 19.47, rowStep: 19.16, r: 8.13, rDz: 5.6,
+      arenaBmp: "a24", zoneBmp: "dz24", drawDelay: 0.25
+    },
+    "24costar": {
+      id: "24costar", name: "24-Well Costar", meta: "4 x 6 Costar",
+      rows: 4, cols: 6, shape: "DISC",
+      xOffset: 17.46, yOffset: 13.78, colStep: 19.3, rowStep: 19.3, r: 8.13, rDz: 5.65,
+      arenaBmp: "a24c", zoneBmp: "dz24c", drawDelay: 0.25
+    },
+    "24square": {
+      id: "24square", name: "24-Well Square", meta: "4 x 6 square",
+      rows: 4, cols: 6, shape: "SQUARE",
+      xOffset: 18.5, yOffset: 14.4, colStep: 18, rowStep: 18, r: 16.5, rDz: 12,
+      arenaBmp: "a24sq", zoneBmp: "dz24sq", drawDelay: 0.25
+    },
+    "48well": {
+      id: "48well", name: "48-Well", meta: "6 x 8 round",
+      rows: 6, cols: 8, shape: "DISC",
+      xOffset: 18.4, yOffset: 10.28, colStep: 12.92, rowStep: 12.92, r: 5.19, rDz: 3.45,
+      arenaBmp: "a48", zoneBmp: "dz48", drawDelay: 0.2
+    },
+    "96well": {
+      id: "96well", name: "96-Well", meta: "8 x 12 standard",
+      rows: 8, cols: 12, shape: "DISC",
+      xOffset: 14.15, yOffset: 11.24, colStep: 9, rowStep: 9, r: 3.5, rDz: 2.47,
+      arenaBmp: "a96", zoneBmp: "dz96", drawDelay: 0.15
+    },
+    "96square": {
+      id: "96square", name: "96-Well Square", meta: "8 x 12 square",
+      rows: 8, cols: 12, shape: "SQUARE",
+      xOffset: 14.15, yOffset: 9.65, colStep: 9, rowStep: 9, r: 7.5, rDz: 4.5,
+      arenaBmp: "a96_sq", zoneBmp: "dz96_sq", drawDelay: 0.15
+    },
+    "petri": {
+      id: "petri", name: "Petri Dish", meta: "1 x 1 (90 mm)",
+      rows: 1, cols: 1, shape: "DISC",
+      xOffset: 67, yOffset: 43, colStep: 19.3, rowStep: 19.3, r: 44, rDz: 31.8,
+      arenaBmp: "aPD", zoneBmp: "dzPD", drawDelay: 0.4
+    }
+  };
+
+  const GEO_FIELDS = ["xOffset", "yOffset", "colStep", "rowStep", "r", "rDz"];
+
+  const STIMULI = [
+    { id: "baseline", name: "None (Baseline)", meta: "Constant light or dark" },
+    { id: "ld_transitions", name: "Light / Dark Cycles", meta: "Alternating light & dark" },
+    { id: "light_off_startle", name: "Light-Off Startle", meta: "Brief dark pulses + ITI" },
+    { id: "light_on_pulse", name: "Light-On Flash", meta: "Bright flashes in dark" },
+    { id: "vibration_startle", name: "Vibration Startle", meta: "Stepper motor tap + ITI" },
+    { id: "circadian", name: "Long-Term Cycle", meta: "Multi-hour / multi-day L:D" }
+  ];
+
+  // ---------------------------------------------------------------------------
+  // 2. Application State & Plate Config Store
+  // ---------------------------------------------------------------------------
+  function cloneDefaultGeometries() {
+    const out = {};
+    for (const key of Object.keys(FACTORY_PLATES)) {
+      const f = FACTORY_PLATES[key];
+      out[key] = {
+        xOffset: f.xOffset,
+        yOffset: f.yOffset,
+        colStep: f.colStep,
+        rowStep: f.rowStep,
+        r: f.r,
+        rDz: f.rDz
+      };
+    }
+    return out;
+  }
+
+  const state = {
+    organism: "daphnia",
+    plateId: "24well",
+    stimId: "ld_transitions",
+    activeStep: 4,
+    profileName: "",
+    plateConfigUpdatedAt: null,
+    unsavedFileChanges: false,
+    plateGeometries: cloneDefaultGeometries(),
+    stimParams: {
+      baseLight: "LIGHT",
+      acclimSec: 120,
+      durationSec: 600,
+      timeBinSec: 1,
+      ldStart: "LIGHT",
+      ldPhaseSec: 300,
+      ldCycles: 2,
+      preBaselineSec: 60,
+      numPulses: 5,
+      pulseDurSec: 1,
+      itiSec: 30,
+      vibIntensity: "U0",
+      vibAmbient: "DARK",
+      lightHours: 16,
+      darkHours: 8,
+      numDays: 2,
+      circBinSec: 10
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // 3. Name, Slug & Plate Config Helpers
+  // ---------------------------------------------------------------------------
+  function sanitizeSlug(raw, maxLen) {
+    const cleaned = String(raw || "")
+      .trim()
+      .replace(/['’`]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!maxLen) return cleaned;
+    return cleaned.slice(0, maxLen).replace(/_+$/g, "");
+  }
+
+  function sanitizeAsciiComment(raw, maxLen) {
+    const cleaned = String(raw || "")
+      .replace(/[^\x20-\x7E]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return maxLen ? cleaned.slice(0, maxLen) : cleaned;
+  }
+
+  function extractLastName(fullName) {
+    const raw = String(fullName || "").trim();
+    if (!raw) return "";
+    if (raw.includes(",")) {
+      const surnamePart = raw.split(",")[0].trim();
+      return sanitizeSlug(surnamePart, 18);
+    }
+    const parts = raw.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "";
+    const suffixes = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "phd", "md"]);
+    while (parts.length > 1 && suffixes.has(parts[parts.length - 1].toLowerCase())) {
+      parts.pop();
+    }
+    return sanitizeSlug(parts[parts.length - 1], 18);
+  }
+
+  function roundGeo(n, fallback) {
+    const v = parseFloat(n);
+    if (!Number.isFinite(v) || v <= 0) return fallback;
+    return Number(v.toFixed(2));
+  }
+
+  function isPlateCustomized(plateId) {
+    const cur = state.plateGeometries[plateId];
+    const def = FACTORY_PLATES[plateId];
+    return GEO_FIELDS.some(k => Math.abs(cur[k] - def[k]) > 0.004);
+  }
+
+  function countCustomizedPlates() {
+    return Object.keys(FACTORY_PLATES).filter(isPlateCustomized).length;
+  }
+
+  function applyConfigObject(obj, markSavedToFile) {
+    if (!obj || typeof obj !== "object") return false;
+    const platesSrc = obj.plates && typeof obj.plates === "object" ? obj.plates : obj;
+    let appliedAny = false;
+
+    for (const key of Object.keys(FACTORY_PLATES)) {
+      if (platesSrc[key] && typeof platesSrc[key] === "object") {
+        const src = platesSrc[key];
+        const def = FACTORY_PLATES[key];
+        state.plateGeometries[key] = {
+          xOffset: roundGeo(src.xOffset, def.xOffset),
+          yOffset: roundGeo(src.yOffset, def.yOffset),
+          colStep: roundGeo(src.colStep, def.colStep),
+          rowStep: roundGeo(src.rowStep, def.rowStep),
+          r: roundGeo(src.r, def.r),
+          rDz: roundGeo(src.rDz, def.rDz)
+        };
+        appliedAny = true;
+      }
+    }
+
+    if (typeof obj.profileName === "string") {
+      state.profileName = obj.profileName.trim().slice(0, 48);
+    }
+    if (typeof obj.updatedAt === "string") {
+      state.plateConfigUpdatedAt = obj.updatedAt;
+    }
+    if (markSavedToFile) {
+      state.unsavedFileChanges = false;
+    }
+    return appliedAny;
+  }
+
+  function buildConfigPayload(updatedAtOverride) {
+    const platesOut = {};
+    for (const key of Object.keys(FACTORY_PLATES)) {
+      platesOut[key] = { ...state.plateGeometries[key] };
+    }
+    return {
+      version: 1,
+      profileName: state.profileName || "",
+      updatedAt: updatedAtOverride !== undefined ? updatedAtOverride : (state.plateConfigUpdatedAt || new Date().toISOString()),
+      plates: platesOut
+    };
+  }
+
+  function formatPlateConfigJsContent(payload) {
+    return [
+      "// Zantiks MWP Plate Calibration Config",
+      "// Keep this file in the same folder as zantiks_script_generator.html.",
+      "// You can edit these values visually in the web app (\"Plate Config\" button) and save",
+      "// back to this file, or edit the numbers below in any text editor. All units are in mm.",
+      "",
+      "window.ZANTIKS_PLATE_CONFIG = " + JSON.stringify(payload, null, 2) + ";",
+      ""
+    ].join("\n");
+  }
+
+  function parseConfigText(rawText) {
+    const trimmed = String(rawText || "").trim();
+    if (!trimmed) throw new Error("Empty configuration file");
+    try {
+      return JSON.parse(trimmed);
+    } catch (_) {
+      // Strip JS comments outside strings so zantiks_plate_config.js parses cleanly
+      let out = "";
+      let inStr = false;
+      let i = 0;
+      while (i < trimmed.length) {
+        const ch = trimmed[i];
+        const next = trimmed[i + 1];
+        if (ch === '"' && trimmed[i - 1] !== "\\") {
+          inStr = !inStr;
+          out += ch;
+          i++;
+        } else if (!inStr && ch === "/" && next === "/") {
+          while (i < trimmed.length && trimmed[i] !== "\n") i++;
+        } else if (!inStr && ch === "/" && next === "*") {
+          i += 2;
+          while (i < trimmed.length && !(trimmed[i] === "*" && trimmed[i + 1] === "/")) i++;
+          i += 2;
+        } else {
+          out += ch;
+          i++;
+        }
+      }
+      const firstBrace = out.indexOf("{");
+      const lastBrace = out.lastIndexOf("}");
+      if (firstBrace < 0 || lastBrace <= firstBrace) {
+        throw new Error("No JSON object found in config file");
+      }
+      return JSON.parse(out.slice(firstBrace, lastBrace + 1));
+    }
+  }
+
+  function savePlateConfigToBrowser() {
+    state.plateConfigUpdatedAt = new Date().toISOString();
+    state.unsavedFileChanges = true;
+    try {
+      if (typeof localStorage !== "undefined") {
+        const payload = buildConfigPayload(state.plateConfigUpdatedAt);
+        localStorage.setItem(STORAGE_KEY_PLATES, JSON.stringify(payload));
+      }
+    } catch (_) {
+      // Ignore storage quota / private mode restrictions
+    }
+  }
+
+  function loadInitialPlateConfig() {
+    const fileCfg = (typeof window !== "undefined" && window.ZANTIKS_PLATE_CONFIG) ? window.ZANTIKS_PLATE_CONFIG : null;
+    let localCfg = null;
+    try {
+      if (typeof localStorage !== "undefined") {
+        const raw = localStorage.getItem(STORAGE_KEY_PLATES);
+        if (raw) localCfg = JSON.parse(raw);
+      }
+    } catch (_) {
+      localCfg = null;
+    }
+
+    if (fileCfg && localCfg) {
+      const fTime = fileCfg.updatedAt ? Date.parse(fileCfg.updatedAt) : 0;
+      const lTime = localCfg.updatedAt ? Date.parse(localCfg.updatedAt) : 0;
+      if (fTime > lTime) {
+        applyConfigObject(fileCfg, true);
+        try { localStorage.setItem(STORAGE_KEY_PLATES, JSON.stringify(buildConfigPayload(fileCfg.updatedAt))); } catch (_) {}
+      } else {
+        applyConfigObject(localCfg, false);
+      }
+    } else if (localCfg) {
+      applyConfigObject(localCfg, false);
+    } else if (fileCfg) {
+      applyConfigObject(fileCfg, true);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. General Formatting Utilities
+  // ---------------------------------------------------------------------------
+  function getWellLabels(rows, cols) {
+    const labels = [];
+    for (let r = 0; r < rows; r++) {
+      const rowChar = String.fromCharCode(65 + r);
+      for (let c = 1; c <= cols; c++) {
+        labels.push(rowChar + c);
+      }
+    }
+    return labels;
+  }
+
+  function chunkArray(arr, size) {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size) {
+      out.push(arr.slice(i, i + size));
+    }
+    return out;
+  }
+
+  function formatLogHeaderBlock(metaHeaders, wellHeaders, indent) {
+    const pad = indent || "    ";
+    const lines = [];
+    lines.push(pad + 'LOGCREATE("' + metaHeaders.map(h => "TEXT:" + h).join("|") + '")');
+    const chunks = chunkArray(wellHeaders, 6);
+    for (const ch of chunks) {
+      lines.push(pad + 'LOGAPPEND("' + ch.map(h => "TEXT:" + h).join("|") + '")');
+    }
+    lines.push(pad + "LOGRUN()");
+    return lines.join("\n");
+  }
+
+  function padOverlay(label) {
+    const s = String(label);
+    return s.length >= 22 ? s.slice(0, 22) : s + " ".repeat(22 - s.length);
+  }
+
+  function formatDuration(totalSec) {
+    const sec = Math.max(0, Math.round(totalSec));
+    if (sec >= 3600) {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      return h + "h " + String(m).padStart(2, "0") + "m";
+    }
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m + "m " + String(s).padStart(2, "0") + "s";
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => t.classList.remove("show"), 2000);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5. Read Current UI Config
+  // ---------------------------------------------------------------------------
+  function readConfig() {
+    const plate = FACTORY_PLATES[state.plateId];
+    const geo = state.plateGeometries[state.plateId];
+    const hw = document.getElementById("hwVersion").value;
+
+    const rawFullName = document.getElementById("userName").value;
+    const rawExpTag = document.getElementById("expPrefix").value;
+
+    const userFullClean = sanitizeAsciiComment(rawFullName, 40);
+    const lastName = extractLastName(rawFullName);
+    const expTag = sanitizeSlug(rawExpTag, 18);
+
+    const prefixParts = [];
+    if (lastName) prefixParts.push(lastName);
+    if (expTag) prefixParts.push(expTag);
+    const runPrefix = prefixParts.length > 0 ? prefixParts.join("_") : "mwp";
+
+    const hasNonAsciiWarning = Boolean(
+      (rawFullName.trim() && !lastName) || (rawExpTag.trim() && !expTag)
+    );
+
+    const targetSize = Math.max(0.5, parseFloat(document.getElementById("targetSize").value) || 2);
+    const detThreshold = Math.max(1, parseInt(document.getElementById("detThreshold").value, 10) || 6);
+    const msdThreshold = Math.max(1, parseInt(document.getElementById("msdThreshold").value, 10) || 6);
+    const autorefTimeout = Math.max(0, parseInt(document.getElementById("autorefTimeout").value, 10) || 60);
+    const thermostatTemp = parseFloat(document.getElementById("thermostatTemp").value) || 22;
+    const useThermostat = document.getElementById("chk_thermostat").checked;
+    const ledPct = Math.min(100, Math.max(5, parseFloat(document.getElementById("ledBrightness").value) || 100));
+    const ledDriveVal = Math.round((ledPct / 100) * 4095);
+    const useUnderLight = document.getElementById("chk_underlight").checked;
+
+    const useDist = document.getElementById("chk_dist").checked;
+    const useMsd = document.getElementById("chk_msd").checked;
+    const useZones = document.getElementById("chk_zones").checked;
+    const useXy = document.getElementById("chk_xy").checked;
+    const videoMode = document.getElementById("videoMode").value;
+    const useTracks = document.getElementById("chk_tracks").checked;
+    const useHeatmap = document.getElementById("chk_heatmap").checked;
+
+    return {
+      plate,
+      wells: getWellLabels(plate.rows, plate.cols),
+      numWells: plate.rows * plate.cols,
+      hw,
+      userFullClean,
+      lastName,
+      expTag,
+      runPrefix,
+      hasNonAsciiWarning,
+      targetSize,
+      detThreshold,
+      msdThreshold,
+      autorefTimeout,
+      thermostatTemp,
+      useThermostat,
+      ledPct,
+      ledDriveVal,
+      useUnderLight,
+      useDist,
+      useMsd,
+      useZones,
+      useXy,
+      videoMode,
+      useTracks,
+      useHeatmap,
+      geo,
+      stimId: state.stimId,
+      sp: state.stimParams
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 6. Zanscript Generators for Steps 1, 2, 3, and 4
+  // ---------------------------------------------------------------------------
+  function buildResearcherComment(cfg) {
+    if (cfg.userFullClean && cfg.lastName) {
+      return `# Researcher: ${cfg.userFullClean} (file tag: ${cfg.lastName})`;
+    }
+    if (cfg.lastName) {
+      return `# Researcher tag: ${cfg.lastName}`;
+    }
+    return null;
+  }
+
+  function buildLightActions(cfg) {
+    if (cfg.hw === "Z3") {
+      const underOn = cfg.useUnderLight
+        ? "    SET(X_LED_DRIVE,12,LED_BRIGHTNESS)"
+        : "    # SET(X_LED_DRIVE,12,LED_BRIGHTNESS)  # Uncomment for underneath LED";
+      const underOff = cfg.useUnderLight
+        ? "    SET(X_LED_DRIVE,12,0)"
+        : "    # SET(X_LED_DRIVE,12,0)";
+      return [
+        "ACTION LIGHTS_ON",
+        "    SET(X_LED_DRIVE,4,LED_BRIGHTNESS)",
+        underOn,
+        "COMPLETE",
+        "",
+        "ACTION LIGHTS_OFF",
+        "    SET(X_LED_DRIVE,4,0)",
+        underOff,
+        "COMPLETE"
+      ].join("\n");
+    }
+    return [
+      "ACTION LIGHTS_ON",
+      "    SET(GPO6,1)",
+      "    SET(GPO7,1)",
+      "    SET(GPO8,1)",
+      "COMPLETE",
+      "",
+      "ACTION LIGHTS_OFF",
+      "    LIGHTS(ALL,OFF)",
+      "    SET(GPO6,0)",
+      "    SET(GPO7,0)",
+      "    SET(GPO8,0)",
+      "COMPLETE"
+    ].join("\n");
+  }
+
+  // STEP 1: Calibration
+  function generateStep1(cfg) {
+    const userLine = buildResearcherComment(cfg);
+    const headerLines = ["# Step 1: Camera Scale Calibration"];
+    if (userLine) headerLines.push(userLine);
+    headerLines.push(
+      "# Insert the black 96-well Zantiks calibration plate into the MWP stand.",
+      "# Only needed once during initial setup or if the camera/stand is moved."
+    );
+
+    const code = [
+      ...headerLines,
+      "",
+      "ACTION MAIN",
+      "",
+      "    Calibration(0)",
+      "",
+      "COMPLETE",
+      ""
+    ].join("\n");
+
+    const fname = cfg.lastName ? `01_${cfg.lastName}_calibration.zs` : "01_calibration.zs";
+
+    return {
+      filename: fname,
+      instruction: "<strong>Physical setup:</strong> Place the black 96-well calibration plate into the MWP chamber and run once. Skip this step if your unit is already calibrated.",
+      schemaText: "Saves internal camera scale calibration on the unit (no CSV output needed).",
+      code
+    };
+  }
+
+  // STEP 2: Plate Asset Builder
+  function generateStep2(cfg) {
+    const p = cfg.plate;
+    const g = cfg.geo;
+    const sizeLabel = p.shape === "SQUARE" ? "LENGTH" : "RADIUS";
+    const sizeDzLabel = p.shape === "SQUARE" ? "LENGTH_DZ" : "RADIUS_DZ";
+    const userLine = buildResearcherComment(cfg);
+
+    const headerLines = [`# Step 2: Plate Arena & Dual-Zone Asset Builder (${p.name})`];
+    if (userLine) headerLines.push(userLine);
+    headerLines.push(
+      `# Config profile: ${sanitizeAsciiComment(state.profileName, 40) || "Default MWP"}`,
+      `# Place an EMPTY ${p.name} plate into the MWP stand before running.`,
+      `# Generates "${p.arenaBmp}.bmp" (full wells) and "${p.zoneBmp}.bmp" (50/50 outer/inner zones) in Assets.`
+    );
+
+    const code = [
+      ...headerLines,
+      "",
+      "DEFINE SHOWTIME 2",
+      `DEFINE DRAWDELAY ${p.drawDelay}`,
+      "",
+      `# Plate geometry in mm (${p.rows} rows x ${p.cols} columns)`,
+      `DEFINE X_OFFSET ${g.xOffset}`,
+      `DEFINE Y_OFFSET ${g.yOffset}`,
+      `DEFINE COL_STEP ${g.colStep}`,
+      `DEFINE ROW_STEP ${g.rowStep}`,
+      `DEFINE ${sizeLabel} ${g.r}`,
+      `DEFINE ${sizeDzLabel} ${g.rDz}`,
+      "",
+      "DEFINE ARENA_ZONE_MODE 200",
+      "DEFINE ROW_COUNTER 101",
+      "DEFINE ARENA_COUNTER 102",
+      "DEFINE COLUMN_COUNTER 103",
+      "DEFINE Y_POSITION 104",
+      "DEFINE X_POSITION 105",
+      "",
+      "ACTION MAIN",
+      "",
+      "    INVOKE(BUILD_ARENAS,1)",
+      "    WAIT(SHOWTIME)",
+      "",
+      "    INVOKE(BUILD_DUAL_ZONES,1)",
+      "    WAIT(SHOWTIME)",
+      "",
+      "COMPLETE",
+      "",
+      "ACTION BUILD_ARENAS",
+      "",
+      "    ResetDrawing()",
+      `    ShapeType(${p.shape},${sizeLabel})`,
+      "    @ARENA_ZONE_MODE = 0",
+      "    INVOKE(DRAW_GRID,1)",
+      `    SaveDrawing("${p.arenaBmp}")`,
+      "",
+      "COMPLETE",
+      "",
+      "ACTION BUILD_DUAL_ZONES",
+      "",
+      "    ResetDrawing()",
+      `    ShapeType(${p.shape},${sizeLabel})`,
+      "    @ARENA_ZONE_MODE = 1",
+      "    INVOKE(DRAW_GRID,1)",
+      "",
+      `    ShapeType(${p.shape},${sizeDzLabel})`,
+      "    @ARENA_ZONE_MODE = 2",
+      "    INVOKE(DRAW_GRID,1)",
+      `    SaveDrawing("${p.zoneBmp}")`,
+      "",
+      "COMPLETE",
+      "",
+      "ACTION DRAW_GRID",
+      "",
+      "    @ROW_COUNTER = 0",
+      "    @Y_POSITION = Y_OFFSET",
+      "    @ARENA_COUNTER = 1",
+      "",
+      `    WHILE @ROW_COUNTER < ${p.rows}`,
+      "        @COLUMN_COUNTER = 0",
+      "        @X_POSITION = X_OFFSET",
+      "",
+      `        WHILE @COLUMN_COUNTER < ${p.cols}`,
+      "            IF @ARENA_ZONE_MODE = 0",
+      "                SET(DrawArea,@ARENA_COUNTER)",
+      "            ELSE",
+      "                SET(DrawArea,@ARENA_ZONE_MODE)",
+      "            ENDIF",
+      "",
+      "            ShapeDraw(@X_POSITION,@Y_POSITION)",
+      '            SaveDrawing("TEMP")',
+      "            WAIT(DRAWDELAY)",
+      "",
+      "            @X_POSITION = @X_POSITION + COL_STEP",
+      "            @COLUMN_COUNTER = @COLUMN_COUNTER + 1",
+      "            @ARENA_COUNTER = @ARENA_COUNTER + 1",
+      "        ENDWHILE",
+      "",
+      "        @Y_POSITION = @Y_POSITION + ROW_STEP",
+      "        @ROW_COUNTER = @ROW_COUNTER + 1",
+      "    ENDWHILE",
+      "",
+      "COMPLETE",
+      ""
+    ].join("\n");
+
+    const fname = cfg.lastName ? `02_${cfg.lastName}_assets_${p.id}.zs` : `02_assets_${p.id}.zs`;
+
+    return {
+      filename: fname,
+      instruction: `<strong>Physical setup:</strong> Insert an <strong>empty ${p.name} plate</strong> and run once while watching Live View. Saves <code>${p.arenaBmp}.bmp</code> and <code>${p.zoneBmp}.bmp</code> into Assets. Adjust offsets in Step 1 (or Plate Config) if wells need alignment.`,
+      schemaText: `Assets created: ${p.arenaBmp}.bmp (${cfg.numWells} arenas) + ${p.zoneBmp}.bmp (Zone 1 = outer ring, Zone 2 = inner center).`,
+      code
+    };
+  }
+
+  // STEP 3: Tracking Parameter Check
+  function generateStep3(cfg) {
+    const p = cfg.plate;
+    const minSize = Math.max(1, Math.floor(cfg.targetSize - 1));
+    const maxSize = Math.min(12, Math.ceil(cfg.targetSize + 2));
+    const wellsHeader = cfg.wells.map(w => "DIST_" + w);
+    const metaHeaders = ["RUNTIME", "UNIT_ID", "TEMP_C", "TARGET_SIZE", "DET_THRESHOLD", "TIME_BIN"];
+    const headerBlock = formatLogHeaderBlock(metaHeaders, wellsHeader, "    ");
+    const userLine = buildResearcherComment(cfg);
+
+    const startDark = (cfg.stimId === "baseline" && cfg.sp.baseLight === "DARK") ||
+      (cfg.stimId === "ld_transitions" && cfg.sp.ldStart === "DARK") ||
+      (cfg.stimId === "light_on_pulse") ||
+      (cfg.stimId === "vibration_startle" && cfg.sp.vibAmbient === "DARK");
+
+    const lines = [`# Step 3: Organism Tracking Check (${p.name})`];
+    if (userLine) lines.push(userLine);
+    lines.push(
+      "# Optional 1-2 minute pre-check with animals loaded in the plate.",
+      `# Sweeps TARGET_SIZE (${minSize} to ${maxSize}) and DETECTOR_THRESHOLD (2 to 10)`,
+      "# so you can confirm clean target lock on video before running Step 4.",
+      "",
+      "DEFINE TIME_BIN 1",
+      "DEFINE SAMPLES_PER_SETTING 2",
+      `DEFINE MIN_SIZE ${minSize}`,
+      `DEFINE MAX_SIZE ${maxSize}`,
+      "DEFINE MIN_THRESH 2",
+      "DEFINE MAX_THRESH 10",
+      `DEFINE AUTOREF_TIME ${cfg.autorefTimeout}`,
+      "DEFINE VIDEO_LENGTH 999999"
+    );
+
+    if (cfg.hw === "Z3") {
+      lines.push("DEFINE X_LED_DRIVE 30039");
+      lines.push(`DEFINE LED_BRIGHTNESS ${cfg.ledDriveVal}`);
+    }
+    if (cfg.useThermostat) {
+      lines.push(`SET(THERMOSTAT,${cfg.thermostatTemp})`);
+    } else {
+      lines.push(`# SET(THERMOSTAT,${cfg.thermostatTemp})  # Thermostat disabled`);
+    }
+
+    lines.push(
+      "",
+      "DEFINE SIZE_VAR 101",
+      "DEFINE THRESH_VAR 102",
+      "",
+      "SET(AUTOREF_MODE,MOVEMENT)",
+      "SET(AUTOREF_TIMEOUT,AUTOREF_TIME)",
+      "",
+      "ACTION MAIN",
+      "",
+      "    SET(COUNTER1,COUNTER_ZERO)",
+      `    INVOKE(${startDark ? "LIGHTS_OFF" : "LIGHTS_ON"},1)`,
+      `    LOAD(ARENAS,"${p.arenaBmp}.bmp")`,
+      "",
+      headerBlock,
+      "",
+      `    VIDEO(VIDEO_LENGTH,"${cfg.runPrefix}_track_check_${p.id}")`,
+      '    LOAD(OVERLAY_TEXT,"1,1:AUTOREFERENCING       ")',
+      "    AUTOREFERENCE()",
+      "",
+      "    INVOKE(SWEEP_SETTINGS,1)",
+      "",
+      "    VIDEOSTOP",
+      '    LOAD(OVERLAY_CLEAR,"")',
+      "    INVOKE(LIGHTS_OFF,1)",
+      "",
+      "COMPLETE",
+      "",
+      "ACTION SWEEP_SETTINGS",
+      "",
+      "    @SIZE_VAR = MIN_SIZE",
+      "    WHILE @SIZE_VAR <= MAX_SIZE",
+      "        SET(TARGET_SIZE,@SIZE_VAR)",
+      "        TargetMarker(@SIZE_VAR,1,1)",
+      "        @THRESH_VAR = MIN_THRESH",
+      "",
+      "        WHILE @THRESH_VAR <= MAX_THRESH",
+      "            SET(DETECTOR_THRESHOLD,@THRESH_VAR)",
+      '            LOAD(OVERLAY_TEXT,"1,1:SIZE @101  THRESH @102  ")',
+      "            INVOKE(SAMPLE_BIN,SAMPLES_PER_SETTING)",
+      "            @THRESH_VAR = @THRESH_VAR + 2",
+      "        ENDWHILE",
+      "",
+      "        @SIZE_VAR = @SIZE_VAR + 1",
+      "    ENDWHILE",
+      "",
+      "COMPLETE",
+      "",
+      "ACTION SAMPLE_BIN",
+      "",
+      "    SET(COUNTER1,COUNTER_INC)",
+      '    LOGDATA(DATA_SNAPSHOT,"begin")',
+      "    WAIT(TIME_BIN)",
+      '    LOGDATA(DATA_SNAPSHOT,"end")',
+      '    LOGDATA(DATA_SELECT,"begin")',
+      '    LOGDATA(DATA_DELTA,"end")',
+      "",
+      '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|@101|@102|COUNTER1")',
+      '    LOGAPPEND("ARENA_DISTANCES:*")',
+      "    LOGRUN()",
+      "",
+      "COMPLETE",
+      "",
+      buildLightActions(cfg),
+      ""
+    );
+
+    const fname = cfg.lastName ? `03_${cfg.lastName}_track_check_${p.id}.zs` : `03_track_check_${p.id}.zs`;
+
+    return {
+      filename: fname,
+      instruction: "<strong>Optional check:</strong> Load animals into the plate and watch Live View (or review the recorded video) to verify that the crosshair stays locked on each organism without background flicker.",
+      schemaText: `CSV Columns: ${metaHeaders.join(" | ")} | DIST_${cfg.wells[0]} ... DIST_${cfg.wells[cfg.wells.length - 1]}`,
+      code: lines.join("\n")
+    };
+  }
+
+  // STEP 4: Main Assay Protocol
+  function generateStep4(cfg) {
+    const p = cfg.plate;
+    const sp = cfg.sp;
+    const N = cfg.numWells;
+    const arenaRange = N === 1 ? "A1" : `A1-${N}`;
+    const userLine = buildResearcherComment(cfg);
+    const runSlug = `${cfg.runPrefix}_${cfg.stimId}_${p.id}`;
+
+    // Build well headers and data expression tokens in identical order
+    const wellHeaders = [];
+    const dataExprs = [];
+
+    if (cfg.useDist) {
+      for (const w of cfg.wells) wellHeaders.push(`DIST_${w}`);
+      dataExprs.push("ARENA_DISTANCES:*");
+    }
+    if (cfg.useMsd) {
+      for (const w of cfg.wells) wellHeaders.push(`MSD_${w}`);
+      dataExprs.push("ARENA_ACTIVITY:*");
+    }
+    if (cfg.useZones) {
+      for (const w of cfg.wells) {
+        wellHeaders.push(`ZD_${w}_Z1`, `ZD_${w}_Z2`);
+      }
+      for (const w of cfg.wells) {
+        wellHeaders.push(`ZC_${w}_Z1`, `ZC_${w}_Z2`);
+      }
+      for (const w of cfg.wells) {
+        wellHeaders.push(`ZT_${w}_Z1`, `ZT_${w}_Z2`);
+      }
+      dataExprs.push(
+        `ZONE_DISTANCES:${arenaRange} Z1-2`,
+        `ZONE_COUNTERS:${arenaRange} Z1-2`,
+        `ZONE_TIMERS:${arenaRange} Z1-2`
+      );
+    }
+
+    if (dataExprs.length === 0) {
+      for (const w of cfg.wells) wellHeaders.push(`DIST_${w}`);
+      dataExprs.push("ARENA_DISTANCES:*");
+    }
+
+    const isCircadian = cfg.stimId === "circadian";
+    const hasTrials = ["ld_transitions", "light_off_startle", "light_on_pulse", "vibration_startle"].includes(cfg.stimId);
+
+    let metaHeaders;
+    if (isCircadian) {
+      metaHeaders = ["RUNTIME", "UNIT_ID", "TEMP_C", "PHASE", "DAY", "HOUR", "TIME_BIN"];
+    } else if (hasTrials) {
+      metaHeaders = ["RUNTIME", "UNIT_ID", "TEMP_C", "PHASE", "TRIAL", "TIME_BIN"];
+    } else {
+      metaHeaders = ["RUNTIME", "UNIT_ID", "TEMP_C", "PHASE", "TIME_BIN"];
+    }
+
+    const topDefines = [];
+    const mainSchedule = [];
+    const extraActions = [];
+    let totalRuntimeSec = 0;
+    let totalRows = 0;
+
+    if (cfg.stimId === "baseline") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const dur = Math.max(bin, parseInt(sp.durationSec, 10) || 600);
+      const numBins = Math.max(1, Math.round(dur / bin));
+      const lightLabel = sp.baseLight === "DARK" ? "DARK" : "LIGHT";
+      const lightAction = sp.baseLight === "DARK" ? "LIGHTS_OFF" : "LIGHTS_ON";
+
+      topDefines.push(
+        `DEFINE ACCLIMATION_SEC ${acclim}`,
+        `DEFINE TIME_BIN ${bin}`,
+        `DEFINE NUM_BINS ${numBins}`
+      );
+
+      mainSchedule.push(
+        `    INVOKE(${lightAction},1)`,
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
+        "    WAIT(ACCLIMATION_SEC)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+        "    AUTOREFERENCE()",
+        "__START_RECORDING__",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("TRACKING " + lightLabel)}")`,
+        "    INVOKE(SAMPLE_BIN,NUM_BINS)"
+      );
+
+      extraActions.push(
+        buildSampleAction("SAMPLE_BIN", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${lightLabel}|COUNTER1`, dataExprs)
+      );
+
+      totalRuntimeSec = acclim + cfg.autorefTimeout + numBins * bin;
+      totalRows = numBins;
+
+    } else if (cfg.stimId === "ld_transitions") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const phaseSec = Math.max(bin, parseInt(sp.ldPhaseSec, 10) || 300);
+      const phaseBins = Math.max(1, Math.round(phaseSec / bin));
+      const cycles = Math.max(1, parseInt(sp.ldCycles, 10) || 2);
+      const startLight = sp.ldStart !== "DARK";
+
+      topDefines.push(
+        `DEFINE ACCLIMATION_SEC ${acclim}`,
+        `DEFINE TIME_BIN ${bin}`,
+        `DEFINE PHASE_BINS ${phaseBins}`,
+        `DEFINE NUM_CYCLES ${cycles}`
+      );
+
+      mainSchedule.push(
+        `    INVOKE(${startLight ? "LIGHTS_ON" : "LIGHTS_OFF"},1)`,
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
+        "    WAIT(ACCLIMATION_SEC)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+        "    AUTOREFERENCE()",
+        "__START_RECORDING__",
+        "    INVOKE(LD_CYCLE,NUM_CYCLES)"
+      );
+
+      const firstBlock = startLight
+        ? [
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("PHASE: LIGHT")}")`,
+            "    INVOKE(LIGHTS_ON,1)",
+            "    INVOKE(SAMPLE_LIGHT,PHASE_BINS)"
+          ]
+        : [
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("PHASE: DARK")}")`,
+            "    INVOKE(LIGHTS_OFF,1)",
+            "    INVOKE(SAMPLE_DARK,PHASE_BINS)"
+          ];
+
+      const secondBlock = startLight
+        ? [
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("PHASE: DARK")}")`,
+            "    INVOKE(LIGHTS_OFF,1)",
+            "    INVOKE(SAMPLE_DARK,PHASE_BINS)"
+          ]
+        : [
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("PHASE: LIGHT")}")`,
+            "    INVOKE(LIGHTS_ON,1)",
+            "    INVOKE(SAMPLE_LIGHT,PHASE_BINS)"
+          ];
+
+      extraActions.push(
+        [
+          "ACTION LD_CYCLE",
+          "",
+          "    SET(COUNTER2,COUNTER_INC)",
+          ...firstBlock,
+          "",
+          ...secondBlock,
+          "",
+          "COMPLETE"
+        ].join("\n"),
+        buildSampleAction("SAMPLE_LIGHT", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:LIGHT|COUNTER2|COUNTER1", dataExprs),
+        buildSampleAction("SAMPLE_DARK", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DARK|COUNTER2|COUNTER1", dataExprs)
+      );
+
+      totalRuntimeSec = acclim + cfg.autorefTimeout + cycles * 2 * phaseBins * bin;
+      totalRows = cycles * 2 * phaseBins;
+
+    } else if (cfg.stimId === "light_off_startle") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+      const preBins = Math.round(preSec / bin);
+      const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+      const pulseDur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
+      const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+      const itiBins = Math.max(1, Math.round(itiSec / bin));
+
+      const subBinPulse = pulseDur < bin;
+      const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
+      const postPulseWait = subBinPulse ? Number((bin - pulseDur).toFixed(3)) : 0;
+
+      topDefines.push(
+        `DEFINE ACCLIMATION_SEC ${acclim}`,
+        `DEFINE TIME_BIN ${bin}`,
+        `DEFINE BASELINE_BINS ${preBins}`,
+        `DEFINE NUM_PULSES ${pulses}`,
+        `DEFINE ITI_BINS ${itiBins}`
+      );
+      if (subBinPulse) {
+        topDefines.push(
+          `DEFINE PULSE_DURATION ${pulseDur}`,
+          `DEFINE POST_PULSE_WAIT ${postPulseWait}`
+        );
+      } else {
+        topDefines.push(`DEFINE PULSE_BINS ${pulseBins}`);
+      }
+
+      mainSchedule.push(
+        "    INVOKE(LIGHTS_ON,1)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
+        "    WAIT(ACCLIMATION_SEC)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+        "    AUTOREFERENCE()",
+        "__START_RECORDING__"
+      );
+      if (preBins > 0) {
+        mainSchedule.push(
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("BASELINE")}")`,
+          "    INVOKE(SAMPLE_BASELINE,BASELINE_BINS)"
+        );
+      }
+      mainSchedule.push("    INVOKE(STARTLE_TRIAL,NUM_PULSES)");
+
+      if (subBinPulse) {
+        extraActions.push(
+          [
+            "ACTION STARTLE_TRIAL",
+            "",
+            "    SET(COUNTER2,COUNTER_INC)",
+            "    INVOKE(DARK_PULSE_BIN,1)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ITI RECOVERY")}")`,
+            "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+            "",
+            "COMPLETE",
+            "",
+            "ACTION DARK_PULSE_BIN",
+            "",
+            "    SET(COUNTER1,COUNTER_INC)",
+            '    LOGDATA(DATA_SNAPSHOT,"begin")',
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("LIGHT-OFF PULSE")}")`,
+            "    INVOKE(LIGHTS_OFF,1)",
+            "    WAIT(PULSE_DURATION)",
+            "    INVOKE(LIGHTS_ON,1)",
+            "    WAIT(POST_PULSE_WAIT)",
+            '    LOGDATA(DATA_SNAPSHOT,"end")',
+            '    LOGDATA(DATA_SELECT,"begin")',
+            '    LOGDATA(DATA_DELTA,"end")',
+            "",
+            '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:STARTLE|COUNTER2|COUNTER1")',
+            ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+            "    LOGRUN()",
+            "",
+            "COMPLETE"
+          ].join("\n")
+        );
+      } else {
+        extraActions.push(
+          [
+            "ACTION STARTLE_TRIAL",
+            "",
+            "    SET(COUNTER2,COUNTER_INC)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("LIGHT-OFF PULSE")}")`,
+            "    INVOKE(LIGHTS_OFF,1)",
+            "    INVOKE(SAMPLE_STARTLE,PULSE_BINS)",
+            "    INVOKE(LIGHTS_ON,1)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ITI RECOVERY")}")`,
+            "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+            "",
+            "COMPLETE"
+          ].join("\n"),
+          buildSampleAction("SAMPLE_STARTLE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:STARTLE|COUNTER2|COUNTER1", dataExprs)
+        );
+      }
+
+      if (preBins > 0) {
+        extraActions.push(
+          buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs)
+        );
+      }
+      extraActions.push(
+        buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs)
+      );
+
+      totalRuntimeSec = acclim + cfg.autorefTimeout + preBins * bin + pulses * (pulseBins + itiBins) * bin;
+      totalRows = preBins + pulses * (pulseBins + itiBins);
+
+    } else if (cfg.stimId === "light_on_pulse") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+      const preBins = Math.round(preSec / bin);
+      const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+      const pulseDur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
+      const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+      const itiBins = Math.max(1, Math.round(itiSec / bin));
+
+      const subBinPulse = pulseDur < bin;
+      const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
+      const postPulseWait = subBinPulse ? Number((bin - pulseDur).toFixed(3)) : 0;
+
+      topDefines.push(
+        `DEFINE ACCLIMATION_SEC ${acclim}`,
+        `DEFINE TIME_BIN ${bin}`,
+        `DEFINE BASELINE_BINS ${preBins}`,
+        `DEFINE NUM_PULSES ${pulses}`,
+        `DEFINE ITI_BINS ${itiBins}`
+      );
+      if (subBinPulse) {
+        topDefines.push(
+          `DEFINE PULSE_DURATION ${pulseDur}`,
+          `DEFINE POST_PULSE_WAIT ${postPulseWait}`
+        );
+      } else {
+        topDefines.push(`DEFINE PULSE_BINS ${pulseBins}`);
+      }
+
+      mainSchedule.push(
+        "    INVOKE(LIGHTS_OFF,1)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK ACCLIMATION")}")`,
+        "    WAIT(ACCLIMATION_SEC)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+        "    AUTOREFERENCE()",
+        "__START_RECORDING__"
+      );
+      if (preBins > 0) {
+        mainSchedule.push(
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK BASELINE")}")`,
+          "    INVOKE(SAMPLE_BASELINE,BASELINE_BINS)"
+        );
+      }
+      mainSchedule.push("    INVOKE(FLASH_TRIAL,NUM_PULSES)");
+
+      if (subBinPulse) {
+        extraActions.push(
+          [
+            "ACTION FLASH_TRIAL",
+            "",
+            "    SET(COUNTER2,COUNTER_INC)",
+            "    INVOKE(LIGHT_FLASH_BIN,1)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK ITI")}")`,
+            "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+            "",
+            "COMPLETE",
+            "",
+            "ACTION LIGHT_FLASH_BIN",
+            "",
+            "    SET(COUNTER1,COUNTER_INC)",
+            '    LOGDATA(DATA_SNAPSHOT,"begin")',
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("LIGHT FLASH")}")`,
+            "    INVOKE(LIGHTS_ON,1)",
+            "    WAIT(PULSE_DURATION)",
+            "    INVOKE(LIGHTS_OFF,1)",
+            "    WAIT(POST_PULSE_WAIT)",
+            '    LOGDATA(DATA_SNAPSHOT,"end")',
+            '    LOGDATA(DATA_SELECT,"begin")',
+            '    LOGDATA(DATA_DELTA,"end")',
+            "",
+            '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:LIGHT_FLASH|COUNTER2|COUNTER1")',
+            ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+            "    LOGRUN()",
+            "",
+            "COMPLETE"
+          ].join("\n")
+        );
+      } else {
+        extraActions.push(
+          [
+            "ACTION FLASH_TRIAL",
+            "",
+            "    SET(COUNTER2,COUNTER_INC)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("LIGHT FLASH")}")`,
+            "    INVOKE(LIGHTS_ON,1)",
+            "    INVOKE(SAMPLE_FLASH,PULSE_BINS)",
+            "    INVOKE(LIGHTS_OFF,1)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK ITI")}")`,
+            "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+            "",
+            "COMPLETE"
+          ].join("\n"),
+          buildSampleAction("SAMPLE_FLASH", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:LIGHT_FLASH|COUNTER2|COUNTER1", dataExprs)
+        );
+      }
+
+      if (preBins > 0) {
+        extraActions.push(
+          buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs)
+        );
+      }
+      extraActions.push(
+        buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs)
+      );
+
+      totalRuntimeSec = acclim + cfg.autorefTimeout + preBins * bin + pulses * (pulseBins + itiBins) * bin;
+      totalRows = preBins + pulses * (pulseBins + itiBins);
+
+    } else if (cfg.stimId === "vibration_startle") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+      const preBins = Math.round(preSec / bin);
+      const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+      const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+      const itiBins = Math.max(1, Math.round(itiSec / bin));
+      const stepMode = sp.vibIntensity || "U0";
+      const ambientAction = sp.vibAmbient === "LIGHT" ? "LIGHTS_ON" : "LIGHTS_OFF";
+
+      topDefines.push(
+        `DEFINE ACCLIMATION_SEC ${acclim}`,
+        `DEFINE TIME_BIN ${bin}`,
+        `DEFINE BASELINE_BINS ${preBins}`,
+        `DEFINE NUM_PULSES ${pulses}`,
+        `DEFINE ITI_BINS ${itiBins}`
+      );
+
+      mainSchedule.push(
+        `    INVOKE(${ambientAction},1)`,
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
+        "    WAIT(ACCLIMATION_SEC)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+        "    AUTOREFERENCE()",
+        "__START_RECORDING__"
+      );
+      if (preBins > 0) {
+        mainSchedule.push(
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("BASELINE")}")`,
+          "    INVOKE(SAMPLE_BASELINE,BASELINE_BINS)"
+        );
+      }
+      mainSchedule.push("    INVOKE(VIBRATION_TRIAL,NUM_PULSES)");
+
+      extraActions.push(
+        [
+          "ACTION VIBRATION_TRIAL",
+          "",
+          "    SET(COUNTER2,COUNTER_INC)",
+          "    INVOKE(VIBRATION_PULSE,1)",
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("POST-VIB ITI")}")`,
+          "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+          "",
+          "COMPLETE",
+          "",
+          "ACTION VIBRATION_PULSE",
+          "",
+          "    SET(COUNTER1,COUNTER_INC)",
+          '    LOGDATA(DATA_SNAPSHOT,"begin")',
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("VIBRATION TAP")}")`,
+          `    ZCOMMAND("${stepMode} D1000 M1 M-1 M1 M-1 M1 M-1 M1 M-1 M1 M-1")`,
+          "    WAIT(TIME_BIN)",
+          '    LOGDATA(DATA_SNAPSHOT,"end")',
+          '    LOGDATA(DATA_SELECT,"begin")',
+          '    LOGDATA(DATA_DELTA,"end")',
+          "",
+          '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:VIBRATION|COUNTER2|COUNTER1")',
+          ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+          "    LOGRUN()",
+          "",
+          "COMPLETE"
+        ].join("\n")
+      );
+      if (preBins > 0) {
+        extraActions.push(
+          buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs)
+        );
+      }
+      extraActions.push(
+        buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs)
+      );
+
+      totalRuntimeSec = acclim + cfg.autorefTimeout + preBins * bin + pulses * (1 + itiBins) * bin;
+      totalRows = preBins + pulses * (1 + itiBins);
+
+    } else if (cfg.stimId === "circadian") {
+      const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
+      const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
+      const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
+      const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
+      const autoref = Math.min(300, Math.max(10, cfg.autorefTimeout || 60));
+      const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
+      const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
+
+      topDefines.push(
+        `DEFINE TIME_BIN ${bin}`,
+        `DEFINE HALF_HOUR_BINS ${halfBins}  # 2 x ${halfBins} x ${bin}s + ${autoref}s autoref = ~1 hour`,
+        `DEFINE LIGHT_HOURS ${lightHrs}`,
+        `DEFINE DARK_HOURS ${darkHrs}`,
+        `DEFINE NUM_DAYS ${days}`,
+        "DEFINE DAY_VAR 100",
+        "DEFINE HOUR_VAR 101",
+        "DEFINE PHASE_VAR 102"
+      );
+
+      mainSchedule.push(
+        "    @DAY_VAR = 0",
+        "    INVOKE(LIGHTS_ON,1)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+        "    AUTOREFERENCE()",
+        "__START_RECORDING__",
+        "    INVOKE(RUN_DAY,NUM_DAYS)"
+      );
+
+      const dayLines = [
+        "ACTION RUN_DAY",
+        "",
+        "    @DAY_VAR = @DAY_VAR + 1"
+      ];
+      if (lightHrs > 0) {
+        dayLines.push(
+          "    @HOUR_VAR = 1",
+          "    @PHASE_VAR = 1",
+          "    INVOKE(LIGHTS_ON,1)",
+          "    INVOKE(RUN_HOUR,LIGHT_HOURS)"
+        );
+      }
+      if (darkHrs > 0) {
+        dayLines.push(
+          "    @HOUR_VAR = 1",
+          "    @PHASE_VAR = 0",
+          "    INVOKE(LIGHTS_OFF,1)",
+          "    INVOKE(RUN_HOUR,DARK_HOURS)"
+        );
+      }
+      dayLines.push("", "COMPLETE");
+
+      extraActions.push(
+        dayLines.join("\n"),
+        [
+          "ACTION RUN_HOUR",
+          "",
+          "    IF @PHASE_VAR = 1",
+          '        LOAD(OVERLAY_TEXT,"1,1:DAY @100 LIGHT HR @101  ")',
+          "    ELSE",
+          '        LOAD(OVERLAY_TEXT,"1,1:DAY @100 DARK  HR @101  ")',
+          "    ENDIF",
+          "",
+          "    INVOKE(SAMPLE_CIRC,HALF_HOUR_BINS)",
+          "    AUTOREFERENCE()",
+          "    INVOKE(SAMPLE_CIRC,HALF_HOUR_BINS)",
+          "    @HOUR_VAR = @HOUR_VAR + 1",
+          "",
+          "COMPLETE"
+        ].join("\n"),
+        [
+          "ACTION SAMPLE_CIRC",
+          "",
+          "    SET(COUNTER1,COUNTER_INC)",
+          '    LOGDATA(DATA_SNAPSHOT,"begin")',
+          "    WAIT(TIME_BIN)",
+          '    LOGDATA(DATA_SNAPSHOT,"end")',
+          '    LOGDATA(DATA_SELECT,"begin")',
+          '    LOGDATA(DATA_DELTA,"end")',
+          "",
+          "    IF @PHASE_VAR = 1",
+          '        LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:LIGHT|@100|@101|COUNTER1")',
+          "    ELSE",
+          '        LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DARK|@100|@101|COUNTER1")',
+          "    ENDIF",
+          ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+          "    LOGRUN()",
+          "",
+          "COMPLETE"
+        ].join("\n")
+      );
+
+      const hrsTotal = days * (lightHrs + darkHrs);
+      totalRuntimeSec = cfg.autorefTimeout + hrsTotal * (2 * halfBins * bin + autoref);
+      totalRows = hrsTotal * 2 * halfBins;
+    }
+
+    // Assemble full Step 4 Zanscript
+    const out = [
+      `# Step 4: Main Assay Script (${p.name} | ${STIMULI.find(s => s.id === cfg.stimId).name})`
+    ];
+    if (userLine) out.push(userLine);
+    out.push(
+      `# Required asset(s) in unit Assets folder: "${p.arenaBmp}.bmp"${cfg.useZones ? ` and "${p.zoneBmp}.bmp"` : ""}`,
+      "",
+      ...topDefines
+    );
+
+    if (cfg.videoMode !== "off") {
+      out.push("DEFINE VIDEO_LENGTH 999999999");
+    }
+    if (cfg.hw === "Z3") {
+      out.push("DEFINE X_LED_DRIVE 30039");
+      out.push(`DEFINE LED_BRIGHTNESS ${cfg.ledDriveVal}`);
+    }
+    if (cfg.useTracks) {
+      out.push("DEFINE X_DRAWTRACKS 30011");
+      out.push("DEFINE X_TRACKTIME 30016");
+    }
+    if (cfg.useHeatmap) {
+      out.push("DEFINE MAKEMAP 5682");
+      out.push("DEFINE COLOURMAP 5683");
+    }
+
+    out.push("");
+    if (cfg.useThermostat) {
+      out.push(`SET(THERMOSTAT,${cfg.thermostatTemp})`);
+    } else {
+      out.push(`# SET(THERMOSTAT,${cfg.thermostatTemp})  # Thermostat disabled`);
+    }
+
+    out.push(
+      `SET(TARGET_SIZE,${cfg.targetSize})`,
+      `SET(DETECTOR_THRESHOLD,${cfg.detThreshold})`,
+      "SET(AUTOREF_MODE,MOVEMENT)",
+      `SET(AUTOREF_TIMEOUT,${cfg.stimId === "circadian" ? Math.min(300, Math.max(10, cfg.autorefTimeout || 60)) : cfg.autorefTimeout})`,
+      `TargetMarker(${Math.max(1, Number((cfg.targetSize * 0.6).toFixed(1)))},1,1)`
+    );
+
+    if (cfg.useMsd) {
+      out.push(
+        "SET(MSD_MODE,ON)",
+        `SET(MSD_THRESHOLD,${cfg.msdThreshold})`
+      );
+    }
+
+    if (cfg.useXy) {
+      out.push(
+        "",
+        `LOGFILE(1,"${runSlug}_XY")`,
+        "SET(LOG_STREAM_PERFRAME,1)"
+      );
+    }
+
+    // ACTION MAIN
+    out.push(
+      "",
+      "ACTION MAIN",
+      "",
+      "    SET(COUNTER1,COUNTER_ZERO)"
+    );
+    if (hasTrials) {
+      out.push("    SET(COUNTER2,COUNTER_ZERO)");
+    }
+    if (cfg.useHeatmap) {
+      out.push("    SET(COLOURMAP,0)");
+    }
+
+    out.push(`    LOAD(ARENAS,"${p.arenaBmp}.bmp")`);
+    if (cfg.useZones) {
+      out.push(`    LOAD(ZONES,"${p.zoneBmp}.bmp")`);
+    }
+
+    out.push(
+      "",
+      "    INVOKE(SETUP_HEADERS,1)"
+    );
+
+    if (cfg.useXy) {
+      out.push(
+        "    SET(LOG_STREAM,1)",
+        "    INVOKE(SETUP_XY_HEADERS,1)",
+        "    SET(LOG_STREAM,0)"
+      );
+    }
+
+    out.push("");
+
+    const recStartLines = [];
+    if (cfg.useTracks) {
+      recStartLines.push(
+        "    SET(X_DRAWTRACKS,1)",
+        "    SET(X_TRACKTIME,15)"
+      );
+    }
+    if (cfg.videoMode !== "off") {
+      recStartLines.push(`    VIDEO(VIDEO_LENGTH,"${runSlug}")`);
+      if (cfg.videoMode === "1fps") {
+        recStartLines.push("    VIDEOSKIP(29)");
+      } else if (cfg.videoMode === "0.2fps") {
+        recStartLines.push("    VIDEOSKIP(149)");
+      } else {
+        recStartLines.push("    VIDEOSKIP(0)");
+      }
+    }
+    if (cfg.useXy) {
+      recStartLines.push("    SET(LOG_PERFRAME,ON)");
+    }
+
+    for (const line of mainSchedule) {
+      if (line === "__START_RECORDING__") {
+        if (recStartLines.length) out.push(...recStartLines);
+      } else {
+        out.push(line);
+      }
+    }
+
+    out.push("");
+    if (cfg.useXy) {
+      out.push("    SET(LOG_PERFRAME,OFF)");
+    }
+    if (cfg.useHeatmap) {
+      out.push("    SET(MAKEMAP,20)");
+    }
+    if (cfg.videoMode !== "off") {
+      out.push("    VIDEOSTOP");
+    }
+    out.push(
+      '    LOAD(OVERLAY_CLEAR,"")',
+      "    INVOKE(LIGHTS_OFF,1)",
+      "",
+      "COMPLETE",
+      ""
+    );
+
+    for (const act of extraActions) {
+      out.push(act, "");
+    }
+
+    out.push(buildLightActions(cfg), "");
+
+    out.push(
+      "ACTION SETUP_HEADERS",
+      "",
+      formatLogHeaderBlock(metaHeaders, wellHeaders, "    "),
+      "",
+      "COMPLETE",
+      ""
+    );
+
+    if (cfg.useXy) {
+      const xyWellHeaders = [];
+      for (const w of cfg.wells) {
+        xyWellHeaders.push(`X_${w}`, `Y_${w}`);
+      }
+      out.push(
+        "ACTION SETUP_XY_HEADERS",
+        "",
+        formatLogHeaderBlock(["RUNTIME"], xyWellHeaders, "    "),
+        `    LOGCREATE("RUNTIME|RAW_XY:${arenaRange}")`,
+        "",
+        "COMPLETE",
+        ""
+      );
+    }
+
+    const firstWell = cfg.wells[0];
+    const lastWell = cfg.wells[cfg.wells.length - 1];
+    const metricSummaryParts = [];
+    if (cfg.useDist || dataExprs[0] === "ARENA_DISTANCES:*") {
+      metricSummaryParts.push(`DIST_${firstWell}..DIST_${lastWell}`);
+    }
+    if (cfg.useMsd) {
+      metricSummaryParts.push(`MSD_${firstWell}..MSD_${lastWell}`);
+    }
+    if (cfg.useZones) {
+      metricSummaryParts.push(`ZD/ZC/ZT_${firstWell}_Z1..Z2`);
+    }
+    let schemaDesc = `Summary CSV: ${metaHeaders.join(" | ")} | ${metricSummaryParts.join(" | ")}`;
+    if (cfg.useXy) {
+      schemaDesc += `  +  XY CSV (${runSlug}_XY): RUNTIME | X_${firstWell} | Y_${firstWell} ...`;
+    }
+
+    return {
+      filename: `04_${runSlug}.zs`,
+      bundleFolder: runSlug,
+      instruction: `<strong>Main experiment:</strong> Confirm <code>${p.arenaBmp}.bmp</code>${cfg.useZones ? ` and <code>${p.zoneBmp}.bmp</code>` : ""} exist in Assets, load your ${p.name} plate with organisms, and click <strong>Run</strong>.`,
+      schemaText: schemaDesc,
+      code: out.join("\n"),
+      totalRuntimeSec,
+      totalRows,
+      csvCount: cfg.useXy ? 2 : 1
+    };
+  }
+
+  function buildSampleAction(name, logCreateStr, dataExprs) {
+    return [
+      `ACTION ${name}`,
+      "",
+      "    SET(COUNTER1,COUNTER_INC)",
+      '    LOGDATA(DATA_SNAPSHOT,"begin")',
+      "    WAIT(TIME_BIN)",
+      '    LOGDATA(DATA_SNAPSHOT,"end")',
+      '    LOGDATA(DATA_SELECT,"begin")',
+      '    LOGDATA(DATA_DELTA,"end")',
+      "",
+      `    LOGCREATE("${logCreateStr}")`,
+      ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+      "    LOGRUN()",
+      "",
+      "COMPLETE"
+    ].join("\n");
+  }
+
+  function generateAllSteps(cfg) {
+    const s1 = generateStep1(cfg);
+    const s2 = generateStep2(cfg);
+    const s3 = generateStep3(cfg);
+    const s4 = generateStep4(cfg);
+    const g = cfg.geo;
+    const sizeKey = cfg.plate.shape === "SQUARE" ? "LENGTH" : "RADIUS";
+
+    const researcherInfo = cfg.userFullClean
+      ? `${cfg.userFullClean}${cfg.lastName ? ` (tag: ${cfg.lastName})` : ""}`
+      : (cfg.lastName || "Not specified");
+
+    const readme = [
+      "ZANTIKS MWP EXPERIMENT BUNDLE",
+      "=============================",
+      `Researcher       : ${researcherInfo}`,
+      `Study Tag        : ${cfg.expTag || "(none)"}`,
+      `Plate Format     : ${cfg.plate.name} (${cfg.plate.rows} x ${cfg.plate.cols}, ${cfg.numWells} arena(s))`,
+      `Config Profile   : ${state.profileName || "Default"}`,
+      `Plate Geometry   : X_OFFSET=${g.xOffset}, Y_OFFSET=${g.yOffset}, COL_STEP=${g.colStep}, ROW_STEP=${g.rowStep}, ${sizeKey}=${g.r}, INNER_ZONE=${g.rDz} mm`,
+      `Hardware Target  : MWP ${cfg.hw}`,
+      `Stimulus Protocol: ${STIMULI.find(s => s.id === cfg.stimId).name}`,
+      `Estimated Runtime: ${formatDuration(s4.totalRuntimeSec)} (${s4.totalRows} CSV rows)`,
+      "",
+      "EXECUTION ORDER IN ZANTIKS CONTROL CONSOLE",
+      "------------------------------------------",
+      `1. ${s1.filename}`,
+      "   - Run ONCE with the black 96-well calibration plate. Skip if already calibrated.",
+      "",
+      `2. ${s2.filename}`,
+      `   - Run ONCE with an EMPTY ${cfg.plate.name} plate.`,
+      `   - Generates "${cfg.plate.arenaBmp}.bmp" and "${cfg.plate.zoneBmp}.bmp" inside the unit's Assets directory.`,
+      "",
+      `3. ${s3.filename} (Optional)`,
+      "   - Run with organisms loaded to check TARGET_SIZE and DETECTOR_THRESHOLD on Live View.",
+      "",
+      `4. ${s4.filename}`,
+      "   - Main assay script. Load your experimental plate, build, and run.",
+      "   - Download exported .csv data from Control Console -> Data files when complete.",
+      "",
+      "UNIT REMINDERS",
+      "--------------",
+      "- Do not rename scripts with spaces or parentheses.",
+      "- Always click Save before Build in the Zantiks web editor.",
+      "- Always shut down via the Control Console webpage before switching off unit power.",
+      ""
+    ].join("\n");
+
+    return { 1: s1, 2: s2, 3: s3, 4: s4, readme };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7. Syntax Highlighting (Read-only Preview)
+  // ---------------------------------------------------------------------------
+  function highlightZanscript(code) {
+    const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return code.split("\n").map(line => {
+      let commentPos = -1;
+      let inStr = false;
+      for (let i = 0; i < line.length; i++) {
+        if (line[i] === '"') inStr = !inStr;
+        else if (line[i] === "#" && !inStr) {
+          commentPos = i;
+          break;
+        }
+      }
+      const codePart = commentPos >= 0 ? line.slice(0, commentPos) : line;
+      const commentPart = commentPos >= 0 ? line.slice(commentPos) : "";
+
+      let html = esc(codePart)
+        .replace(/"([^"]*)"/g, '<span class="zs-str">"$1"</span>')
+        .replace(/\b(ACTION|COMPLETE|DEFINE|IF|ELSEIF|ELSE|ENDIF|WHILE|ENDWHILE|INCLUDE)\b/g, '<span class="zs-kw">$1</span>')
+        .replace(/\b(INVOKE|SET|WAIT|LOAD|AUTOREFERENCE|LOGCREATE|LOGAPPEND|LOGRUN|LOGDATA|LOGFILE|VIDEO|VIDEOSKIP|VIDEOSTOP|ZCOMMAND|LIGHTS|Calibration|ResetDrawing|ShapeType|ShapeDraw|SaveDrawing|TargetMarker)\b/g, '<span class="zs-cmd">$1</span>')
+        .replace(/(@\w+)/g, '<span class="zs-var">$1</span>');
+
+      if (commentPart) {
+        html += '<span class="zs-comment">' + esc(commentPart) + "</span>";
+      }
+      return html;
+    }).join("\n");
+  }
+
+  // ---------------------------------------------------------------------------
+  // 8. Offline Pure-JS ZIP Builder (STORE method + IEEE CRC32)
+  // ---------------------------------------------------------------------------
+  const CRC_TABLE = (function () {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) {
+        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      }
+      t[i] = c >>> 0;
+    }
+    return t;
+  })();
+
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) {
+      crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function createZipBlob(files) {
+    const encoder = new TextEncoder();
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+
+    const now = new Date();
+    const dosTime = ((now.getHours() & 0x1F) << 11) | ((now.getMinutes() & 0x3F) << 5) | ((now.getSeconds() >> 1) & 0x1F);
+    const dosDate = (((Math.max(1980, now.getFullYear()) - 1980) & 0x7F) << 9) | (((now.getMonth() + 1) & 0x0F) << 5) | (now.getDate() & 0x1F);
+
+    for (const f of files) {
+      const nameBytes = encoder.encode(f.name);
+      const dataBytes = encoder.encode(f.content);
+      const crc = crc32(dataBytes);
+
+      const local = new Uint8Array(30 + nameBytes.length);
+      const lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0x0800, true);
+      lv.setUint16(8, 0, true);
+      lv.setUint16(10, dosTime, true);
+      lv.setUint16(12, dosDate, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, dataBytes.length, true);
+      lv.setUint32(22, dataBytes.length, true);
+      lv.setUint16(26, nameBytes.length, true);
+      lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+
+      localParts.push(local, dataBytes);
+
+      const central = new Uint8Array(46 + nameBytes.length);
+      const cv = new DataView(central.buffer);
+      cv.setUint32(0, 0x02014b50, true);
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0x0800, true);
+      cv.setUint16(10, 0, true);
+      cv.setUint16(12, dosTime, true);
+      cv.setUint16(14, dosDate, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, dataBytes.length, true);
+      cv.setUint32(24, dataBytes.length, true);
+      cv.setUint16(28, nameBytes.length, true);
+      cv.setUint16(30, 0, true);
+      cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true);
+      cv.setUint16(36, 0, true);
+      cv.setUint32(38, 0, true);
+      cv.setUint32(42, offset, true);
+      central.set(nameBytes, 46);
+
+      centralParts.push(central);
+      offset += local.length + dataBytes.length;
+    }
+
+    let centralSize = 0;
+    for (const c of centralParts) centralSize += c.length;
+
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(4, 0, true);
+    ev.setUint16(6, 0, true);
+    ev.setUint16(8, files.length, true);
+    ev.setUint16(10, files.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, offset, true);
+    ev.setUint16(20, 0, true);
+
+    return new Blob([...localParts, ...centralParts, eocd], { type: "application/zip" });
+  }
+
+  function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 9. Dynamic UI & Modal Rendering
+  // ---------------------------------------------------------------------------
+  function renderOrganismChips() {
+    const wrap = document.getElementById("organismPresets");
+    if (wrap.children.length === 0) {
+      for (const org of ORGANISM_PRESETS) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.setAttribute("data-org", org.id);
+        btn.className = "chip" + (state.organism === org.id ? " active" : "");
+        btn.textContent = org.label;
+        btn.addEventListener("click", () => {
+          state.organism = org.id;
+          if (org.id !== "custom") {
+            document.getElementById("targetSize").value = org.targetSize;
+            document.getElementById("detThreshold").value = org.detThreshold;
+            document.getElementById("msdThreshold").value = org.msdThreshold;
+            document.getElementById("thermostatTemp").value = org.temp;
+            document.getElementById("chk_thermostat").checked = org.thermostat;
+            if (org.suggestMsd) {
+              document.getElementById("chk_msd").checked = true;
+              syncCheckStyles();
+            }
+          }
+          renderOrganismChips();
+          refreshAll();
+        });
+        wrap.appendChild(btn);
+      }
+      return;
+    }
+
+    for (let i = 0; i < wrap.children.length; i++) {
+      const btn = wrap.children[i];
+      const isActive = btn.getAttribute("data-org") === state.organism;
+      btn.className = "chip" + (isActive ? " active" : "");
+    }
+  }
+
+  function renderPlateGrid() {
+    const wrap = document.getElementById("plateGrid");
+    wrap.innerHTML = "";
+    for (const key of Object.keys(FACTORY_PLATES)) {
+      const p = FACTORY_PLATES[key];
+      const customized = isPlateCustomized(key);
+      const tile = document.createElement("button");
+      tile.type = "button";
+      tile.className = "option-tile" + (state.plateId === key ? " active" : "");
+      const dotHtml = customized ? '<span class="tile-dot" title="Custom geometry offsets"></span>' : "";
+      tile.innerHTML = `<span class="tile-name"><span>${p.name}</span>${dotHtml}</span><span class="tile-meta">${p.meta}</span>`;
+      tile.addEventListener("click", () => {
+        state.plateId = key;
+        syncGeoInputsToActivePlate();
+        renderPlateGrid();
+        refreshAll();
+      });
+      wrap.appendChild(tile);
+    }
+  }
+
+  function syncGeoInputsToActivePlate() {
+    const p = FACTORY_PLATES[state.plateId];
+    const g = state.plateGeometries[state.plateId];
+    const isSingle = p.rows === 1 && p.cols === 1;
+
+    document.getElementById("geoX").value = g.xOffset;
+    document.getElementById("geoY").value = g.yOffset;
+    document.getElementById("geoR").value = g.r;
+    document.getElementById("geoColStep").value = g.colStep;
+    document.getElementById("geoRowStep").value = g.rowStep;
+    document.getElementById("geoRdz").value = g.rDz;
+
+    document.getElementById("geoRLabel").textContent = p.shape === "SQUARE" ? "SIDE LENGTH (mm)" : "RADIUS (mm)";
+    document.getElementById("geoColStep").disabled = isSingle;
+    document.getElementById("geoRowStep").disabled = isSingle;
+  }
+
+  function renderPlateSvg(cfg) {
+    const svg = document.getElementById("plateSvg");
+    const p = cfg.plate;
+    const g = cfg.geo;
+    const isPetri = p.id === "petri";
+
+    // True-scale millimeter footprint (standard SBS plate ~127.8 x 85.5 mm, or chamber tray for dish)
+    const trayW = isPetri ? 132 : 127.8;
+    const trayH = 85.5;
+    let items = `<rect x="0" y="0" width="${trayW}" height="${trayH}" rx="${isPetri ? 8 : 5}" fill="#ffffff" stroke="#afb8c1" stroke-width="1.2"/>`;
+
+    const showInner = cfg.useZones || document.getElementById("inlineGeoDetails").open;
+
+    for (let r = 0; r < p.rows; r++) {
+      for (let c = 0; c < p.cols; c++) {
+        const cx = g.xOffset + c * g.colStep;
+        const cy = g.yOffset + r * g.rowStep;
+        if (p.shape === "SQUARE") {
+          const s = g.r;
+          items += `<rect x="${(cx - s / 2).toFixed(2)}" y="${(cy - s / 2).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" fill="#ddf4ff" stroke="#0969da" stroke-width="0.9"/>`;
+          if (showInner) {
+            const si = g.rDz;
+            items += `<rect x="${(cx - si / 2).toFixed(2)}" y="${(cy - si / 2).toFixed(2)}" width="${si.toFixed(2)}" height="${si.toFixed(2)}" fill="none" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          }
+        } else {
+          items += `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${g.r.toFixed(2)}" fill="#ddf4ff" stroke="#0969da" stroke-width="0.9"/>`;
+          if (showInner) {
+            items += `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${g.rDz.toFixed(2)}" fill="none" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          }
+        }
+      }
+    }
+    svg.innerHTML = items;
+
+    const first = cfg.wells[0];
+    const last = cfg.wells[cfg.wells.length - 1];
+    document.getElementById("platePreviewLabel").textContent =
+      cfg.numWells === 1 ? "1 Arena (A1)" : `${p.rows} x ${p.cols} (${first}-${last})`;
+    document.getElementById("plateAssetHint").textContent =
+      `Assets: ${p.arenaBmp}.bmp${cfg.useZones ? `, ${p.zoneBmp}.bmp` : ""}`;
+  }
+
+  function renderConfigModalTable() {
+    const tbody = document.getElementById("cfgTableBody");
+    tbody.innerHTML = "";
+    document.getElementById("cfgProfileName").value = state.profileName || "";
+
+    for (const key of Object.keys(FACTORY_PLATES)) {
+      const p = FACTORY_PLATES[key];
+      const g = state.plateGeometries[key];
+      const customized = isPlateCustomized(key);
+      const isSingle = p.rows === 1 && p.cols === 1;
+
+      const tr = document.createElement("tr");
+      if (state.plateId === key) tr.className = "active-row";
+
+      const badge = customized ? '<span class="badge-custom">Custom</span>' : "";
+      const sizeHint = p.shape === "SQUARE" ? "side" : "rad";
+
+      tr.innerHTML = `
+        <td>
+          <div class="cfg-plate-label">${p.name} ${badge}</div>
+          <div class="cfg-plate-sub">${p.rows}x${p.cols} • ${p.arenaBmp}.bmp (${sizeHint})</div>
+        </td>
+        <td><input type="number" step="0.05" data-plate="${key}" data-field="xOffset" value="${g.xOffset}"></td>
+        <td><input type="number" step="0.05" data-plate="${key}" data-field="yOffset" value="${g.yOffset}"></td>
+        <td><input type="number" step="0.05" data-plate="${key}" data-field="colStep" value="${g.colStep}" ${isSingle ? "disabled" : ""}></td>
+        <td><input type="number" step="0.05" data-plate="${key}" data-field="rowStep" value="${g.rowStep}" ${isSingle ? "disabled" : ""}></td>
+        <td><input type="number" step="0.05" data-plate="${key}" data-field="r" value="${g.r}"></td>
+        <td><input type="number" step="0.05" data-plate="${key}" data-field="rDz" value="${g.rDz}"></td>
+        <td style="white-space:nowrap;">
+          <button type="button" class="btn btn-xs" data-act="auto50" data-plate="${key}" title="Set INNER_ZONE to 50% area">50%</button>
+          <button type="button" class="btn btn-xs" data-act="reset" data-plate="${key}" title="Restore factory values">Reset</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    tbody.querySelectorAll("input[data-plate]").forEach(inp => {
+      inp.addEventListener("change", () => {
+        const key = inp.getAttribute("data-plate");
+        const field = inp.getAttribute("data-field");
+        const defVal = FACTORY_PLATES[key][field];
+        const nextVal = roundGeo(inp.value, defVal);
+        state.plateGeometries[key][field] = nextVal;
+        inp.value = nextVal;
+        savePlateConfigToBrowser();
+        if (key === state.plateId) syncGeoInputsToActivePlate();
+        renderPlateGrid();
+        renderConfigModalTable();
+        refreshAll();
+      });
+    });
+
+    tbody.querySelectorAll("button[data-act]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-plate");
+        const act = btn.getAttribute("data-act");
+        if (act === "auto50") {
+          const r = state.plateGeometries[key].r;
+          state.plateGeometries[key].rDz = Number((r * Math.SQRT1_2).toFixed(2));
+          showToast(`Set ${FACTORY_PLATES[key].name} inner zone to 50% area`);
+        } else if (act === "reset") {
+          const def = FACTORY_PLATES[key];
+          state.plateGeometries[key] = {
+            xOffset: def.xOffset, yOffset: def.yOffset,
+            colStep: def.colStep, rowStep: def.rowStep,
+            r: def.r, rDz: def.rDz
+          };
+          showToast(`Reset ${def.name} to factory defaults`);
+        }
+        savePlateConfigToBrowser();
+        if (key === state.plateId) syncGeoInputsToActivePlate();
+        renderPlateGrid();
+        renderConfigModalTable();
+        refreshAll();
+      });
+    });
+
+    updateConfigStatusBadges();
+  }
+
+  function updateConfigStatusBadges() {
+    const customCount = countCustomizedPlates();
+    const topBadge = document.getElementById("topCustomCountBadge");
+    if (customCount > 0) {
+      topBadge.style.display = "inline-block";
+      topBadge.textContent = `${customCount} custom`;
+    } else {
+      topBadge.style.display = "none";
+    }
+
+    const activeCustom = isPlateCustomized(state.plateId);
+    const inlineBadge = document.getElementById("inlineGeoCustomBadge");
+    inlineBadge.style.display = activeCustom ? "inline-block" : "none";
+
+    const p = FACTORY_PLATES[state.plateId];
+    const g = state.plateGeometries[state.plateId];
+    document.getElementById("inlineGeoSummaryText").textContent =
+      `${p.name} Offsets: X=${g.xOffset}, Y=${g.yOffset}, ${p.shape === "SQUARE" ? "L" : "R"}=${g.r} mm`;
+
+    const syncBadge = document.getElementById("cfgSyncBadge");
+    if (state.unsavedFileChanges) {
+      syncBadge.className = "badge-warn";
+      syncBadge.textContent = "Saved in browser • Unsaved to file";
+    } else {
+      syncBadge.className = "badge-custom";
+      syncBadge.textContent = customCount > 0 ? "Synced with config file" : "Factory defaults";
+    }
+  }
+
+  function renderStimGrid() {
+    const wrap = document.getElementById("stimGrid");
+    wrap.innerHTML = "";
+    for (const s of STIMULI) {
+      const tile = document.createElement("button");
+      tile.type = "button";
+      tile.className = "option-tile" + (state.stimId === s.id ? " active" : "");
+      tile.innerHTML = `<span class="tile-name">${s.name}</span><span class="tile-meta">${s.meta}</span>`;
+      tile.addEventListener("click", () => {
+        state.stimId = s.id;
+        renderStimGrid();
+        renderStimParams();
+        refreshAll();
+      });
+      wrap.appendChild(tile);
+    }
+  }
+
+  function renderStimParams() {
+    const box = document.getElementById("stimParamsBox");
+    const sp = state.stimParams;
+    const id = state.stimId;
+
+    if (id === "baseline") {
+      box.innerHTML = `
+        <div class="form-grid">
+          <div class="field">
+            <label>Chamber Lighting</label>
+            <select data-sp="baseLight">
+              <option value="LIGHT" ${sp.baseLight === "LIGHT" ? "selected" : ""}>Overhead Light ON</option>
+              <option value="DARK" ${sp.baseLight === "DARK" ? "selected" : ""}>Dark (IR Tracking Only)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Time Bin (sec)</label>
+            <input type="number" min="1" max="3600" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
+          </div>
+          <div class="field">
+            <label>Acclimation (sec)</label>
+            <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
+          </div>
+          <div class="field">
+            <label>Recording Duration (sec)</label>
+            <input type="number" min="5" max="86400" step="30" data-sp="durationSec" value="${sp.durationSec}">
+          </div>
+        </div>`;
+    } else if (id === "ld_transitions") {
+      box.innerHTML = `
+        <div class="form-grid">
+          <div class="field">
+            <label>Starting Phase</label>
+            <select data-sp="ldStart">
+              <option value="LIGHT" ${sp.ldStart === "LIGHT" ? "selected" : ""}>Light First (Light -> Dark)</option>
+              <option value="DARK" ${sp.ldStart === "DARK" ? "selected" : ""}>Dark First (Dark -> Light)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Number of L/D Cycles</label>
+            <input type="number" min="1" max="50" step="1" data-sp="ldCycles" value="${sp.ldCycles}">
+          </div>
+          <div class="field">
+            <label>Each Phase Duration (sec)</label>
+            <input type="number" min="5" max="7200" step="30" data-sp="ldPhaseSec" value="${sp.ldPhaseSec}">
+          </div>
+          <div class="field">
+            <label>Acclimation (sec)</label>
+            <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
+          </div>
+          <div class="field">
+            <label>Time Bin (sec)</label>
+            <input type="number" min="1" max="600" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
+          </div>
+        </div>`;
+    } else if (id === "light_off_startle" || id === "light_on_pulse") {
+      const pulseLabel = id === "light_off_startle" ? "Dark Pulse Duration (sec)" : "Light Flash Duration (sec)";
+      box.innerHTML = `
+        <div class="form-grid">
+          <div class="field">
+            <label>Number of Pulses</label>
+            <input type="number" min="1" max="100" step="1" data-sp="numPulses" value="${sp.numPulses}">
+          </div>
+          <div class="field">
+            <label>${pulseLabel}</label>
+            <input type="number" min="0.2" max="60" step="0.2" data-sp="pulseDurSec" value="${sp.pulseDurSec}">
+          </div>
+          <div class="field">
+            <label>Inter-Trial Interval / ITI (sec)</label>
+            <input type="number" min="1" max="1800" step="5" data-sp="itiSec" value="${sp.itiSec}">
+          </div>
+          <div class="field">
+            <label>Pre-Pulse Baseline (sec)</label>
+            <input type="number" min="0" max="3600" step="10" data-sp="preBaselineSec" value="${sp.preBaselineSec}">
+          </div>
+          <div class="field">
+            <label>Acclimation (sec)</label>
+            <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
+          </div>
+          <div class="field">
+            <label>Time Bin (sec)</label>
+            <input type="number" min="1" max="300" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
+          </div>
+        </div>`;
+    } else if (id === "vibration_startle") {
+      box.innerHTML = `
+        <div class="form-grid">
+          <div class="field">
+            <label>Tap Intensity (Stepper Mode)</label>
+            <select data-sp="vibIntensity">
+              <option value="U0" ${sp.vibIntensity === "U0" ? "selected" : ""}>Strong (Full Step - U0)</option>
+              <option value="U1" ${sp.vibIntensity === "U1" ? "selected" : ""}>Medium (Half Step - U1)</option>
+              <option value="U2" ${sp.vibIntensity === "U2" ? "selected" : ""}>Mild (Quarter Step - U2)</option>
+              <option value="U3" ${sp.vibIntensity === "U3" ? "selected" : ""}>Gentle (Eighth Step - U3)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Ambient Chamber Light</label>
+            <select data-sp="vibAmbient">
+              <option value="DARK" ${sp.vibAmbient === "DARK" ? "selected" : ""}>Dark (IR Only)</option>
+              <option value="LIGHT" ${sp.vibAmbient === "LIGHT" ? "selected" : ""}>Overhead Light ON</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Number of Vibration Taps</label>
+            <input type="number" min="1" max="100" step="1" data-sp="numPulses" value="${sp.numPulses}">
+          </div>
+          <div class="field">
+            <label>Inter-Trial Interval / ITI (sec)</label>
+            <input type="number" min="1" max="1800" step="5" data-sp="itiSec" value="${sp.itiSec}">
+          </div>
+          <div class="field">
+            <label>Pre-Tap Baseline (sec)</label>
+            <input type="number" min="0" max="3600" step="10" data-sp="preBaselineSec" value="${sp.preBaselineSec}">
+          </div>
+          <div class="field">
+            <label>Acclimation (sec)</label>
+            <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
+          </div>
+        </div>`;
+    } else if (id === "circadian") {
+      box.innerHTML = `
+        <div class="form-grid">
+          <div class="field">
+            <label>Light Hours per Cycle</label>
+            <input type="number" min="0" max="24" step="1" data-sp="lightHours" value="${sp.lightHours}">
+          </div>
+          <div class="field">
+            <label>Dark Hours per Cycle</label>
+            <input type="number" min="0" max="24" step="1" data-sp="darkHours" value="${sp.darkHours}">
+          </div>
+          <div class="field">
+            <label>Number of Cycles / Days</label>
+            <input type="number" min="1" max="14" step="1" data-sp="numDays" value="${sp.numDays}">
+          </div>
+          <div class="field">
+            <label>Time Bin (sec)</label>
+            <input type="number" min="1" max="600" step="1" data-sp="circBinSec" value="${sp.circBinSec}">
+          </div>
+        </div>`;
+    }
+
+    box.querySelectorAll("[data-sp]").forEach(el => {
+      el.addEventListener("input", () => {
+        state.stimParams[el.getAttribute("data-sp")] = el.value;
+        refreshAll();
+      });
+      el.addEventListener("change", () => {
+        state.stimParams[el.getAttribute("data-sp")] = el.value;
+        refreshAll();
+      });
+    });
+  }
+
+  function renderTimeline(cfg, s4) {
+    const bar = document.getElementById("timelineBar");
+    const desc = document.getElementById("timelineDesc");
+    const total = document.getElementById("timelineTotal");
+    const sp = cfg.sp;
+    const segs = [];
+
+    if (cfg.stimId === "baseline") {
+      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
+      segs.push({
+        cls: sp.baseLight === "DARK" ? "tl-dark" : "tl-light",
+        w: Math.max(10, +sp.durationSec),
+        txt: sp.baseLight === "DARK" ? "Dark Recording" : "Light Recording"
+      });
+      desc.textContent = `Constant ${sp.baseLight.toLowerCase()} recording`;
+    } else if (cfg.stimId === "ld_transitions") {
+      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
+      const n = Math.min(6, Math.max(1, parseInt(sp.ldCycles, 10) || 1));
+      const startL = sp.ldStart !== "DARK";
+      for (let i = 0; i < n; i++) {
+        segs.push({ cls: startL ? "tl-light" : "tl-dark", w: +sp.ldPhaseSec, txt: startL ? "L" : "D" });
+        segs.push({ cls: startL ? "tl-dark" : "tl-light", w: +sp.ldPhaseSec, txt: startL ? "D" : "L" });
+      }
+      desc.textContent = `${sp.ldCycles} x (${sp.ldPhaseSec}s Light / ${sp.ldPhaseSec}s Dark)`;
+    } else if (cfg.stimId === "light_off_startle" || cfg.stimId === "light_on_pulse") {
+      const isOff = cfg.stimId === "light_off_startle";
+      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
+      if (+sp.preBaselineSec > 0) segs.push({ cls: isOff ? "tl-light" : "tl-dark", w: +sp.preBaselineSec, txt: "Base" });
+      const n = Math.min(8, Math.max(1, parseInt(sp.numPulses, 10) || 1));
+      for (let i = 0; i < n; i++) {
+        segs.push({ cls: "tl-pulse", w: Math.max(4, +sp.itiSec * 0.18), txt: "" });
+        segs.push({ cls: isOff ? "tl-light" : "tl-dark", w: +sp.itiSec, txt: "" });
+      }
+      desc.textContent = `${sp.numPulses} pulses (${sp.pulseDurSec}s pulse, ${sp.itiSec}s ITI)`;
+    } else if (cfg.stimId === "vibration_startle") {
+      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
+      const baseCls = sp.vibAmbient === "LIGHT" ? "tl-light" : "tl-dark";
+      if (+sp.preBaselineSec > 0) segs.push({ cls: baseCls, w: +sp.preBaselineSec, txt: "Base" });
+      const n = Math.min(8, Math.max(1, parseInt(sp.numPulses, 10) || 1));
+      for (let i = 0; i < n; i++) {
+        segs.push({ cls: "tl-vib", w: Math.max(4, +sp.itiSec * 0.18), txt: "" });
+        segs.push({ cls: baseCls, w: +sp.itiSec, txt: "" });
+      }
+      desc.textContent = `${sp.numPulses} taps (${sp.vibIntensity}, ${sp.itiSec}s ITI)`;
+    } else if (cfg.stimId === "circadian") {
+      const n = Math.min(5, Math.max(1, parseInt(sp.numDays, 10) || 1));
+      for (let i = 0; i < n; i++) {
+        if (+sp.lightHours > 0) segs.push({ cls: "tl-light", w: +sp.lightHours, txt: `${sp.lightHours}h L` });
+        if (+sp.darkHours > 0) segs.push({ cls: "tl-dark", w: +sp.darkHours, txt: `${sp.darkHours}h D` });
+      }
+      desc.textContent = `${sp.numDays} cycle(s) of ${sp.lightHours}h Light : ${sp.darkHours}h Dark`;
+    }
+
+    const sumW = segs.reduce((a, b) => a + b.w, 0) || 1;
+    bar.innerHTML = segs.map(s => {
+      const pct = ((s.w / sumW) * 100).toFixed(2);
+      return `<div class="tl-seg ${s.cls}" style="width:${pct}%">${pct > 11 ? s.txt : ""}</div>`;
+    }).join("");
+
+    total.textContent = `Est. Runtime: ${formatDuration(s4.totalRuntimeSec)}`;
+  }
+
+  function syncCheckStyles() {
+    ["dist", "msd", "zones", "xy"].forEach(k => {
+      const chk = document.getElementById("chk_" + k);
+      const lbl = document.getElementById("lbl_" + k);
+      lbl.classList.toggle("checked", chk.checked);
+    });
+  }
+
+  function refreshAll() {
+    const cfg = readConfig();
+    const bundle = generateAllSteps(cfg);
+    const activeObj = bundle[state.activeStep];
+    const s4 = bundle[4];
+
+    // Researcher filename preview & non-ASCII warning
+    document.getElementById("previewFolderName").textContent = `${s4.bundleFolder}/`;
+    document.getElementById("previewMainScript").textContent = s4.filename;
+    document.getElementById("nameAsciiWarn").classList.toggle("show", cfg.hasNonAsciiWarning);
+
+    // Header badge & preset summary
+    document.getElementById("hwBadge").textContent = "MWP " + cfg.hw;
+    const orgObj = ORGANISM_PRESETS.find(o => o.id === state.organism);
+    document.getElementById("presetSummary").textContent =
+      `TARGET_SIZE=${cfg.targetSize}mm | THRESHOLD=${cfg.detThreshold} | TEMP=${cfg.useThermostat ? cfg.thermostatTemp + "°C" : "Ambient"} (${orgObj.label})`;
+
+    // Visual previews & geometry status
+    updateConfigStatusBadges();
+    renderPlateSvg(cfg);
+    renderTimeline(cfg, s4);
+
+    // Summary strip stats
+    const first = cfg.wells[0];
+    const last = cfg.wells[cfg.wells.length - 1];
+    document.getElementById("statWells").textContent =
+      cfg.numWells === 1 ? "1 (A1)" : `${cfg.numWells} (${first}-${last})`;
+    document.getElementById("statRuntime").textContent = formatDuration(s4.totalRuntimeSec);
+    document.getElementById("statRows").textContent = `${s4.totalRows} rows`;
+    document.getElementById("statFiles").textContent =
+      s4.csvCount === 2 ? "2 CSVs (Summary + XY)" : "1 Summary CSV";
+
+    // Active step tab content
+    document.getElementById("currentFilename").textContent = activeObj.filename;
+    document.getElementById("stepInstructionText").innerHTML = activeObj.instruction;
+    document.getElementById("csvSchemaBox").innerHTML = `<code>${activeObj.schemaText}</code>`;
+    document.getElementById("codePreview").innerHTML = highlightZanscript(activeObj.code);
+
+    refreshAll._latestBundle = bundle;
+    refreshAll._latestCfg = cfg;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 10. Event Listeners & Init
+  // ---------------------------------------------------------------------------
+  function openConfigModal() {
+    renderConfigModalTable();
+    document.getElementById("configModalBackdrop").classList.add("open");
+  }
+
+  function closeConfigModal() {
+    document.getElementById("configModalBackdrop").classList.remove("open");
+  }
+
+  async function saveConfigJsFile() {
+    const nowIso = new Date().toISOString();
+    state.plateConfigUpdatedAt = nowIso;
+    const payload = buildConfigPayload(nowIso);
+    const jsText = formatPlateConfigJsContent(payload);
+
+    // Persist in browser as well
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(STORAGE_KEY_PLATES, JSON.stringify(payload));
+      }
+    } catch (_) {}
+
+    if (typeof window !== "undefined" && typeof window.showSaveFilePicker === "function") {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: "zantiks_plate_config.js",
+          types: [{
+            description: "Zantiks Plate Config (.js)",
+            accept: { "text/javascript": [".js"] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(jsText);
+        await writable.close();
+        state.unsavedFileChanges = false;
+        updateConfigStatusBadges();
+        showToast("Saved zantiks_plate_config.js");
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+      }
+    }
+
+    const blob = new Blob([jsText], { type: "text/javascript;charset=utf-8" });
+    triggerDownload(blob, "zantiks_plate_config.js");
+    state.unsavedFileChanges = false;
+    updateConfigStatusBadges();
+    showToast("Downloaded zantiks_plate_config.js");
+  }
+
+  function bindEvents() {
+    // Researcher Full Name -> Auto-extract Last Name
+    const userNameEl = document.getElementById("userName");
+    userNameEl.addEventListener("input", refreshAll);
+    userNameEl.addEventListener("change", refreshAll);
+
+    // Step Tabs
+    document.querySelectorAll("#stepTabs .tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        state.activeStep = parseInt(btn.getAttribute("data-step"), 10);
+        document.querySelectorAll("#stepTabs .tab-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        refreshAll();
+      });
+    });
+
+    // Exported Data Checkboxes
+    ["dist", "msd", "zones", "xy"].forEach(k => {
+      document.getElementById("chk_" + k).addEventListener("change", (e) => {
+        const anyChecked = ["dist", "msd", "zones", "xy"].some(id => document.getElementById("chk_" + id).checked);
+        if (!anyChecked) {
+          e.target.checked = true;
+          showToast("At least one exported data type is required");
+        }
+        syncCheckStyles();
+        refreshAll();
+      });
+    });
+
+    // Inline Plate Geometry Inputs (Persist per plate!)
+    const inlineMap = {
+      geoX: "xOffset",
+      geoY: "yOffset",
+      geoR: "r",
+      geoColStep: "colStep",
+      geoRowStep: "rowStep",
+      geoRdz: "rDz"
+    };
+    Object.keys(inlineMap).forEach(inputId => {
+      const el = document.getElementById(inputId);
+      const field = inlineMap[inputId];
+      const handleGeoEdit = (normalizeInput) => {
+        const key = state.plateId;
+        const defVal = FACTORY_PLATES[key][field];
+        const val = roundGeo(el.value, defVal);
+        state.plateGeometries[key][field] = val;
+        if (normalizeInput) el.value = val;
+        savePlateConfigToBrowser();
+        renderPlateGrid();
+        refreshAll();
+      };
+      el.addEventListener("input", () => handleGeoEdit(false));
+      el.addEventListener("change", () => handleGeoEdit(true));
+    });
+
+    document.getElementById("inlineGeoDetails").addEventListener("toggle", refreshAll);
+
+    document.getElementById("auto50InlineBtn").addEventListener("click", () => {
+      const key = state.plateId;
+      const r = state.plateGeometries[key].r;
+      state.plateGeometries[key].rDz = Number((r * Math.SQRT1_2).toFixed(2));
+      syncGeoInputsToActivePlate();
+      savePlateConfigToBrowser();
+      renderPlateGrid();
+      refreshAll();
+      showToast("Updated INNER_ZONE to 50% well area");
+    });
+
+    document.getElementById("resetPlateInlineBtn").addEventListener("click", () => {
+      const key = state.plateId;
+      const def = FACTORY_PLATES[key];
+      state.plateGeometries[key] = {
+        xOffset: def.xOffset, yOffset: def.yOffset,
+        colStep: def.colStep, rowStep: def.rowStep,
+        r: def.r, rDz: def.rDz
+      };
+      syncGeoInputsToActivePlate();
+      savePlateConfigToBrowser();
+      renderPlateGrid();
+      refreshAll();
+      showToast(`Reset ${def.name} offsets to factory defaults`);
+    });
+
+    // General Assay / Hardware Inputs
+    [
+      "videoMode", "chk_tracks", "chk_heatmap", "expPrefix", "hwVersion",
+      "targetSize", "detThreshold", "msdThreshold", "autorefTimeout",
+      "thermostatTemp", "chk_thermostat", "ledBrightness", "chk_underlight"
+    ].forEach(id => {
+      const el = document.getElementById(id);
+      el.addEventListener("input", () => {
+        if (["targetSize", "detThreshold", "msdThreshold", "thermostatTemp", "chk_thermostat"].includes(id)) {
+          state.organism = "custom";
+          renderOrganismChips();
+        }
+        refreshAll();
+      });
+      el.addEventListener("change", refreshAll);
+    });
+
+    // Config Modal Events
+    document.getElementById("openConfigModalBtn").addEventListener("click", openConfigModal);
+    document.getElementById("openConfigFromStep1Btn").addEventListener("click", openConfigModal);
+    document.getElementById("closeConfigModalBtn").addEventListener("click", closeConfigModal);
+    document.getElementById("configModalBackdrop").addEventListener("click", (e) => {
+      if (e.target.id === "configModalBackdrop") closeConfigModal();
+    });
+    if (typeof document.addEventListener === "function") {
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeConfigModal();
+      });
+    }
+
+    document.getElementById("cfgProfileName").addEventListener("input", (e) => {
+      state.profileName = e.target.value.trim().slice(0, 48);
+      savePlateConfigToBrowser();
+      refreshAll();
+    });
+
+    document.getElementById("saveCfgJsBtn").addEventListener("click", saveConfigJsFile);
+
+    document.getElementById("exportCfgJsonBtn").addEventListener("click", () => {
+      const nowIso = new Date().toISOString();
+      state.plateConfigUpdatedAt = nowIso;
+      const payload = buildConfigPayload(nowIso);
+      const slug = sanitizeSlug(state.profileName, 24) || "mwp";
+      const blob = new Blob([JSON.stringify(payload, null, 2) + "\n"], { type: "application/json;charset=utf-8" });
+      triggerDownload(blob, `${slug}_plate_config.json`);
+      showToast(`Exported ${slug}_plate_config.json`);
+    });
+
+    const fileInput = document.getElementById("cfgFileInput");
+    document.getElementById("loadCfgFileBtn").addEventListener("click", () => {
+      fileInput.value = "";
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = parseConfigText(reader.result);
+          if (!applyConfigObject(parsed, true)) {
+            throw new Error("No valid plate definitions found");
+          }
+          try {
+            if (typeof localStorage !== "undefined") {
+              localStorage.setItem(STORAGE_KEY_PLATES, JSON.stringify(buildConfigPayload(state.plateConfigUpdatedAt)));
+            }
+          } catch (_) {}
+          syncGeoInputsToActivePlate();
+          renderPlateGrid();
+          renderConfigModalTable();
+          refreshAll();
+          showToast(`Loaded config: ${state.profileName}`);
+        } catch (err) {
+          showToast("Invalid config file format");
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById("resetAllPlatesBtn").addEventListener("click", () => {
+      state.plateGeometries = cloneDefaultGeometries();
+      savePlateConfigToBrowser();
+      syncGeoInputsToActivePlate();
+      renderPlateGrid();
+      renderConfigModalTable();
+      refreshAll();
+      showToast("Reset all 9 plate formats to factory defaults");
+    });
+
+    // Copy filename (without .zs for pasting into Zantiks Add Service dialog)
+    document.getElementById("copyFilenameBtn").addEventListener("click", () => {
+      const fname = refreshAll._latestBundle[state.activeStep].filename.replace(/\.zs$/, "");
+      navigator.clipboard.writeText(fname).then(() => {
+        showToast(`Copied service name: ${fname}`);
+      });
+    });
+
+    // Copy script code
+    document.getElementById("copyCodeBtn").addEventListener("click", () => {
+      const code = refreshAll._latestBundle[state.activeStep].code;
+      navigator.clipboard.writeText(code).then(() => {
+        showToast(`Copied ${refreshAll._latestBundle[state.activeStep].filename}`);
+      });
+    });
+
+    // Download single .zs
+    document.getElementById("downloadSingleBtn").addEventListener("click", () => {
+      const item = refreshAll._latestBundle[state.activeStep];
+      const blob = new Blob([item.code], { type: "text/plain;charset=utf-8" });
+      triggerDownload(blob, item.filename);
+      showToast(`Downloaded ${item.filename}`);
+    });
+
+    // Download all 4 scripts + README as .zip
+    document.getElementById("downloadZipBtn").addEventListener("click", () => {
+      const b = refreshAll._latestBundle;
+      const folder = b[4].bundleFolder;
+      const zipBlob = createZipBlob([
+        { name: `${folder}/${b[1].filename}`, content: b[1].code },
+        { name: `${folder}/${b[2].filename}`, content: b[2].code },
+        { name: `${folder}/${b[3].filename}`, content: b[3].code },
+        { name: `${folder}/${b[4].filename}`, content: b[4].code },
+        { name: `${folder}/README_STEPS.txt`, content: b.readme }
+      ]);
+      triggerDownload(zipBlob, `${folder}_scripts.zip`);
+      showToast(`Downloaded ${folder}_scripts.zip`);
+    });
+
+    // Reset Assay button (preserves calibrated plate offsets!)
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      state.organism = "daphnia";
+      state.plateId = "24well";
+      state.stimId = "ld_transitions";
+      state.activeStep = 4;
+      document.getElementById("userName").value = "";
+      document.getElementById("expPrefix").value = "";
+      document.getElementById("hwVersion").value = "Z3";
+      document.getElementById("chk_dist").checked = true;
+      document.getElementById("chk_msd").checked = true;
+      document.getElementById("chk_zones").checked = false;
+      document.getElementById("chk_xy").checked = false;
+      document.getElementById("videoMode").value = "1fps";
+      document.getElementById("chk_tracks").checked = true;
+      document.getElementById("chk_heatmap").checked = false;
+      document.getElementById("ledBrightness").value = 100;
+      document.getElementById("chk_underlight").checked = false;
+
+      const daph = ORGANISM_PRESETS[0];
+      document.getElementById("targetSize").value = daph.targetSize;
+      document.getElementById("detThreshold").value = daph.detThreshold;
+      document.getElementById("msdThreshold").value = daph.msdThreshold;
+      document.getElementById("thermostatTemp").value = daph.temp;
+      document.getElementById("chk_thermostat").checked = daph.thermostat;
+      document.getElementById("autorefTimeout").value = 60;
+
+      syncGeoInputsToActivePlate();
+      syncCheckStyles();
+      renderOrganismChips();
+      renderPlateGrid();
+      renderStimGrid();
+      renderStimParams();
+      document.querySelectorAll("#stepTabs .tab-btn").forEach(b => {
+        b.classList.toggle("active", b.getAttribute("data-step") === "4");
+      });
+      refreshAll();
+      showToast("Reset assay settings (plate calibration kept)");
+    });
+  }
+
+  // Initialize app
+  function init() {
+    loadInitialPlateConfig();
+
+    const daph = ORGANISM_PRESETS[0];
+    document.getElementById("targetSize").value = daph.targetSize;
+    document.getElementById("detThreshold").value = daph.detThreshold;
+    document.getElementById("msdThreshold").value = daph.msdThreshold;
+    document.getElementById("thermostatTemp").value = daph.temp;
+    document.getElementById("chk_thermostat").checked = daph.thermostat;
+    document.getElementById("chk_msd").checked = true;
+
+    syncGeoInputsToActivePlate();
+    syncCheckStyles();
+    renderOrganismChips();
+    renderPlateGrid();
+    renderStimGrid();
+    renderStimParams();
+    bindEvents();
+    refreshAll();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
