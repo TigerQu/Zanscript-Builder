@@ -38,14 +38,16 @@ Zanscript-Builder/
    git clone https://github.com/TigerQu/Zanscript-Builder.git
    ```
 2. **Open the builder**: Double-click `zantiks_script_generator.html` to open it in any modern browser (Chrome, Edge, Safari, or Firefox).
-3. **Configure your experiment** in the left panel:
-   - Enter **Researcher & Study Tag** (optional; appends ASCII-safe tags to generated filenames and folders).
-   - Pick an **Organism Preset** (or customize tracking thresholds and thermostat settings under **Advanced Tracking, Thermostat & Hardware**).
-   - Select **Step 1: Plate Format** (and adjust millimeter offsets if needed).
-   - Select **Step 2: Stimulus Protocol** and set phase durations, pulse counts, or inter-trial intervals (ITI).
-   - Choose **Step 3: Recorded Data & Video** metrics and recording frame rate.
-4. **Export your scripts** from the right panel:
-   - Click **Download All 4 Scripts (.zip)** to get the complete experiment folder and `README_STEPS.txt`, **or**
+3. **Walk through the six pages** with **Next** / **Back** (or click any step in the top bar to jump straight to it):
+   1. **Study** – Researcher name & study tag (optional; appends ASCII-safe tags to generated filenames and folders), MWP hardware revision and Z3 lighting.
+   2. **Organism** – Pick an organism preset, then fine-tune `TARGET_SIZE`, thresholds, `AUTOREF_TIMEOUT` and thermostat settings.
+   3. **Plate** – Select the plate format (and adjust millimeter offsets if needed).
+   4. **Stimulus** – Select the stimulus protocol and set phase durations, pulse counts, or inter-trial intervals (ITI).
+   5. **Data & Video** – Choose CSV metrics, recording frame rate and overlays.
+   6. **Export** – Review and download the generated scripts.
+   - The **Run Summary** sidebar shows every choice, the total runtime and CSV size at all times; click a row to jump back and edit it.
+4. **Export your scripts** on the **Export** page:
+   - Click **Download All 4 Scripts (.zip)** (also available in the top bar on every page) to get the complete experiment folder and `README_STEPS.txt`, **or**
    - Switch between tabs (**Step 1** – **Step 4**) to **Copy Script** / **Download `.zs`** individually.
    - *Tip:* Click the filename badge above the code preview to copy the `.zs`-stripped service name directly for pasting into Zantiks' **Add Service** dialog.
 
@@ -93,7 +95,7 @@ Selecting an organism chip populates recommended tracking and environmental para
 | **C. elegans** | `1 mm` | `5` | `5` | `20 °C` | Enabled | Enables `MSD_MODE` for thrashing/motility |
 | **Planaria** | `3 mm` | `6` | `6` | `21 °C` | Disabled | Ambient temperature by default |
 | **Zebrafish Larvae** | `2 mm` | `6` | `6` | `28 °C` | Enabled | Standard larval zebrafish assay defaults |
-| **Custom** | User-defined | User-defined | User-defined | User-defined | Configurable | Full manual control in Advanced settings |
+| **Custom** | User-defined | User-defined | User-defined | User-defined | Configurable | Full manual control on the Organism page |
 
 ---
 
@@ -136,7 +138,7 @@ Selecting an organism chip populates recommended tracking and environmental para
 
 Different MWP units or plate manufacturers can exhibit slight positional shifts relative to factory coordinates. Zanscript-Builder provides two-tier calibration persistence:
 
-1. **Automatic Browser Storage**: Any change made in Step 1's inline geometry editor or the **Plate Config** modal is immediately saved to `localStorage` (`zantiks_mwp_plate_config_v1`). Clicking **Reset Assay** resets experimental parameters without erasing your calibrated plate offsets.
+1. **Automatic Browser Storage**: Any change made in the Plate page's inline geometry editor or the **Plate Config** modal is immediately saved to `localStorage` (`zantiks_mwp_plate_config_v1`). Clicking **Reset Assay** resets experimental parameters without erasing your calibrated plate offsets.
 2. **Shared Folder Config (`zantiks_plate_config.js`)**:
    - Open **Plate Config** in the top bar and click **Save `zantiks_plate_config.js`** to write your unit's calibration directly back to disk (uses the File System Access API where supported, or downloads the updated `.js` file).
    - On startup, the app compares `updatedAt` timestamps between `zantiks_plate_config.js` and `localStorage`, automatically applying whichever calibration profile is newer.

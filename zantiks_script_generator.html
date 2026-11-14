@@ -27,6 +27,14 @@
     --radius-sm: 6px;
     --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    /* Layout spacing */
+    --page-max: 1240px;
+    --page-pad-x: 32px;
+    --col-gap: 28px;
+    --card-gap: 20px;
+    --card-pad-y: 22px;
+    --card-pad-x: 24px;
   }
 
   * {
@@ -39,7 +47,7 @@
     color: var(--text);
     font-family: var(--font-sans);
     font-size: 14px;
-    line-height: 1.45;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -47,12 +55,22 @@
   .topbar {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 14px 24px;
+    padding: 18px var(--page-pad-x);
+  }
+
+  .topbar-inner {
+    max-width: calc(var(--page-max) - 2 * var(--page-pad-x));
+    margin: 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 14px 32px;
     flex-wrap: wrap;
+  }
+
+  .topbar-title {
+    flex: 1 1 420px;
+    min-width: 0;
   }
 
   .topbar-title h1 {
@@ -97,15 +115,15 @@
   }
 
   .topbar-title p {
-    margin: 3px 0 0;
-    font-size: 12.5px;
+    margin: 5px 0 0;
+    font-size: 13px;
     color: var(--text-muted);
   }
 
   .topbar-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     flex-wrap: wrap;
   }
 
@@ -118,7 +136,7 @@
     font-family: var(--font-sans);
     font-size: 13px;
     font-weight: 500;
-    padding: 7px 13px;
+    padding: 8px 14px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface);
@@ -146,30 +164,304 @@
     border-color: var(--accent-hover);
   }
 
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+    pointer-events: none;
+  }
+
   .btn-sm {
-    padding: 4px 10px;
+    padding: 5px 12px;
     font-size: 12px;
   }
 
   .btn-xs {
-    padding: 2px 7px;
+    padding: 3px 9px;
     font-size: 11px;
   }
 
   /* Main Layout */
-  .container {
-    max-width: 1420px;
+  .wizard {
+    max-width: var(--page-max);
     margin: 0 auto;
-    padding: 20px 24px 40px;
+    padding: 24px var(--page-pad-x) 0;
     display: grid;
-    grid-template-columns: minmax(430px, 550px) minmax(0, 1fr);
-    gap: 20px;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 24px var(--col-gap);
     align-items: start;
   }
 
-  @media (max-width: 1024px) {
-    .container {
-      grid-template-columns: 1fr;
+  .wizard-main {
+    min-width: 0;
+  }
+
+  /* Stepper (same visual language as the script tabs) */
+  .stepper {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    background: #f3f5f8;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .stepper-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 13px 16px;
+    border: none;
+    border-right: 1px solid var(--border-muted);
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .stepper-item:last-child {
+    border-right: none;
+  }
+
+  .stepper-item:hover {
+    background: rgba(255, 255, 255, 0.65);
+  }
+
+  .stepper-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .stepper-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stepper-item.done {
+    color: var(--text);
+  }
+
+  .stepper-item.done .stepper-num {
+    background: var(--text);
+    border-color: var(--text);
+    color: #ffffff;
+  }
+
+  .stepper-item.active {
+    background: var(--surface);
+    border-bottom-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .stepper-item.active .stepper-num {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+  }
+
+  /* Pages */
+  .wizard-page {
+    display: none;
+  }
+
+  .wizard-page.active {
+    display: block;
+  }
+
+  .page-head {
+    margin: 6px 0 20px;
+  }
+
+  .page-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .page-desc {
+    margin: 6px 0 0;
+    max-width: 680px;
+    font-size: 13.5px;
+    color: var(--text-muted);
+  }
+
+  /* Back / Next bar: sticks to the bottom of the window on long pages */
+  .wizard-nav {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 0 24px;
+    background: var(--bg);
+    border-top: 1px solid var(--border-muted);
+  }
+
+  .wizard-progress {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  /* Run summary sidebar */
+  .run-summary {
+    position: sticky;
+    top: 20px;
+    margin-top: 6px;
+  }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .summary-head {
+    padding: 14px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-muted);
+  }
+
+  .summary-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
+    padding: 16px 18px;
+    background: var(--surface-subtle);
+    border-bottom: 1px solid var(--border-muted);
+  }
+
+  .summary-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .summary-row {
+    display: grid;
+    grid-template-columns: 66px minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 2px;
+    width: 100%;
+    padding: 11px 18px;
+    border: none;
+    border-bottom: 1px solid var(--border-muted);
+    background: transparent;
+    font-family: var(--font-sans);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+
+  .summary-row:last-child {
+    border-bottom: none;
+  }
+
+  .summary-row:hover {
+    background: var(--surface-subtle);
+  }
+
+  .summary-row.current {
+    background: #f0f8ff;
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  .summary-key {
+    grid-row: span 2;
+    padding-top: 2px;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .summary-val {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .summary-sub {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .summary-sub:empty {
+    display: none;
+  }
+
+  .summary-sub code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  /* Narrow screens: one column, summary below the page */
+  @media (max-width: 1000px) {
+    :root {
+      --page-max: 760px;
+    }
+
+    .wizard {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .run-summary {
+      position: static;
+      margin: 0 0 32px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .stepper-item {
+      justify-content: center;
+      padding: 12px 4px;
+    }
+
+    .stepper-label {
+      display: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    :root {
+      --page-pad-x: 16px;
+      --col-gap: 16px;
+      --card-gap: 14px;
+      --card-pad-y: 18px;
+      --card-pad-x: 16px;
+    }
+
+    .wizard {
+      padding-top: 16px;
     }
   }
 
@@ -178,34 +470,34 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 16px 18px;
-    margin-bottom: 14px;
+    padding: var(--card-pad-y) var(--card-pad-x);
+    margin-bottom: var(--card-gap);
   }
 
   .card-header {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    margin-bottom: 12px;
-    gap: 8px;
+    margin-bottom: 16px;
+    gap: 4px 12px;
     flex-wrap: wrap;
   }
 
   .card-title {
     margin: 0;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
 
   .step-num {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     background: var(--text);
     color: #fff;
@@ -221,8 +513,8 @@
 
   /* Researcher Name Preview Bar */
   .name-preview-bar {
-    margin-top: 10px;
-    padding: 7px 10px;
+    margin-top: 14px;
+    padding: 10px 12px;
     border-radius: var(--radius-sm);
     background: var(--surface-subtle);
     border: 1px solid var(--border-muted);
@@ -230,7 +522,7 @@
     color: var(--text-muted);
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 14px;
+    gap: 6px 20px;
     align-items: center;
   }
 
@@ -242,8 +534,8 @@
   }
 
   .name-warn {
-    margin-top: 8px;
-    padding: 6px 10px;
+    margin-top: 12px;
+    padding: 8px 12px;
     border-radius: var(--radius-sm);
     background: var(--warn-soft);
     border: 1px solid rgba(154, 103, 0, 0.35);
@@ -260,7 +552,7 @@
   .preset-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: 10px;
   }
 
   @media (max-width: 560px) {
@@ -271,10 +563,10 @@
 
   .chip {
     width: 100%;
-    height: 34px;
-    padding: 0 10px;
+    height: 38px;
+    padding: 0 12px;
     font-family: var(--font-sans);
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 600;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
@@ -303,38 +595,28 @@
     box-shadow: inset 0 0 0 1px var(--accent);
   }
 
-  .preset-summary {
-    margin-top: 8px;
-    font-size: 12px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    background: var(--surface-subtle);
-    padding: 6px 10px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   /* Plate Selector Grid */
   .plate-layout-wrap {
     display: grid;
-    grid-template-columns: 1fr 136px;
-    gap: 12px;
-    align-items: center;
-  }
-
-  @media (max-width: 560px) {
-    .plate-layout-wrap {
-      grid-template-columns: 1fr;
-    }
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 20px;
+    align-items: stretch;
   }
 
   .plate-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 7px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  @media (max-width: 720px) {
+    .plate-layout-wrap {
+      grid-template-columns: 1fr;
+    }
+
+    .plate-grid {
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
   }
 
   .option-tile {
@@ -342,7 +624,7 @@
     border: 1px solid var(--border);
     background: var(--surface);
     border-radius: var(--radius-sm);
-    padding: 8px 9px;
+    padding: 11px 13px;
     cursor: pointer;
     text-align: left;
     transition: all 0.12s;
@@ -382,38 +664,45 @@
   }
 
   .option-tile .tile-meta {
-    font-size: 11px;
+    font-size: 11.5px;
     color: var(--text-muted);
     display: block;
-    margin-top: 1px;
+    margin-top: 2px;
   }
 
   .plate-preview-box {
     border: 1px solid var(--border-muted);
     background: var(--surface-subtle);
     border-radius: var(--radius-sm);
-    padding: 8px;
+    padding: 18px 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
   }
 
+  #plateSvg {
+    display: block;
+    width: 100%;
+    max-width: 226px;
+    height: auto;
+  }
+
   .plate-preview-caption {
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    margin-top: 4px;
+    margin-top: 10px;
     text-align: center;
   }
 
   /* Inline Plate Geometry Editor */
   details.geo-inline-box {
-    margin-top: 12px;
+    margin-top: 16px;
     border: 1px solid var(--border-muted);
     background: var(--surface-subtle);
     border-radius: var(--radius-sm);
-    padding: 8px 11px;
+    padding: 11px 14px;
   }
 
   details.geo-inline-box summary {
@@ -443,13 +732,13 @@
   }
 
   .geo-inline-body {
-    margin-top: 10px;
-    padding-top: 10px;
+    margin-top: 12px;
+    padding-top: 14px;
     border-top: 1px solid var(--border-muted);
   }
 
   .geo-inline-actions {
-    margin-top: 10px;
+    margin-top: 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -460,28 +749,33 @@
   /* Stimulus Selector */
   .stim-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 7px;
-    margin-bottom: 12px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  @media (max-width: 720px) {
+    .stim-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   .params-box {
     background: var(--surface-subtle);
     border: 1px solid var(--border-muted);
     border-radius: var(--radius-sm);
-    padding: 12px;
+    padding: 16px;
   }
 
   .form-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
   }
 
   .form-grid-3 {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px 16px;
   }
 
   @media (max-width: 560px) {
@@ -494,11 +788,12 @@
   .field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
+    min-width: 0;
   }
 
   .field label {
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--text-muted);
   }
@@ -507,7 +802,7 @@
   .field input[type="text"],
   .field select {
     width: 100%;
-    padding: 6px 8px;
+    padding: 8px 10px;
     font-size: 13px;
     font-family: var(--font-sans);
     border: 1px solid var(--border);
@@ -530,11 +825,11 @@
 
   /* Timeline Preview */
   .timeline-wrap {
-    margin-top: 12px;
+    margin-top: 22px;
   }
 
   .timeline-bar {
-    height: 18px;
+    height: 22px;
     border-radius: 4px;
     overflow: hidden;
     display: flex;
@@ -544,7 +839,7 @@
 
   .tl-seg {
     height: 100%;
-    font-size: 9.5px;
+    font-size: 10px;
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -562,23 +857,36 @@
   .timeline-legend {
     display: flex;
     justify-content: space-between;
-    font-size: 11px;
+    gap: 12px;
+    font-size: 11.5px;
     color: var(--text-muted);
-    margin-top: 4px;
+    margin-top: 8px;
   }
 
   /* Checkboxes for Measurements */
   .check-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
+  }
+
+  .check-list.check-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  @media (max-width: 720px) {
+    .check-list.check-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   .check-item {
     display: flex;
     align-items: flex-start;
-    gap: 9px;
-    padding: 8px 10px;
+    gap: 12px;
+    padding: 12px 14px;
     border: 1px solid var(--border-muted);
     border-radius: var(--radius-sm);
     background: var(--surface-subtle);
@@ -614,13 +922,26 @@
     color: var(--text);
     display: flex;
     align-items: center;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 4px 8px;
   }
 
   .check-desc {
-    font-size: 11.5px;
+    font-size: 12px;
     color: var(--text-muted);
-    margin-top: 1px;
+    margin-top: 3px;
+  }
+
+  .media-row {
+    margin-top: 18px;
+  }
+
+  .inline-check-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    min-height: 36px;
   }
 
   .code-pill {
@@ -630,50 +951,6 @@
     padding: 1px 5px;
     border-radius: 4px;
     color: var(--text);
-  }
-
-  /* Collapsible Advanced Section */
-  details.advanced-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px 18px;
-  }
-
-  details.advanced-card summary {
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    color: var(--text-muted);
-    user-select: none;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  details.advanced-card summary::-webkit-details-marker {
-    display: none;
-  }
-
-  details.advanced-card summary::after {
-    content: "+ Expand";
-    font-size: 11.5px;
-    font-weight: 500;
-    color: var(--accent);
-  }
-
-  details.advanced-card[open] summary::after {
-    content: "− Collapse";
-  }
-
-  .advanced-body {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-muted);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
   }
 
   .inline-check {
@@ -687,34 +964,19 @@
 
   /* Right Output Panel */
   .output-panel {
-    position: sticky;
-    top: 16px;
+    min-width: 0;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
-  }
-
-  .summary-strip {
-    padding: 12px 16px;
-    background: var(--surface-subtle);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .metrics-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
+    margin-bottom: var(--card-gap);
   }
 
   .metric-stat {
     display: flex;
     flex-direction: column;
+    gap: 3px;
+    min-width: 0;
   }
 
   .metric-stat .stat-label {
@@ -726,7 +988,7 @@
   }
 
   .metric-stat .stat-val {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 600;
     font-family: var(--font-mono);
     color: var(--text);
@@ -747,7 +1009,7 @@
   }
 
   .tab-btn {
-    padding: 10px 12px;
+    padding: 12px 16px;
     border: none;
     border-right: 1px solid var(--border-muted);
     border-bottom: 2px solid transparent;
@@ -778,6 +1040,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
   }
 
   .tab-btn.active .tab-step {
@@ -785,16 +1048,17 @@
   }
 
   .tab-title {
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text);
-    margin-top: 2px;
+    margin-top: 4px;
     display: block;
   }
 
   .tab-tag {
     font-size: 10px;
-    padding: 1px 5px;
+    padding: 1px 6px;
+    white-space: nowrap;
     border-radius: 4px;
     background: #eaeef2;
     color: var(--text-muted);
@@ -807,32 +1071,39 @@
 
   /* Step Info Banner */
   .step-banner {
-    padding: 12px 16px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--border-muted);
     background: var(--surface);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
   }
 
   .step-banner-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 12px;
     flex-wrap: wrap;
+  }
+
+  .step-banner-actions {
+    display: flex;
+    gap: 8px;
   }
 
   .filename-box {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
     font-family: var(--font-mono);
     font-size: 12.5px;
     font-weight: 600;
     background: var(--surface-subtle);
     border: 1px solid var(--border);
-    padding: 4px 10px;
+    padding: 5px 12px;
     border-radius: var(--radius-sm);
     cursor: pointer;
   }
@@ -843,7 +1114,7 @@
   }
 
   .step-instructions {
-    font-size: 12.5px;
+    font-size: 13px;
     color: var(--text-muted);
     margin: 0;
   }
@@ -857,7 +1128,7 @@
     background: var(--surface-subtle);
     border: 1px solid var(--border-muted);
     border-radius: var(--radius-sm);
-    padding: 7px 10px;
+    padding: 9px 12px;
     color: var(--text-muted);
   }
 
@@ -865,20 +1136,24 @@
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text);
-    word-break: break-all;
+    overflow-wrap: anywhere;
   }
 
   /* Code Viewer */
+  .output-panel > .code-container {
+    max-height: max(420px, calc(100vh - 360px));
+  }
+
   .code-container {
     background: var(--code-bg);
     color: var(--code-text);
-    max-height: 580px;
     overflow: auto;
-    padding: 14px 16px;
+    padding: 18px 20px;
     font-family: var(--font-mono);
     font-size: 12.5px;
-    line-height: 1.5;
+    line-height: 1.6;
   }
+
 
   .code-container pre {
     margin: 0;
@@ -894,14 +1169,14 @@
 
   /* Footer Safety Bar */
   .safety-footer {
-    padding: 10px 16px;
+    padding: 12px 20px;
     background: var(--warn-soft);
     border-top: 1px solid #d4a72c55;
     font-size: 12px;
     color: #5c3c00;
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: 6px 24px;
   }
 
   /* Plate Config Modal */
@@ -912,7 +1187,7 @@
     display: none;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 24px;
     z-index: 90;
   }
 
@@ -925,7 +1200,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     width: 100%;
-    max-width: 980px;
+    max-width: 1100px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
@@ -934,7 +1209,7 @@
   }
 
   .modal-header {
-    padding: 14px 20px;
+    padding: 18px 24px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
@@ -952,13 +1227,13 @@
   }
 
   .modal-header p {
-    margin: 2px 0 0;
+    margin: 4px 0 0;
     font-size: 12px;
     color: var(--text-muted);
   }
 
   .modal-toolbar {
-    padding: 10px 20px;
+    padding: 12px 24px;
     background: var(--surface-subtle);
     border-bottom: 1px solid var(--border-muted);
     display: flex;
@@ -990,7 +1265,7 @@
   }
 
   .modal-body {
-    padding: 14px 20px;
+    padding: 16px 24px;
     overflow: auto;
     flex: 1;
   }
@@ -1006,13 +1281,13 @@
     font-size: 11px;
     font-weight: 600;
     color: var(--text-muted);
-    padding: 7px 8px;
+    padding: 9px 10px;
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
 
   .cfg-table td {
-    padding: 6px 8px;
+    padding: 8px 10px;
     border-bottom: 1px solid var(--border-muted);
     vertical-align: middle;
   }
@@ -1049,10 +1324,12 @@
     font-size: 11px;
     color: var(--text-muted);
     font-family: var(--font-mono);
+    white-space: nowrap;
+    margin-top: 2px;
   }
 
   .modal-footer {
-    padding: 11px 20px;
+    padding: 14px 24px;
     border-top: 1px solid var(--border);
     background: var(--surface-subtle);
     display: flex;
@@ -1090,6 +1367,7 @@
 <body>
 
 <header class="topbar">
+  <div class="topbar-inner">
   <div class="topbar-title">
     <h1>
       Zantiks MWP Script Builder
@@ -1105,189 +1383,59 @@
     <button class="btn" type="button" id="resetBtn">Reset Assay</button>
     <button class="btn btn-primary" type="button" id="downloadZipBtn">Download All 4 Scripts (.zip)</button>
   </div>
+  </div>
 </header>
 
-<main class="container">
-  <!-- LEFT COLUMN: CONFIGURATION -->
-  <section class="config-col">
+<main class="wizard">
 
-    <!-- Researcher & Session Info -->
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">Researcher &amp; Study Tag</h2>
-        <span class="card-hint">Appends last name &amp; tag to folders &amp; scripts</span>
-      </div>
-      <div class="form-grid">
-        <div class="field">
-          <label for="userName">Full Name</label>
-          <input type="text" id="userName" autocomplete="off">
+  <!-- STEPPER -->
+  <nav class="stepper" id="wizardStepper" aria-label="Builder steps">
+    <button type="button" class="stepper-item active" data-goto="study"><span class="stepper-num">1</span><span class="stepper-label">Study</span></button>
+    <button type="button" class="stepper-item" data-goto="organism"><span class="stepper-num">2</span><span class="stepper-label">Organism</span></button>
+    <button type="button" class="stepper-item" data-goto="plate"><span class="stepper-num">3</span><span class="stepper-label">Plate</span></button>
+    <button type="button" class="stepper-item" data-goto="stimulus"><span class="stepper-num">4</span><span class="stepper-label">Stimulus</span></button>
+    <button type="button" class="stepper-item" data-goto="data"><span class="stepper-num">5</span><span class="stepper-label">Data &amp; Video</span></button>
+    <button type="button" class="stepper-item" data-goto="export"><span class="stepper-num">6</span><span class="stepper-label">Export</span></button>
+  </nav>
+
+  <div class="wizard-main">
+
+    <!-- PAGE 1: STUDY & HARDWARE -->
+    <section class="wizard-page active" data-page="study">
+      <header class="page-head">
+        <h2 class="page-title">Study &amp; Hardware</h2>
+        <p class="page-desc">Who is running the assay and on which MWP unit. Names become ASCII-safe tags in the bundle folder and script filenames.</p>
+      </header>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Researcher &amp; Study Tag</h3>
+          <span class="card-hint">Appends last name &amp; tag to folders &amp; scripts</span>
         </div>
-        <div class="field">
-          <label for="expPrefix">Study Tag (Optional)</label>
-          <input type="text" id="expPrefix" autocomplete="off">
+        <div class="form-grid">
+          <div class="field">
+            <label for="userName">Full Name</label>
+            <input type="text" id="userName" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="expPrefix">Study Tag (Optional)</label>
+            <input type="text" id="expPrefix" autocomplete="off">
+          </div>
         </div>
-      </div>
-      <div class="name-warn" id="nameAsciiWarn">
-        Use English letters (A-Z) and digits for names so Zantiks Build accepts the script filenames.
-      </div>
-      <div class="name-preview-bar">
-        <span>Bundle folder: <code id="previewFolderName">mwp_ld_transitions_24well/</code></span>
-        <span>Main script: <code id="previewMainScript">04_mwp_ld_transitions_24well.zs</code></span>
-      </div>
-    </div>
-
-    <!-- Quick Organism Presets -->
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">Organism Preset</h2>
-        <span class="card-hint">Sets tracking size, threshold &amp; temp</span>
-      </div>
-      <div class="preset-row" id="organismPresets"></div>
-      <div class="preset-summary" id="presetSummary"></div>
-    </div>
-
-    <!-- Step 1: Plate Size -->
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title"><span class="step-num">1</span> Plate Format</h2>
-        <span class="card-hint" id="plateAssetHint">Assets: a24.bmp, dz24.bmp</span>
-      </div>
-      <div class="plate-layout-wrap">
-        <div class="plate-grid" id="plateGrid"></div>
-        <div class="plate-preview-box">
-          <svg id="plateSvg" width="118" height="80" viewBox="-2 -3 136 92"></svg>
-          <div class="plate-preview-caption" id="platePreviewLabel">4 x 6 (A1-D6)</div>
+        <div class="name-warn" id="nameAsciiWarn">
+          Use English letters (A-Z) and digits for names so Zantiks Build accepts the script filenames.
+        </div>
+        <div class="name-preview-bar">
+          <span>Bundle folder: <code id="previewFolderName">mwp_ld_transitions_24well/</code></span>
+          <span>Main script: <code id="previewMainScript">04_mwp_ld_transitions_24well.zs</code></span>
         </div>
       </div>
 
-      <!-- Inline Plate Calibration Fine-Tuning -->
-      <details class="geo-inline-box" id="inlineGeoDetails">
-        <summary>
-          <span id="inlineGeoSummaryText">Tune 24-Well Offsets &amp; Radius (mm)</span>
-          <span class="geo-summary-right">
-            <span class="badge-custom" id="inlineGeoCustomBadge" style="display:none;">Custom</span>
-            <span>Edit</span>
-          </span>
-        </summary>
-        <div class="geo-inline-body">
-          <div class="form-grid-3">
-            <div class="field">
-              <label for="geoX">X_OFFSET (mm)</label>
-              <input type="number" id="geoX" step="0.05">
-            </div>
-            <div class="field">
-              <label for="geoY">Y_OFFSET (mm)</label>
-              <input type="number" id="geoY" step="0.05">
-            </div>
-            <div class="field">
-              <label for="geoR" id="geoRLabel">RADIUS (mm)</label>
-              <input type="number" id="geoR" step="0.05">
-            </div>
-            <div class="field">
-              <label for="geoColStep" id="geoColLabel">COL_STEP (mm)</label>
-              <input type="number" id="geoColStep" step="0.05">
-            </div>
-            <div class="field">
-              <label for="geoRowStep" id="geoRowLabel">ROW_STEP (mm)</label>
-              <input type="number" id="geoRowStep" step="0.05">
-            </div>
-            <div class="field">
-              <label for="geoRdz" id="geoRdzLabel">INNER_ZONE (mm)</label>
-              <input type="number" id="geoRdz" step="0.05">
-            </div>
-          </div>
-          <div class="geo-inline-actions">
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button type="button" class="btn btn-xs" id="auto50InlineBtn" title="Calculate exact 50% area inner zone">Auto 50% Inner Zone</button>
-              <button type="button" class="btn btn-xs" id="resetPlateInlineBtn">Reset This Plate</button>
-            </div>
-            <button type="button" class="btn btn-xs" id="openConfigFromStep1Btn">All Plates &amp; Config File...</button>
-          </div>
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">MWP Hardware</h3>
+          <span class="card-hint">Lighting commands depend on the unit revision</span>
         </div>
-      </details>
-    </div>
-
-    <!-- Step 2: Stimulus Protocol -->
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title"><span class="step-num">2</span> Stimulus Protocol</h2>
-        <span class="card-hint">Select assay schedule</span>
-      </div>
-      <div class="stim-grid" id="stimGrid"></div>
-      <div class="params-box" id="stimParamsBox"></div>
-      <div class="timeline-wrap">
-        <div class="timeline-bar" id="timelineBar"></div>
-        <div class="timeline-legend">
-          <span id="timelineDesc">Acclimation + Recording</span>
-          <span id="timelineTotal">Total: 11 min 00 sec</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Step 3: Data & Video Outputs -->
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title"><span class="step-num">3</span> Recorded Data &amp; Video</h2>
-        <span class="card-hint">Combine any metrics</span>
-      </div>
-      <div class="check-list">
-        <label class="check-item checked" id="lbl_dist">
-          <input type="checkbox" id="chk_dist" checked>
-          <div class="check-body">
-            <div class="check-title">Arena Distance (mm) <span class="code-pill">ARENA_DISTANCES</span></div>
-            <div class="check-desc">Centroid distance traveled per well during each time bin (<code>DIST_A1</code> ...).</div>
-          </div>
-        </label>
-
-        <label class="check-item" id="lbl_msd">
-          <input type="checkbox" id="chk_msd">
-          <div class="check-body">
-            <div class="check-title">Pixel Activity / Motility <span class="code-pill">MSD_MODE</span></div>
-            <div class="check-desc">Mean pixel change per well (<code>MSD_A1</code> ...). Captures in-place thrashing or twitching.</div>
-          </div>
-        </label>
-
-        <label class="check-item" id="lbl_zones">
-          <input type="checkbox" id="chk_zones">
-          <div class="check-body">
-            <div class="check-title">Inner / Outer Zones (50/50 Split) <span class="code-pill">ZONE_TIMERS</span></div>
-            <div class="check-desc">Wall-hugging (thigmotaxis): logs distance, entries, and time in outer ring (<code>Z1</code>) vs. center (<code>Z2</code>).</div>
-          </div>
-        </label>
-
-        <label class="check-item" id="lbl_xy">
-          <input type="checkbox" id="chk_xy">
-          <div class="check-body">
-            <div class="check-title">Raw XY Coordinates (Per-Frame CSV) <span class="code-pill">LOG_STREAM 1</span></div>
-            <div class="check-desc">Writes frame-by-frame millimeter coordinates (<code>X_A1, Y_A1</code> ...) to a second <code>_XY</code> CSV file.</div>
-          </div>
-        </label>
-      </div>
-
-      <div class="form-grid" style="margin-top: 12px;">
-        <div class="field">
-          <label for="videoMode">Video Recording</label>
-          <select id="videoMode">
-            <option value="1fps" selected>1 fps Timelapse (Recommended)</option>
-            <option value="0.2fps">0.2 fps Long-Run Timelapse (1 frame / 5s)</option>
-            <option value="full">Full 30 fps Video (Large files)</option>
-            <option value="off">No Video Recording</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Visual Overlays</label>
-          <div style="display:flex; gap:12px; padding-top:6px;">
-            <label class="inline-check"><input type="checkbox" id="chk_tracks" checked> Track Traces</label>
-            <label class="inline-check"><input type="checkbox" id="chk_heatmap"> End Heatmap</label>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Advanced Settings -->
-    <details class="advanced-card">
-      <summary>Advanced Tracking, Thermostat &amp; Hardware</summary>
-      <div class="advanced-body">
         <div class="form-grid">
           <div class="field">
             <label for="hwVersion">MWP Hardware Revision</label>
@@ -1297,11 +1445,39 @@
             </select>
           </div>
           <div class="field">
-            <label for="autorefTimeout">AUTOREF_TIMEOUT (s)</label>
-            <input type="number" id="autorefTimeout" min="0" max="600" step="5" value="60">
+            <label for="ledBrightness">Z3 Overhead Light Brightness (%)</label>
+            <input type="number" id="ledBrightness" min="5" max="100" step="5" value="100">
+          </div>
+          <div class="field">
+            <label>Z3 Underneath Light</label>
+            <div class="inline-check-row">
+              <label class="inline-check"><input type="checkbox" id="chk_underlight"> Drive Underneath LED (Ch 12)</label>
+            </div>
           </div>
         </div>
+      </div>
+    </section>
 
+    <!-- PAGE 2: ORGANISM & TRACKING -->
+    <section class="wizard-page" data-page="organism">
+      <header class="page-head">
+        <h2 class="page-title">Organism &amp; Tracking</h2>
+        <p class="page-desc">Pick a preset to load recommended tracking and temperature values, then fine-tune them below if needed.</p>
+      </header>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Organism Preset</h3>
+          <span class="card-hint">Sets tracking size, threshold &amp; temp</span>
+        </div>
+        <div class="preset-row" id="organismPresets"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Tracking &amp; Temperature</h3>
+          <span class="card-hint">Editing size, thresholds or temp switches to Custom</span>
+        </div>
         <div class="form-grid-3">
           <div class="field">
             <label for="targetSize">TARGET_SIZE (mm)</label>
@@ -1315,49 +1491,270 @@
             <label for="msdThreshold">MSD_THRESHOLD</label>
             <input type="number" id="msdThreshold" min="1" max="50" step="1" value="6">
           </div>
-        </div>
-
-        <div class="form-grid">
+          <div class="field">
+            <label for="autorefTimeout">AUTOREF_TIMEOUT (s)</label>
+            <input type="number" id="autorefTimeout" min="0" max="600" step="5" value="60">
+          </div>
           <div class="field">
             <label for="thermostatTemp">Temperature (°C)</label>
             <input type="number" id="thermostatTemp" min="10" max="40" step="0.5" value="22">
           </div>
           <div class="field">
             <label>Thermostat Control</label>
-            <div style="padding-top:6px;">
+            <div class="inline-check-row">
               <label class="inline-check"><input type="checkbox" id="chk_thermostat" checked> Enable Thermostat</label>
             </div>
           </div>
         </div>
+      </div>
+    </section>
 
+    <!-- PAGE 3: PLATE -->
+    <section class="wizard-page" data-page="plate">
+      <header class="page-head">
+        <h2 class="page-title">Plate Format</h2>
+        <p class="page-desc">Choose the plate or dish loaded in the MWP. The preview is drawn to true millimeter scale from the calibration offsets.</p>
+      </header>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Plate Type</h3>
+          <span class="card-hint" id="plateAssetHint">Assets: a24.bmp, dz24.bmp</span>
+        </div>
+        <div class="plate-layout-wrap">
+          <div class="plate-grid" id="plateGrid"></div>
+          <div class="plate-preview-box">
+            <svg id="plateSvg" width="118" height="80" viewBox="-2 -3 136 92"></svg>
+            <div class="plate-preview-caption" id="platePreviewLabel">4 x 6 (A1-D6)</div>
+          </div>
+        </div>
+
+        <!-- Inline Plate Calibration Fine-Tuning -->
+        <details class="geo-inline-box" id="inlineGeoDetails">
+          <summary>
+            <span id="inlineGeoSummaryText">Tune 24-Well Offsets &amp; Radius (mm)</span>
+            <span class="geo-summary-right">
+              <span class="badge-custom" id="inlineGeoCustomBadge" style="display:none;">Custom</span>
+              <span>Edit</span>
+            </span>
+          </summary>
+          <div class="geo-inline-body">
+            <div class="form-grid-3">
+              <div class="field">
+                <label for="geoX">X_OFFSET (mm)</label>
+                <input type="number" id="geoX" step="0.05">
+              </div>
+              <div class="field">
+                <label for="geoY">Y_OFFSET (mm)</label>
+                <input type="number" id="geoY" step="0.05">
+              </div>
+              <div class="field">
+                <label for="geoR" id="geoRLabel">RADIUS (mm)</label>
+                <input type="number" id="geoR" step="0.05">
+              </div>
+              <div class="field">
+                <label for="geoColStep" id="geoColLabel">COL_STEP (mm)</label>
+                <input type="number" id="geoColStep" step="0.05">
+              </div>
+              <div class="field">
+                <label for="geoRowStep" id="geoRowLabel">ROW_STEP (mm)</label>
+                <input type="number" id="geoRowStep" step="0.05">
+              </div>
+              <div class="field">
+                <label for="geoRdz" id="geoRdzLabel">INNER_ZONE (mm)</label>
+                <input type="number" id="geoRdz" step="0.05">
+              </div>
+            </div>
+            <div class="geo-inline-actions">
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-xs" id="auto50InlineBtn" title="Calculate exact 50% area inner zone">Auto 50% Inner Zone</button>
+                <button type="button" class="btn btn-xs" id="resetPlateInlineBtn">Reset This Plate</button>
+              </div>
+              <button type="button" class="btn btn-xs" id="openConfigFromStep1Btn">All Plates &amp; Config File...</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- PAGE 4: STIMULUS -->
+    <section class="wizard-page" data-page="stimulus">
+      <header class="page-head">
+        <h2 class="page-title">Stimulus Protocol</h2>
+        <p class="page-desc">Pick the assay schedule, then set its timing. The bar at the bottom previews the whole run.</p>
+      </header>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Protocol</h3>
+          <span class="card-hint">Select assay schedule</span>
+        </div>
+        <div class="stim-grid" id="stimGrid"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Schedule &amp; Timing</h3>
+          <span class="card-hint">All durations in seconds unless noted</span>
+        </div>
+        <div id="stimParamsBox"></div>
+        <div class="timeline-wrap">
+          <div class="timeline-bar" id="timelineBar"></div>
+          <div class="timeline-legend">
+            <span id="timelineDesc">Acclimation + Recording</span>
+            <span id="timelineTotal">Total: 11 min 00 sec</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 5: DATA & VIDEO -->
+    <section class="wizard-page" data-page="data">
+      <header class="page-head">
+        <h2 class="page-title">Recorded Data &amp; Video</h2>
+        <p class="page-desc">Combine any CSV metrics, then choose how video and visual overlays are recorded.</p>
+      </header>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">CSV Metrics</h3>
+          <span class="card-hint">Combine any metrics</span>
+        </div>
+        <div class="check-list check-grid">
+          <label class="check-item checked" id="lbl_dist">
+            <input type="checkbox" id="chk_dist" checked>
+            <div class="check-body">
+              <div class="check-title">Arena Distance (mm) <span class="code-pill">ARENA_DISTANCES</span></div>
+              <div class="check-desc">Centroid distance traveled per well during each time bin (<code>DIST_A1</code> ...).</div>
+            </div>
+          </label>
+
+          <label class="check-item" id="lbl_msd">
+            <input type="checkbox" id="chk_msd">
+            <div class="check-body">
+              <div class="check-title">Pixel Activity / Motility <span class="code-pill">MSD_MODE</span></div>
+              <div class="check-desc">Mean pixel change per well (<code>MSD_A1</code> ...). Captures in-place thrashing or twitching.</div>
+            </div>
+          </label>
+
+          <label class="check-item" id="lbl_zones">
+            <input type="checkbox" id="chk_zones">
+            <div class="check-body">
+              <div class="check-title">Inner / Outer Zones (50/50 Split) <span class="code-pill">ZONE_TIMERS</span></div>
+              <div class="check-desc">Wall-hugging (thigmotaxis): logs distance, entries, and time in outer ring (<code>Z1</code>) vs. center (<code>Z2</code>).</div>
+            </div>
+          </label>
+
+          <label class="check-item" id="lbl_xy">
+            <input type="checkbox" id="chk_xy">
+            <div class="check-body">
+              <div class="check-title">Raw XY Coordinates (Per-Frame CSV) <span class="code-pill">LOG_STREAM 1</span></div>
+              <div class="check-desc">Writes frame-by-frame millimeter coordinates (<code>X_A1, Y_A1</code> ...) to a second <code>_XY</code> CSV file.</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Video &amp; Overlays</h3>
+          <span class="card-hint">Recorded alongside the CSV data</span>
+        </div>
         <div class="form-grid">
           <div class="field">
-            <label for="ledBrightness">Z3 Overhead Light Brightness (%)</label>
-            <input type="number" id="ledBrightness" min="5" max="100" step="5" value="100">
+            <label for="videoMode">Video Recording</label>
+            <select id="videoMode">
+              <option value="1fps" selected>1 fps Timelapse (Recommended)</option>
+              <option value="0.2fps">0.2 fps Long-Run Timelapse (1 frame / 5s)</option>
+              <option value="full">Full 30 fps Video (Large files)</option>
+              <option value="off">No Video Recording</option>
+            </select>
           </div>
           <div class="field">
-            <label>Z3 Underneath Light</label>
-            <div style="padding-top:6px;">
-              <label class="inline-check"><input type="checkbox" id="chk_underlight"> Drive Underneath LED (Ch 12)</label>
+            <label>Visual Overlays</label>
+            <div class="inline-check-row">
+              <label class="inline-check"><input type="checkbox" id="chk_tracks" checked> Track Traces</label>
+              <label class="inline-check"><input type="checkbox" id="chk_heatmap"> End Heatmap</label>
             </div>
           </div>
         </div>
       </div>
-    </details>
+    </section>
 
-  </section>
+    <!-- PAGE 6: EXPORT -->
+    <section class="wizard-page" data-page="export">
+      <header class="page-head">
+        <h2 class="page-title">Review &amp; Export</h2>
+        <p class="page-desc">Four scripts to run in order on the Zantiks Control Console. Download them together as a .zip, or copy each one from its tab.</p>
+      </header>
 
-  <!-- RIGHT COLUMN: GENERATED STEP SCRIPTS -->
-  <section class="output-panel">
-    <div class="summary-strip">
-      <div class="metrics-row">
-        <div class="metric-stat">
-          <span class="stat-label">Plate Wells</span>
-          <span class="stat-val" id="statWells">24 (A1-D6)</span>
+      <div class="output-panel">
+        <!-- 4 Separate Script Tabs -->
+        <div class="tabs-bar" id="stepTabs">
+          <button type="button" class="tab-btn" data-step="1">
+            <span class="tab-step">Step 1 <span class="tab-tag">Once</span></span>
+            <span class="tab-title">1. Calibration</span>
+          </button>
+          <button type="button" class="tab-btn" data-step="2">
+            <span class="tab-step">Step 2 <span class="tab-tag">Empty Plate</span></span>
+            <span class="tab-title">2. Plate Assets</span>
+          </button>
+          <button type="button" class="tab-btn" data-step="3">
+            <span class="tab-step">Step 3 <span class="tab-tag">Optional</span></span>
+            <span class="tab-title">3. Track Check</span>
+          </button>
+          <button type="button" class="tab-btn active" data-step="4">
+            <span class="tab-step">Step 4 <span class="tab-tag">Main Run</span></span>
+            <span class="tab-title">4. Assay Script</span>
+          </button>
         </div>
+
+        <div class="step-banner">
+          <div class="step-banner-top">
+            <div class="filename-box" id="copyFilenameBtn" title="Click to copy safe script name">
+              <span id="currentFilename">04_mwp_ld_transitions_24well.zs</span>
+            </div>
+            <div class="step-banner-actions">
+              <button type="button" class="btn btn-sm" id="copyCodeBtn">Copy Script</button>
+              <button type="button" class="btn btn-sm btn-primary" id="downloadSingleBtn">Download .zs</button>
+            </div>
+          </div>
+          <p class="step-instructions" id="stepInstructionText"></p>
+          <div class="csv-schema-box" id="csvSchemaBox"></div>
+        </div>
+
+        <div class="code-container">
+          <pre id="codePreview"></pre>
+        </div>
+
+        <div class="safety-footer">
+          <span><strong>Console Checklist:</strong> Click <strong>Save</strong> before <strong>Build</strong> in the web editor.</span>
+          <span><strong>Filenames:</strong> Never add spaces or parentheses.</span>
+          <span><strong>Shutdown:</strong> Always shut down from Control Console before flipping power off.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- BACK / NEXT -->
+    <div class="wizard-nav">
+      <button type="button" class="btn" id="wizPrevBtn" disabled>&larr; Back</button>
+      <span class="wizard-progress" id="wizProgress">1 / 6</span>
+      <button type="button" class="btn btn-primary" id="wizNextBtn">Next: Organism &rarr;</button>
+    </div>
+  </div>
+
+  <!-- RUN SUMMARY (always visible) -->
+  <aside class="run-summary" aria-label="Run summary">
+    <div class="summary-card">
+      <div class="summary-head">Run Summary</div>
+      <div class="summary-stats">
         <div class="metric-stat">
           <span class="stat-label">Assay Runtime</span>
           <span class="stat-val" id="statRuntime">11m 00s</span>
+        </div>
+        <div class="metric-stat">
+          <span class="stat-label">Plate Wells</span>
+          <span class="stat-val" id="statWells">24 (A1-D6)</span>
         </div>
         <div class="metric-stat">
           <span class="stat-label">CSV Rows</span>
@@ -1368,52 +1765,40 @@
           <span class="stat-val" id="statFiles">1 Summary CSV</span>
         </div>
       </div>
-    </div>
-
-    <!-- 4 Separate Script Tabs -->
-    <div class="tabs-bar" id="stepTabs">
-      <button type="button" class="tab-btn" data-step="1">
-        <span class="tab-step">Step 1 <span class="tab-tag">Once</span></span>
-        <span class="tab-title">1. Calibration</span>
-      </button>
-      <button type="button" class="tab-btn" data-step="2">
-        <span class="tab-step">Step 2 <span class="tab-tag">Empty Plate</span></span>
-        <span class="tab-title">2. Plate Assets</span>
-      </button>
-      <button type="button" class="tab-btn" data-step="3">
-        <span class="tab-step">Step 3 <span class="tab-tag">Optional</span></span>
-        <span class="tab-title">3. Track Check</span>
-      </button>
-      <button type="button" class="tab-btn active" data-step="4">
-        <span class="tab-step">Step 4 <span class="tab-tag">Main Run</span></span>
-        <span class="tab-title">4. Assay Script</span>
-      </button>
-    </div>
-
-    <div class="step-banner">
-      <div class="step-banner-top">
-        <div class="filename-box" id="copyFilenameBtn" title="Click to copy safe script name">
-          <span id="currentFilename">04_mwp_ld_transitions_24well.zs</span>
-        </div>
-        <div style="display:flex; gap:8px;">
-          <button type="button" class="btn btn-sm" id="copyCodeBtn">Copy Script</button>
-          <button type="button" class="btn btn-sm btn-primary" id="downloadSingleBtn">Download .zs</button>
-        </div>
+      <div class="summary-list">
+        <button type="button" class="summary-row" data-goto="study">
+          <span class="summary-key">Study</span>
+          <span class="summary-val" id="sumResearcher">Name not set</span>
+          <span class="summary-sub"><code id="sumFolder">mwp_ld_transitions_24well/</code></span>
+        </button>
+        <button type="button" class="summary-row" data-goto="study">
+          <span class="summary-key">Unit</span>
+          <span class="summary-val" id="sumHw">MWP Z3</span>
+          <span class="summary-sub" id="sumHwSub"></span>
+        </button>
+        <button type="button" class="summary-row" data-goto="organism">
+          <span class="summary-key">Organism</span>
+          <span class="summary-val" id="sumOrganism">Daphnia magna</span>
+          <span class="summary-sub" id="sumOrganismSub"></span>
+        </button>
+        <button type="button" class="summary-row" data-goto="plate">
+          <span class="summary-key">Plate</span>
+          <span class="summary-val" id="sumPlate">24-Well</span>
+          <span class="summary-sub" id="sumPlateSub"></span>
+        </button>
+        <button type="button" class="summary-row" data-goto="stimulus">
+          <span class="summary-key">Stimulus</span>
+          <span class="summary-val" id="sumStim">Light / Dark Cycles</span>
+          <span class="summary-sub" id="sumStimSub"></span>
+        </button>
+        <button type="button" class="summary-row" data-goto="data">
+          <span class="summary-key">Data</span>
+          <span class="summary-val" id="sumData">Distance</span>
+          <span class="summary-sub" id="sumDataSub"></span>
+        </button>
       </div>
-      <p class="step-instructions" id="stepInstructionText"></p>
-      <div class="csv-schema-box" id="csvSchemaBox"></div>
     </div>
-
-    <div class="code-container">
-      <pre id="codePreview"></pre>
-    </div>
-
-    <div class="safety-footer">
-      <span><strong>Console Checklist:</strong> Click <strong>Save</strong> before <strong>Build</strong> in the web editor.</span>
-      <span><strong>Filenames:</strong> Never add spaces or parentheses.</span>
-      <span><strong>Shutdown:</strong> Always shut down from Control Console before flipping power off.</span>
-    </div>
-  </section>
+  </aside>
 </main>
 
 <!-- PLATE CALIBRATION CONFIG MODAL -->
@@ -3738,11 +4123,9 @@
     document.getElementById("previewMainScript").textContent = s4.filename;
     document.getElementById("nameAsciiWarn").classList.toggle("show", cfg.hasNonAsciiWarning);
 
-    // Header badge & preset summary
+    // Header badge
     document.getElementById("hwBadge").textContent = "MWP " + cfg.hw;
     const orgObj = ORGANISM_PRESETS.find(o => o.id === state.organism);
-    document.getElementById("presetSummary").textContent =
-      `TARGET_SIZE=${cfg.targetSize}mm | THRESHOLD=${cfg.detThreshold} | TEMP=${cfg.useThermostat ? cfg.thermostatTemp + "°C" : "Ambient"} (${orgObj.label})`;
 
     // Visual previews & geometry status
     updateConfigStatusBadges();
@@ -3758,6 +4141,7 @@
     document.getElementById("statRows").textContent = `${s4.totalRows} rows`;
     document.getElementById("statFiles").textContent =
       s4.csvCount === 2 ? "2 CSVs (Summary + XY)" : "1 Summary CSV";
+    renderRunSummary(cfg, s4, orgObj);
 
     // Active step tab content
     document.getElementById("currentFilename").textContent = activeObj.filename;
@@ -4076,6 +4460,128 @@
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // 11. Step-by-Step Wizard & Run Summary
+  // ---------------------------------------------------------------------------
+  const WIZARD_PAGES = [
+    { id: "study", label: "Study" },
+    { id: "organism", label: "Organism" },
+    { id: "plate", label: "Plate" },
+    { id: "stimulus", label: "Stimulus" },
+    { id: "data", label: "Data & Video" },
+    { id: "export", label: "Export" }
+  ];
+  let currentPageIdx = 0;
+
+  const VIDEO_LABELS = {
+    "1fps": "1 fps timelapse",
+    "0.2fps": "0.2 fps timelapse",
+    "full": "30 fps video",
+    "off": "No video"
+  };
+
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function renderRunSummary(cfg, s4, orgObj) {
+    setText("sumResearcher", cfg.userFullClean || "Name not set");
+    setText("sumFolder", `${s4.bundleFolder}/`);
+
+    setText("sumHw", "MWP " + cfg.hw);
+    setText("sumHwSub", cfg.hw === "Z3"
+      ? `Overhead LED ${cfg.ledPct}%${cfg.useUnderLight ? " + underneath" : ""}`
+      : "GPO6-8 lighting");
+
+    setText("sumOrganism", orgObj ? orgObj.label : "Custom");
+    setText("sumOrganismSub",
+      `${cfg.targetSize} mm · threshold ${cfg.detThreshold} · ${cfg.useThermostat ? cfg.thermostatTemp + " °C" : "ambient"}`);
+
+    setText("sumPlate", cfg.plate.name);
+    setText("sumPlateSub", `${cfg.plate.meta} · ${cfg.plate.arenaBmp}.bmp`);
+
+    const stim = STIMULI.find(s => s.id === state.stimId);
+    setText("sumStim", stim ? stim.name : state.stimId);
+    setText("sumStimSub", document.getElementById("timelineDesc").textContent);
+
+    const metrics = [];
+    if (cfg.useDist) metrics.push("Distance");
+    if (cfg.useMsd) metrics.push("Activity");
+    if (cfg.useZones) metrics.push("Zones");
+    if (cfg.useXy) metrics.push("Raw XY");
+    setText("sumData", metrics.join(" · "));
+    const extras = [];
+    if (cfg.useTracks) extras.push("tracks");
+    if (cfg.useHeatmap) extras.push("heatmap");
+    setText("sumDataSub", (VIDEO_LABELS[cfg.videoMode] || cfg.videoMode) + (extras.length ? " · " + extras.join(" + ") : ""));
+  }
+
+  function pageIndexOf(id) {
+    return WIZARD_PAGES.findIndex(p => p.id === id);
+  }
+
+  function goToPage(id, opts) {
+    const idx = pageIndexOf(id);
+    if (idx < 0) return;
+    const changed = idx !== currentPageIdx;
+    currentPageIdx = idx;
+    const last = WIZARD_PAGES.length - 1;
+
+    document.querySelectorAll(".wizard-page").forEach(sec => {
+      sec.classList.toggle("active", sec.getAttribute("data-page") === id);
+    });
+    document.querySelectorAll("#wizardStepper .stepper-item").forEach((btn, i) => {
+      btn.classList.toggle("active", i === idx);
+      btn.classList.toggle("done", i < idx);
+      if (i === idx) btn.setAttribute("aria-current", "step");
+      else btn.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".summary-row").forEach(row => {
+      row.classList.toggle("current", row.getAttribute("data-goto") === id);
+    });
+
+    const prevBtn = document.getElementById("wizPrevBtn");
+    const nextBtn = document.getElementById("wizNextBtn");
+    prevBtn.disabled = idx === 0;
+    prevBtn.textContent = idx === 0 ? "\u2190 Back" : `\u2190 ${WIZARD_PAGES[idx - 1].label}`;
+    nextBtn.textContent = idx === last
+      ? "Download All 4 Scripts (.zip)"
+      : `Next: ${WIZARD_PAGES[idx + 1].label} \u2192`;
+    setText("wizProgress", `${idx + 1} / ${WIZARD_PAGES.length}`);
+
+    // Remember the page in the URL so a refresh stays on the same step
+    try {
+      if (location.hash !== "#" + id) history.replaceState(null, "", "#" + id);
+    } catch (_) {}
+
+    if (changed && !(opts && opts.initial)) window.scrollTo(0, 0);
+  }
+
+  function bindWizard() {
+    document.querySelectorAll("[data-goto]").forEach(el => {
+      el.addEventListener("click", () => goToPage(el.getAttribute("data-goto")));
+    });
+    document.getElementById("wizPrevBtn").addEventListener("click", () => {
+      if (currentPageIdx > 0) goToPage(WIZARD_PAGES[currentPageIdx - 1].id);
+    });
+    document.getElementById("wizNextBtn").addEventListener("click", () => {
+      if (currentPageIdx < WIZARD_PAGES.length - 1) {
+        goToPage(WIZARD_PAGES[currentPageIdx + 1].id);
+      } else {
+        document.getElementById("downloadZipBtn").click();
+      }
+    });
+    document.getElementById("resetBtn").addEventListener("click", () => goToPage("study"));
+    window.addEventListener("hashchange", () => {
+      const id = location.hash.slice(1);
+      if (pageIndexOf(id) >= 0) goToPage(id);
+    });
+
+    const fromHash = location.hash.slice(1);
+    goToPage(pageIndexOf(fromHash) >= 0 ? fromHash : "study", { initial: true });
+  }
+
   // Initialize app
   function init() {
     loadInitialPlateConfig();
@@ -4096,6 +4602,7 @@
     renderStimParams();
     bindEvents();
     refreshAll();
+    bindWizard();
   }
 
   init();
