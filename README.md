@@ -2,11 +2,36 @@
 
 **Zanscript-Builder** (*Zantiks MWP Script Builder*) is a standalone, zero-dependency browser application for designing behavioral tracking experiments on **Zantiks MWP** systems (**MWP Z3** and **MWP Z2 / Z2S**). It generates ready-to-compile **Zanscript (`.zs`)** files for camera calibration, multi-well plate arena/zone asset creation, tracking parameter verification, and full stimulus-driven assays.
 
+**Live Web Builder:** [https://tigerqu.github.io/Zanscript-Builder/](https://tigerqu.github.io/Zanscript-Builder/)
+
+> [!IMPORTANT]
+> **Unofficial Community Tool — Use at Your Own Risk**
+> *Zanscript-Builder* is an independent open-source project and is **not affiliated with, endorsed by, or supported by Zantiks Ltd.** Generated `.zs` scripts are provided **"AS IS"** without warranty of any kind, and the authors assume **no liability** for any potential hardware damage, data loss, or experimental issues. Always inspect generated code, verify physical hardware connections, and test new protocols on an empty plate before running live assays. See [Disclaimer & Hardware Safety](#disclaimer--hardware-safety) below.
+
+---
+
+## Visual Walkthrough
+
+### 1. Step-by-Step Experiment Configuration
+Walk through Study, Organism, Plate, Stimulus, and Data & Video pages while the **Run Summary** sidebar tracks total runtime, well count, and CSV outputs in real time:
+
+![Step-by-step wizard workflow](assets/demo_wizard_workflow.gif)
+
+### 2. True-Scale Plate Preview & Millimeter Calibration
+Preview round, square, and Petri dish geometries at true millimeter scale, fine-tune well offsets inline with one-click **Auto 50% Inner Zone**, or manage unit-wide calibration profiles in **Plate Config**:
+
+![Plate geometry preview and calibration](assets/demo_plate_calibration.gif)
+
+### 3. Coordinated 4-Script Preview & One-Click `.zip` Export
+Inspect syntax-highlighted Zanscripts and CSV column schemas for all four workflow steps, copy Zantiks-safe service names, or download the complete run bundle as a `.zip`:
+
+![Script tabs and ZIP bundle export](assets/demo_script_export.gif)
+
 ---
 
 ## Key Features
 
-- **Zero-Install & Offline Ready**: Runs directly in any modern browser over `file://` with no local server, build step, or internet connection required—ideal for dedicated lab computers connected to a Zantiks unit.
+- **Zero-Install & Offline Ready**: Runs directly in any modern browser over `https://` or local `file://` with no local server, build step, or internet connection required—ideal for dedicated lab computers connected to a Zantiks unit.
 - **Complete 4-Step Zantiks Workflow**: Generates standalone `.zs` scripts for every stage of an MWP experiment, viewable individually with syntax highlighting or downloadable together as a `.zip` bundle (including a run sheet `README_STEPS.txt`) via an embedded pure-JavaScript ZIP builder.
 - **9 Plate & Dish Formats with True-Scale Preview**: Supports 6-, 12-, 24- (standard, Costar, and square), 48-, and 96-well (round and square) plates plus 90 mm Petri dishes, complete with a live millimeter-accurate SVG layout preview.
 - **Visual Plate Calibration & Shared Config**: Fine-tune `X_OFFSET`, `Y_OFFSET`, `COL_STEP`, `ROW_STEP`, `RADIUS` / `SIDE LENGTH`, and `INNER_ZONE` inline or across all formats in the **Plate Config** modal, with one-click **Auto 50% Inner Zone** calculation ($r_{\text{inner}} = r / \sqrt{2}$) for thigmotaxis assays.
@@ -22,23 +47,27 @@
 
 ```text
 Zanscript-Builder/
+├── index.html                      # Redirect entry point for GitHub Pages
 ├── zantiks_script_generator.html   # Standalone web app (UI, previews, .zs generator, ZIP bundler)
 ├── zantiks_plate_config.js         # External plate geometry calibration profile (mm)
-└── README.md                       # Documentation
+├── assets/                         # Walkthrough GIFs for documentation
+├── LICENSE                         # MIT License
+└── README.md                       # Documentation & hardware verification matrix
 ```
 
-> **Note:** Keep `zantiks_plate_config.js` in the same folder as `zantiks_script_generator.html` so custom plate calibration profiles load automatically over `file://` without browser CORS restrictions.
+> **Note:** When running locally, keep `zantiks_plate_config.js` in the same folder as `zantiks_script_generator.html` so custom plate calibration profiles load automatically over `file://` without browser CORS restrictions.
 
 ---
 
 ## Quick Start
 
-1. **Download or clone this repository**:
-   ```bash
-   git clone https://github.com/TigerQu/Zanscript-Builder.git
-   ```
-2. **Open the builder**: Double-click `zantiks_script_generator.html` to open it in any modern browser (Chrome, Edge, Safari, or Firefox).
-3. **Walk through the six pages** with **Next** / **Back** (or click any step in the top bar to jump straight to it):
+1. **Use online or run locally**:
+   - **Online**: Open [https://tigerqu.github.io/Zanscript-Builder/](https://tigerqu.github.io/Zanscript-Builder/) in any modern browser, **or**
+   - **Offline / Local**: Clone this repository and double-click `zantiks_script_generator.html`:
+     ```bash
+     git clone https://github.com/TigerQu/Zanscript-Builder.git
+     ```
+2. **Walk through the six pages** with **Next** / **Back** (or click any step in the top bar to jump straight to it):
    1. **Study** – Researcher name & study tag (optional; appends ASCII-safe tags to generated filenames and folders), MWP hardware revision and Z3 lighting.
    2. **Organism** – Pick an organism preset, then fine-tune `TARGET_SIZE`, thresholds, `AUTOREF_TIMEOUT` and thermostat settings.
    3. **Plate** – Select the plate format (and adjust millimeter offsets if needed).
@@ -46,10 +75,38 @@ Zanscript-Builder/
    5. **Data & Video** – Choose CSV metrics, recording frame rate and overlays.
    6. **Export** – Review and download the generated scripts.
    - The **Run Summary** sidebar shows every choice, the total runtime and CSV size at all times; click a row to jump back and edit it.
-4. **Export your scripts** on the **Export** page:
+3. **Export your scripts** on the **Export** page:
    - Click **Download All 4 Scripts (.zip)** (also available in the top bar on every page) to get the complete experiment folder and `README_STEPS.txt`, **or**
    - Switch between tabs (**Step 1** – **Step 4**) to **Copy Script** / **Download `.zs`** individually.
    - *Tip:* Click the filename badge above the code preview to copy the `.zs`-stripped service name directly for pasting into Zantiks' **Add Service** dialog.
+
+---
+
+## Hardware Verification Status
+
+All generated script permutations pass automated static checks (block closure, ASCII identifier sanitization, line-length bounds, and `LOGCREATE`/`LOGAPPEND` CSV column-count parity). The table below tracks **physical on-unit testing** across experimental scenarios as validation progresses.
+
+**Status Legend:**
+- `✅ Verified` — Compiled (`Build`), executed, and confirmed CSV/asset output on physical Zantiks MWP hardware
+- `⏳ Pending` — Static syntax & official reference check passed; awaiting physical on-unit test run
+- `⚠️ Partial / Issue` — Known firmware or hardware revision caveat (see notes)
+
+| Scenario / Subsystem | Target Hardware | Configuration / Scope | Static Check | On-Unit Test | Notes / Last Verified |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+| **Step 1: Camera Calibration** | MWP Z3 / Z2 | `Calibration(0)` with black 96-well plate | ✅ Passed | ⏳ Pending | Standard Zantiks scale calibration |
+| **Step 2: Round-Well Asset Builder** | MWP Z3 / Z2 | `6`, `12`, `24`, `24 Costar`, `48`, `96`-well & `90 mm` Petri (`DISC`) | ✅ Passed | ⏳ Pending | Saves `a*.bmp` & 50/50 `dz*.bmp` to `Assets` |
+| **Step 2: Square-Well Asset Builder** | MWP Z3 / Z2 | `24-Well Square`, `96-Well Square` (`SQUARE`) | ✅ Passed | ⏳ Pending | Saves `a24sq.bmp` / `a96_sq.bmp` & dual zones |
+| **Step 3: Tracking Parameter Sweep** | MWP Z3 | `TARGET_SIZE` & `DETECTOR_THRESHOLD` sweep video + CSV | ✅ Passed | ⏳ Pending | Optional 1–2 min pre-assay check |
+| **Baseline Tracking (`baseline`)** | MWP Z3 | Constant Light (`X_LED_DRIVE`) or IR Dark · `DIST` + `MSD` | ✅ Passed | ⏳ Pending | Continuous time-bin logging |
+| **Light / Dark Cycles (`ld_transitions`)** | MWP Z3 | Alternating Light ↔ Dark cycles · `DIST` + `MSD` + `ZONES` | ✅ Passed | ⏳ Pending | Overhead Ch 4 (& optional Ch 12 underlight) |
+| **Light-Off Startle (`light_off_startle`)** | MWP Z3 | Sub-bin (`< TIME_BIN`) & multi-bin dark pulses + ITI | ✅ Passed | ⏳ Pending | Pulse + recovery trial loop |
+| **Light-On Flash (`light_on_pulse`)** | MWP Z3 | Brief bright flashes from dark baseline + ITI | ✅ Passed | ⏳ Pending | Pulse + recovery trial loop |
+| **Vibration Startle (`vibration_startle`)** | MWP Z3 | Stepper motor taps (`U0`–`U3` via `ZCOMMAND`) + ITI | ✅ Passed | ⏳ Pending | Requires MWP Z3 stepper vibration stand |
+| **Long-Term / Circadian (`circadian`)** | MWP Z3 | Multi-day `L:D` schedule + hourly `AUTOREFERENCE()` | ✅ Passed | ⏳ Pending | Use `0.2 fps` timelapse or `No Video` |
+| **Dual-Stream Raw XY (`LOG_STREAM 1`)** | MWP Z3 / Z2 | Per-frame millimeter `X/Y` CSV alongside summary CSV | ✅ Passed | ⏳ Pending | `SET(LOG_PERFRAME,ON)` secondary stream |
+| **Legacy GPO Lighting (`GPO6–8`)** | MWP Z2 / Z2S | Any stimulus protocol in `MWP Z2 / Z2S` hardware mode | ✅ Passed | ⏳ Pending | Community testing welcome |
+
+> *Tested a scenario on your MWP unit? Feel free to open an Issue or Pull Request with your hardware revision (`MWP Z3` or `MWP Z2 / Z2S`), plate type, and results to update this table.*
 
 ---
 
@@ -158,3 +215,15 @@ Different MWP units or plate manufacturers can exhibit slight positional shifts 
 - **Asset Prerequisite**: Run the **Step 2 (`02_*_assets_*.zs`)** script at least once for each plate type so the required `.bmp` arena/zone masks exist in the unit's `Assets` directory before running Step 3 or Step 4.
 - **Safe Filenames**: Never rename `.zs` scripts on the unit with spaces, parentheses, or non-ASCII characters.
 - **Safe Shutdown**: Always shut down the MWP system from the **Control Console** webpage and wait for completion before switching off physical power.
+
+---
+
+## Disclaimer & Hardware Safety
+
+1. **Unofficial & Non-Affiliated**: *Zanscript-Builder* is an independent community-developed tool created to assist researchers and educators working with Zantiks equipment. It is **not** an official product of, nor is it affiliated with, endorsed by, or supported by **Zantiks Ltd.** *Zantiks* and *Zanscript* are trademarks of Zantiks Ltd.
+2. **No Warranty & Limitation of Liability**: This software and all `.zs` scripts generated by it are provided **"AS IS"**, without warranty of any kind, express or implied, including but not limited to fitness for a particular purpose or non-infringement. In no event shall the authors or contributors be held liable for any direct, indirect, incidental, or consequential damages—including hardware or peripheral damage, corrupted storage, lost experimental data, or unintended effects on model organisms—arising from the use or misuse of generated scripts.
+3. **Mandatory Operator Precautions**:
+   - **Thermostat & Cooling Fan**: If `SET(THERMOSTAT, ...)` is enabled, verify that the unit's cooling/circulation fan is connected and spinning freely before starting a run. Disable **Enable Thermostat** if your unit is not equipped with temperature control hardware.
+   - **Vibration Motor Connections**: Never plug or unplug vibration motor or accessory cables while the Zantiks unit is powered on. Power down completely before changing hardware attachments.
+   - **Dry-Run Verification**: Always verify arena alignment (`02_*_assets_*.zs`) and test new stimulus schedules briefly on an **empty plate** while monitoring Live View before introducing live organisms or starting unattended multi-hour assays.
+   - **Storage & Power-Off**: Use `1 fps` or `0.2 fps` timelapse (rather than full `30 fps` video) for long experiments to avoid filling internal storage, and always initiate **Shut Down** from the web Control Console before turning off the rear power switch.
