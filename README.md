@@ -35,10 +35,10 @@ Inspect syntax-highlighted Zanscripts and CSV column schemas for all four workfl
 - **Complete 4-Step Zantiks Workflow**: Generates standalone `.zs` scripts for every stage of an MWP experiment, viewable individually with syntax highlighting or downloadable together as a `.zip` bundle (including a run sheet `README_STEPS.txt`) via an embedded pure-JavaScript ZIP builder.
 - **9 Plate & Dish Formats with True-Scale Preview**: Supports 6-, 12-, 24- (standard, Costar, and square), 48-, and 96-well (round and square) plates plus 90 mm Petri dishes, complete with a live millimeter-accurate SVG layout preview.
 - **Visual Plate Calibration & Shared Config**: Fine-tune `X_OFFSET`, `Y_OFFSET`, `COL_STEP`, `ROW_STEP`, `RADIUS` / `SIDE LENGTH`, and `INNER_ZONE` inline or across all formats in the **Plate Config** modal, with one-click **Auto 50% Inner Zone** calculation ($r_{\text{inner}} = r / \sqrt{2}$) for thigmotaxis assays.
-- **6 Built-in Stimulus Protocols**: Configure constant baseline tracking, alternating Light/Dark cycles, Light-Off startle pulses, Light-On flashes, stepper-motor Vibration startle taps (`U0`–`U3`), or multi-day Circadian `L:D` cycles with interactive timeline and runtime previews.
+- **8 Built-in Stimulus Protocols**: Configure constant baseline tracking, alternating Light/Dark cycles, Light-Off startle pulses, Light-On flashes, stepper-motor Vibration startle taps (`U0`–`U3`), multi-day Circadian `L:D` cycles, an **AE/Premiere-style Multi-Track Timeline** (overlapping `White / Blue / Green / Red / UV` LED channels + `Temp °C` track compiled automatically into flicker-free Zanscript time slices), or **Temperature Step / Ramp** curves (`SET(THERMOSTAT, ...)`) with interactive timeline and runtime previews.
+- **Multi-Wavelength LED Support (`White / RGB / UV`)**: Choose between **White (~6000K, Ch 4/12)**, **Blue (470 nm, Ch 1/9)**, **Green (530 nm, Ch 3/11)**, **Red (625 nm, Ch 5/13)**, and **UV (365 nm, Ch 0/8)** on **MWP Z3** units (with automatic visible-channel zeroing between color transitions while preserving 850 nm IR tracking on Ch 2/10), or `GPO6–8` RGB actions on **MWP Z2 / Z2S** units.
 - **Curated Organism Presets**: Instant tracking and temperature defaults for *Daphnia magna*, *Drosophila* (Adult), *C. elegans*, *Planaria*, and *Zebrafish Larvae*, plus full manual customization.
 - **Composable CSV Metrics & Video Modes**: Combine centroid distance (`DIST_*`), pixel motility (`MSD_*`), 50/50 inner/outer zone metrics (`ZD_*`, `ZC_*`, `ZT_*`), and optional per-frame raw millimeter coordinates (`_XY` CSV), alongside timelapse (`1 fps`, `0.2 fps`) or `30 fps` video, live track traces, and end-of-assay heatmaps.
-- **MWP Z3 & Legacy Z2 Support**: Generates native 12-bit `X_LED_DRIVE` commands (overhead Ch 4 and optional underneath LED Ch 12) for **MWP Z3** units or `GPO6–8` lighting actions for **MWP Z2 / Z2S** units.
 - **Zantiks-Safe Naming**: Automatically extracts researcher surnames and sanitizes study tags into space-free ASCII identifiers accepted by the Zantiks Control Console compiler.
 
 ---
@@ -103,6 +103,8 @@ All generated script permutations pass automated static checks (block closure, A
 | **Light-On Flash (`light_on_pulse`)** | MWP Z3 | Brief bright flashes from dark baseline + ITI | ✅ Passed | ⏳ Pending | Pulse + recovery trial loop |
 | **Vibration Startle (`vibration_startle`)** | MWP Z3 | Stepper motor taps (`U0`–`U3` via `ZCOMMAND`) + ITI | ✅ Passed | ⏳ Pending | Requires MWP Z3 stepper vibration stand |
 | **Long-Term / Circadian (`circadian`)** | MWP Z3 | Multi-day `L:D` schedule + hourly `AUTOREFERENCE()` | ✅ Passed | ⏳ Pending | Use `0.2 fps` timelapse or `No Video` |
+| **Multi-Track Timeline (`multi_phase`)** | MWP Z3 | Overlapping `White / Blue / Green / Red / UV` tracks + `Temp °C` track compiled into time slices | ✅ Passed | ⏳ Pending | Flicker-free PWM across `Ch 0,1,3,4,5` (`Ch 2/10` IR untouched); `UV` requires Z3 UV LEDs |
+| **Temperature Step / Ramp (`temp_ramp`)** | MWP Z3 / Z2 | Stepped `SET(THERMOSTAT, ...)` plateaus + baseline restore | ✅ Passed | ⏳ Pending | Standard heater regulates ambient to +10 °C |
 | **Dual-Stream Raw XY (`LOG_STREAM 1`)** | MWP Z3 / Z2 | Per-frame millimeter `X/Y` CSV alongside summary CSV | ✅ Passed | ⏳ Pending | `SET(LOG_PERFRAME,ON)` secondary stream |
 | **Legacy GPO Lighting (`GPO6–8`)** | MWP Z2 / Z2S | Any stimulus protocol in `MWP Z2 / Z2S` hardware mode | ✅ Passed | ⏳ Pending | Community testing welcome |
 
@@ -166,6 +168,8 @@ Selecting an organism chip populates recommended tracking and environmental para
 | **Light-On Flash** | `light_on_pulse` | Dark acclimation → Optional dark baseline (`preBaselineSec`) → `numPulses` bright light flashes (`pulseDurSec`, supports sub-bin durations) separated by dark intervals (`itiSec`). |
 | **Vibration Startle** | `vibration_startle` | Light or dark acclimation (`vibAmbient`) → Optional baseline → `numPulses` stepper-motor taps via `ZCOMMAND` (`U0` Full, `U1` Half, `U2` Quarter, `U3` Eighth step) with ITI recovery (`itiSec`). |
 | **Long-Term Cycle** | `circadian` | Multi-hour / multi-day `L:D` cycles (`lightHours`, `darkHours`, `numDays`, `circBinSec`) with automatic mid-hour `AUTOREFERENCE()` re-referencing to prevent tracking drift over multi-day runs. |
+| **Multi-Track Timeline** | `multi_phase` | Interactive 6-track NLE editor (`White`, `Blue 470`, `Green 530`, `Red 625`, `UV 365`, `Temp °C`) supporting arbitrary overlapping clips across tracks (`mpTimelineSec`, `mpCycles`, `timeBinSec`), automatically compiled via sweep-line discretization into contiguous non-overlapping Zanscript slices (`S1..SK`) with flicker-free PWM transitions and baseline temperature restore. |
+| **Temperature Step / Ramp** | `temp_ramp` | Acclimation at `rampStartTemp` → Stepped thermal plateaus from `rampStartTemp` to `rampEndTemp` in `rampStepTemp` increments (`rampHoldSec` per step), automatically restoring `rampStartTemp` when finished. |
 
 ---
 

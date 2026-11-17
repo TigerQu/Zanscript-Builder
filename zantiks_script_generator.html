@@ -749,13 +749,13 @@
   /* Stimulus Selector */
   .stim-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: 560px) {
     .stim-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
     }
   }
 
@@ -837,8 +837,19 @@
     background: #eaeef2;
   }
 
+  .timeline-bar.has-overlap {
+    background: repeating-linear-gradient(
+      135deg,
+      #dbeafe 0px,
+      #dbeafe 6px,
+      #fef08a 6px,
+      #fef08a 12px
+    );
+  }
+
   .tl-seg {
     height: 100%;
+    min-width: 0;
     font-size: 10px;
     font-weight: 600;
     display: flex;
@@ -853,6 +864,366 @@
   .tl-dark   { background: #24292f; color: #f0f6fc; }
   .tl-pulse  { background: #ff818266; color: #82071e; }
   .tl-vib    { background: #ddf4ff; color: #0550ae; }
+  .tl-blue   { background: #dbeafe; color: #1e40af; }
+  .tl-green  { background: #dcfce7; color: #166534; }
+  .tl-red    { background: #fee2e2; color: #991b1b; }
+  .tl-uv     { background: #f3e8ff; color: #6b21a8; }
+  .tl-temp-1 { background: #e0f2fe; color: #075985; }
+  .tl-temp-2 { background: #fef3c7; color: #92400e; }
+  .tl-temp-3 { background: #ffedd5; color: #9a3412; }
+  .tl-temp-4 { background: #fee2e2; color: #991b1b; }
+  .tl-overlap {
+    background: transparent;
+    color: #1e293b;
+  }
+
+  /* AE / Premiere-Style Multi-Track NLE Timeline */
+  .nle-section {
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .nle-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    background: var(--surface-subtle);
+    border-bottom: 1px solid var(--border-muted);
+  }
+
+  .nle-presets {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .nle-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nle-hud {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-border);
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .nle-hud:empty {
+    display: none;
+  }
+
+  .nle-workspace {
+    user-select: none;
+    -webkit-user-select: none;
+    background: #0f172a;
+    color: #e2e8f0;
+    outline: none;
+  }
+
+  .nle-header-row {
+    display: grid;
+    grid-template-columns: 122px minmax(0, 1fr);
+    border-bottom: 1px solid #1e293b;
+    background: #0b1120;
+  }
+
+  .nle-corner {
+    padding: 5px 10px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    border-right: 1px solid #1e293b;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nle-ruler {
+    position: relative;
+    height: 24px;
+    overflow: hidden;
+  }
+
+  .nle-tick {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: #94a3b8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 3px;
+    pointer-events: none;
+  }
+
+  .nle-tick:first-child {
+    transform: translateX(2px);
+    align-items: flex-start;
+  }
+
+  .nle-tick.is-end {
+    transform: translateX(calc(-100% - 4px));
+    align-items: flex-end;
+  }
+
+  .nle-tick::after {
+    content: "";
+    width: 1px;
+    height: 5px;
+    background: #475569;
+    margin-top: 1px;
+  }
+
+  .nle-track-row {
+    display: grid;
+    grid-template-columns: 122px minmax(0, 1fr);
+    border-bottom: 1px solid #1e293b;
+  }
+
+  .nle-track-row:last-child {
+    border-bottom: none;
+  }
+
+  .nle-track-hdr {
+    padding: 0 8px 0 10px;
+    height: 42px;
+    border-right: 1px solid #1e293b;
+    background: #111827;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .nle-track-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .nle-swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .nle-track-name {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #f1f5f9;
+    white-space: nowrap;
+  }
+
+  .nle-track-add {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #cbd5e1;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .nle-track-add:hover {
+    background: #334155;
+    color: #ffffff;
+  }
+
+  .nle-lane {
+    position: relative;
+    height: 42px;
+    background-color: #0f172a;
+    background-image: linear-gradient(to right, rgba(148, 163, 184, 0.09) 1px, transparent 1px);
+    cursor: crosshair;
+    overflow: hidden;
+  }
+
+  .nle-lane:hover {
+    background-color: #131c31;
+  }
+
+  .nle-clip {
+    position: absolute;
+    top: 5px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1.5px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    cursor: grab;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    transition: box-shadow 0.08s;
+  }
+
+  .nle-clip:hover {
+    filter: brightness(1.03);
+  }
+
+  .nle-clip:active,
+  .nle-clip.is-dragging {
+    cursor: grabbing;
+  }
+
+  .nle-clip.selected {
+    box-shadow: 0 0 0 2px #ffffff, 0 3px 10px rgba(0, 0, 0, 0.55);
+    z-index: 4;
+  }
+
+  .nle-clip-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+  }
+
+  .nle-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: min(12px, 28%);
+    min-width: 5px;
+    cursor: ew-resize;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .nle-handle::after {
+    content: "";
+    width: 2px;
+    height: 12px;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.28);
+    transition: background 0.1s, transform 0.1s;
+  }
+
+  .nle-handle-l {
+    left: 0;
+    border-right: 1px solid rgba(0, 0, 0, 0.12);
+    background: rgba(255, 255, 255, 0.32);
+  }
+
+  .nle-handle-r {
+    right: 0;
+    border-left: 1px solid rgba(0, 0, 0, 0.12);
+    background: rgba(255, 255, 255, 0.32);
+  }
+
+  .nle-handle:hover {
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .nle-handle:hover::after {
+    background: rgba(0, 0, 0, 0.6);
+    transform: scaleY(1.15);
+  }
+
+  .nle-inspector {
+    padding: 8px 12px;
+    background: var(--surface-subtle);
+    border-top: 1px solid var(--border-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    min-height: 52px;
+  }
+
+  .nle-insp-fields {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .nle-insp-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .nle-insp-group input[type="number"] {
+    width: 54px;
+    padding: 4px 5px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .nle-insp-group input[type="range"] {
+    width: 84px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    margin: 0;
+  }
+
+  .nle-kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-muted);
+  }
+
+  .nle-insp-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+
+  .proto-note {
+    margin-top: 12px;
+    padding: 8px 11px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-muted);
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
 
   .timeline-legend {
     display: flex;
@@ -1433,8 +1804,8 @@
 
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">MWP Hardware</h3>
-          <span class="card-hint">Lighting commands depend on the unit revision</span>
+          <h3 class="card-title">MWP Hardware &amp; Lighting</h3>
+          <span class="card-hint">Select unit revision, default stimulus wavelength &amp; intensity</span>
         </div>
         <div class="form-grid">
           <div class="field">
@@ -1445,13 +1816,23 @@
             </select>
           </div>
           <div class="field">
-            <label for="ledBrightness">Z3 Overhead Light Brightness (%)</label>
+            <label for="ledColor">Stimulus Light Wavelength</label>
+            <select id="ledColor">
+              <option value="WHITE" selected>White (~6000K - Z3 Ch 4)</option>
+              <option value="BLUE">Blue (470 nm - Z3 Ch 1)</option>
+              <option value="GREEN">Green (530 nm - Z3 Ch 3)</option>
+              <option value="RED">Red (625 nm - Z3 Ch 5)</option>
+              <option value="UV">UV (365 nm - Z3 Ch 0, if fitted)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ledBrightness">Z3 Light Brightness (%)</label>
             <input type="number" id="ledBrightness" min="5" max="100" step="5" value="100">
           </div>
           <div class="field">
             <label>Z3 Underneath Light</label>
             <div class="inline-check-row">
-              <label class="inline-check"><input type="checkbox" id="chk_underlight"> Drive Underneath LED (Ch 12)</label>
+              <label class="inline-check"><input type="checkbox" id="chk_underlight"> <span id="underlightText">Drive Underneath LED (Ch 12)</span></label>
             </div>
           </div>
         </div>
@@ -1988,13 +2369,32 @@
 
   const GEO_FIELDS = ["xOffset", "yOffset", "colStep", "rowStep", "r", "rDz"];
 
+  const LED_COLORS = {
+    WHITE: { id: "WHITE", label: "White (~6000K)", short: "White", tag: "LIGHT", z3Over: 4, z3Under: 12, z2Gpo: [6, 7, 8], tlCls: "tl-light" },
+    BLUE:  { id: "BLUE",  label: "Blue (470 nm)",  short: "Blue",  tag: "BLUE",  z3Over: 1, z3Under: 9,  z2Gpo: [8],       tlCls: "tl-blue" },
+    GREEN: { id: "GREEN", label: "Green (530 nm)", short: "Green", tag: "GREEN", z3Over: 3, z3Under: 11, z2Gpo: [7],       tlCls: "tl-green" },
+    RED:   { id: "RED",   label: "Red (625 nm)",   short: "Red",   tag: "RED",   z3Over: 5, z3Under: 13, z2Gpo: [6],       tlCls: "tl-red" },
+    UV:    { id: "UV",    label: "UV (365 nm)",    short: "UV",    tag: "UV",    z3Over: 0, z3Under: 8,  z2Gpo: [8],       tlCls: "tl-uv" }
+  };
+
   const STIMULI = [
     { id: "baseline", name: "None (Baseline)", meta: "Constant light or dark" },
     { id: "ld_transitions", name: "Light / Dark Cycles", meta: "Alternating light & dark" },
     { id: "light_off_startle", name: "Light-Off Startle", meta: "Brief dark pulses + ITI" },
     { id: "light_on_pulse", name: "Light-On Flash", meta: "Bright flashes in dark" },
     { id: "vibration_startle", name: "Vibration Startle", meta: "Stepper motor tap + ITI" },
-    { id: "circadian", name: "Long-Term Cycle", meta: "Multi-hour / multi-day L:D" }
+    { id: "circadian", name: "Long-Term Cycle", meta: "Multi-hour / multi-day L:D" },
+    { id: "multi_phase", name: "Multi-Track Timeline", meta: "AE/PR overlapping lights & temp" },
+    { id: "temp_ramp", name: "Temperature Step / Ramp", meta: "Stepped thermal curve (e.g. 20->30°C)" }
+  ];
+
+  const NLE_TRACKS = [
+    { id: "WHITE", label: "White",     sub: "Ch 4",  kind: "light", swatch: "#eab308", bg: "#fef08a", border: "#ca8a04", text: "#713f12" },
+    { id: "BLUE",  label: "Blue 470",  sub: "Ch 1",  kind: "light", swatch: "#3b82f6", bg: "#bfdbfe", border: "#2563eb", text: "#1e3a8a" },
+    { id: "GREEN", label: "Green 530", sub: "Ch 3",  kind: "light", swatch: "#22c55e", bg: "#bbf7d0", border: "#16a34a", text: "#14532d" },
+    { id: "RED",   label: "Red 625",   sub: "Ch 5",  kind: "light", swatch: "#ef4444", bg: "#fecaca", border: "#dc2626", text: "#7f1d1d" },
+    { id: "UV",    label: "UV 365",    sub: "Ch 0",  kind: "light", swatch: "#a855f7", bg: "#e9d5ff", border: "#9333ea", text: "#581c87" },
+    { id: "TEMP",  label: "Temp °C",   sub: "Therm", kind: "temp",  swatch: "#f97316", bg: "#fed7aa", border: "#ea580c", text: "#7c2d12" }
   ];
 
   // ---------------------------------------------------------------------------
@@ -2016,6 +2416,131 @@
     return out;
   }
 
+  let _nextClipId = 100;
+  function cloneDefaultTimelineClips() {
+    return [
+      { id: 1, track: "WHITE", startSec: 0,   endSec: 180, val: 35 },
+      { id: 2, track: "BLUE",  startSec: 30,  endSec: 50,  val: 100 },
+      { id: 3, track: "RED",   startSec: 80,  endSec: 100, val: 100 },
+      { id: 4, track: "BLUE",  startSec: 130, endSec: 150, val: 100 },
+      { id: 5, track: "TEMP",  startSec: 0,   endSec: 90,  val: 22 },
+      { id: 6, track: "TEMP",  startSec: 90,  endSec: 180, val: 26 }
+    ];
+  }
+
+  function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp) {
+    const bin = Math.max(1, parseFloat(binRaw) || 1);
+    const totalBins = Math.max(1, Math.round((Math.max(bin, parseFloat(timelineSecRaw) || 180)) / bin));
+    const totalSec = totalBins * bin;
+    const baseT = Math.min(40, Math.max(10, Number((parseFloat(fallbackTemp) || 22).toFixed(1))));
+
+    const norm = [];
+    for (const c of (clipsRaw || [])) {
+      const sBin = Math.max(0, Math.min(totalBins, Math.round((parseFloat(c.startSec) || 0) / bin)));
+      const eBin = Math.max(0, Math.min(totalBins, Math.round((parseFloat(c.endSec) || 0) / bin)));
+      if (eBin > sBin) {
+        norm.push({ track: c.track, sBin, eBin, val: parseFloat(c.val) });
+      }
+    }
+
+    const hasAnyTempClip = norm.some(c => c.track === "TEMP");
+    const ptSet = new Set([0, totalBins]);
+    for (const c of norm) {
+      ptSet.add(c.sBin);
+      ptSet.add(c.eBin);
+    }
+    const pts = [...ptSet].sort((a, b) => a - b);
+
+    const lightOrder = ["WHITE", "BLUE", "GREEN", "RED", "UV"];
+    const rawSlices = [];
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const b0 = pts[i], b1 = pts[i + 1];
+      if (b1 <= b0) continue;
+
+      const activeLights = [];
+      for (const lid of lightOrder) {
+        const hit = norm.find(c => c.track === lid && c.sBin <= b0 && c.eBin >= b1);
+        if (hit) {
+          const pct = Math.min(100, Math.max(5, Math.round(hit.val || 100)));
+          const pwm = Math.round((pct / 100) * 4095);
+          activeLights.push({ id: lid, pct, pwm, colObj: LED_COLORS[lid] });
+        }
+      }
+
+      const tempHit = norm.find(c => c.track === "TEMP" && c.sBin <= b0 && c.eBin >= b1);
+      const effectiveTemp = hasAnyTempClip
+        ? (tempHit ? Math.min(40, Math.max(10, Number((tempHit.val || baseT).toFixed(1)))) : baseT)
+        : null;
+
+      const sig = activeLights.map(l => `${l.id}:${l.pct}`).join("+") + "|" + (effectiveTemp !== null ? effectiveTemp : "none");
+      const prev = rawSlices[rawSlices.length - 1];
+      if (prev && prev.sig === sig) {
+        prev.b1 = b1;
+        prev.bins = prev.b1 - prev.b0;
+      } else {
+        rawSlices.push({ b0, b1, bins: b1 - b0, lights: activeLights, effectiveTemp, sig });
+      }
+    }
+
+    const shortMap = { WHITE: "W", BLUE: "B", GREEN: "G", RED: "R", UV: "UV" };
+    const slices = rawSlices.map((s, idx) => {
+      const sNum = idx + 1;
+      let lightTag;
+      let ovLight;
+      if (s.lights.length === 0) {
+        lightTag = "DARK";
+        ovLight = "DARK";
+      } else if (s.lights.length === 1) {
+        lightTag = s.lights[0].id;
+        ovLight = s.lights[0].id;
+      } else if (s.lights.length === 2) {
+        lightTag = `${s.lights[0].id}_${s.lights[1].id}`;
+        ovLight = `${s.lights[0].id}+${s.lights[1].id}`;
+      } else {
+        lightTag = "MIX_" + s.lights.map(l => shortMap[l.id]).join("");
+        ovLight = s.lights.map(l => shortMap[l.id]).join("+");
+      }
+      const tempSuffix = s.effectiveTemp !== null ? `_${s.effectiveTemp}C` : "";
+      const csvTag = `S${sNum}_${lightTag}${tempSuffix}`.slice(0, 24);
+      const overlayText = `S${sNum} ${ovLight}${s.effectiveTemp !== null ? " " + s.effectiveTemp + "C" : ""}`;
+      return {
+        idx: sNum,
+        startSec: s.b0 * bin,
+        endSec: s.b1 * bin,
+        bins: s.bins,
+        lights: s.lights,
+        effectiveTemp: s.effectiveTemp,
+        csvTag,
+        overlayText
+      };
+    });
+
+    const initialTemp = hasAnyTempClip && slices.length > 0 ? slices[0].effectiveTemp : null;
+    const anyTempChange = hasAnyTempClip && slices.some(sl => Math.abs(sl.effectiveTemp - initialTemp) > 0.01);
+
+    return { totalBins, totalSec, bin, hasAnyTempClip, initialTemp, anyTempChange, slices };
+  }
+
+  function computeTempRampSteps(startRaw, endRaw, stepRaw) {
+    const startT = Math.min(40, Math.max(10, Number((parseFloat(startRaw) || 20).toFixed(1))));
+    const endT = Math.min(40, Math.max(10, Number((parseFloat(endRaw) || 30).toFixed(1))));
+    const step = Math.min(20, Math.max(0.5, Number((Math.abs(parseFloat(stepRaw)) || 2).toFixed(1))));
+    if (Math.abs(endT - startT) < 0.01) return [startT];
+    const dir = endT > startT ? 1 : -1;
+    const steps = [];
+    let cur = startT;
+    while ((dir > 0 ? cur <= endT + 0.001 : cur >= endT - 0.001) && steps.length < 24) {
+      steps.push(Number(cur.toFixed(1)));
+      cur += dir * step;
+    }
+    const last = steps[steps.length - 1];
+    if (Math.abs(last - endT) > 0.01 && steps.length < 25) {
+      steps.push(endT);
+    }
+    return steps;
+  }
+
   const state = {
     organism: "daphnia",
     plateId: "24well",
@@ -2025,6 +2550,8 @@
     plateConfigUpdatedAt: null,
     unsavedFileChanges: false,
     plateGeometries: cloneDefaultGeometries(),
+    timelineClips: cloneDefaultTimelineClips(),
+    selectedClipId: 2,
     stimParams: {
       baseLight: "LIGHT",
       acclimSec: 120,
@@ -2042,7 +2569,15 @@
       lightHours: 16,
       darkHours: 8,
       numDays: 2,
-      circBinSec: 10
+      circBinSec: 10,
+      mpTimelineSec: 180,
+      mpAcclimLight: "DARK",
+      mpCycles: 1,
+      rampStartTemp: 20,
+      rampEndTemp: 30,
+      rampStepTemp: 2,
+      rampHoldSec: 300,
+      rampLight: "DARK"
     }
   };
 
@@ -2325,6 +2860,8 @@
     const autorefTimeout = Math.max(0, parseInt(document.getElementById("autorefTimeout").value, 10) || 60);
     const thermostatTemp = parseFloat(document.getElementById("thermostatTemp").value) || 22;
     const useThermostat = document.getElementById("chk_thermostat").checked;
+    const ledColorRaw = document.getElementById("ledColor") ? document.getElementById("ledColor").value : "WHITE";
+    const ledColorObj = LED_COLORS[ledColorRaw] || LED_COLORS.WHITE;
     const ledPct = Math.min(100, Math.max(5, parseFloat(document.getElementById("ledBrightness").value) || 100));
     const ledDriveVal = Math.round((ledPct / 100) * 4095);
     const useUnderLight = document.getElementById("chk_underlight").checked;
@@ -2353,6 +2890,8 @@
       autorefTimeout,
       thermostatTemp,
       useThermostat,
+      ledColor: ledColorObj.id,
+      ledColorObj,
       ledPct,
       ledDriveVal,
       useUnderLight,
@@ -2365,7 +2904,8 @@
       useHeatmap,
       geo,
       stimId: state.stimId,
-      sp: state.stimParams
+      sp: state.stimParams,
+      timelineClips: state.timelineClips
     };
   }
 
@@ -2383,30 +2923,70 @@
   }
 
   function buildLightActions(cfg) {
+    const col = cfg.ledColorObj || LED_COLORS.WHITE;
+    const isMultiColor = cfg.stimId === "multi_phase";
+
     if (cfg.hw === "Z3") {
       const underOn = cfg.useUnderLight
-        ? "    SET(X_LED_DRIVE,12,LED_BRIGHTNESS)"
-        : "    # SET(X_LED_DRIVE,12,LED_BRIGHTNESS)  # Uncomment for underneath LED";
+        ? `    SET(X_LED_DRIVE,${col.z3Under},LED_BRIGHTNESS)`
+        : `    # SET(X_LED_DRIVE,${col.z3Under},LED_BRIGHTNESS)  # Uncomment for underneath LED`;
+
+      if (isMultiColor) {
+        const offLines = [
+          "ACTION LIGHTS_OFF",
+          "    SET(X_LED_DRIVE,0,0)",
+          "    SET(X_LED_DRIVE,1,0)",
+          "    SET(X_LED_DRIVE,3,0)",
+          "    SET(X_LED_DRIVE,4,0)",
+          "    SET(X_LED_DRIVE,5,0)"
+        ];
+        if (cfg.useUnderLight) {
+          offLines.push(
+            "    SET(X_LED_DRIVE,8,0)",
+            "    SET(X_LED_DRIVE,9,0)",
+            "    SET(X_LED_DRIVE,11,0)",
+            "    SET(X_LED_DRIVE,12,0)",
+            "    SET(X_LED_DRIVE,13,0)"
+          );
+        }
+        offLines.push("COMPLETE");
+        return [
+          "ACTION LIGHTS_ON",
+          `    SET(X_LED_DRIVE,${col.z3Over},LED_BRIGHTNESS)`,
+          underOn,
+          "COMPLETE",
+          "",
+          ...offLines
+        ].join("\n");
+      }
+
       const underOff = cfg.useUnderLight
-        ? "    SET(X_LED_DRIVE,12,0)"
-        : "    # SET(X_LED_DRIVE,12,0)";
+        ? `    SET(X_LED_DRIVE,${col.z3Under},0)`
+        : `    # SET(X_LED_DRIVE,${col.z3Under},0)`;
       return [
         "ACTION LIGHTS_ON",
-        "    SET(X_LED_DRIVE,4,LED_BRIGHTNESS)",
+        `    SET(X_LED_DRIVE,${col.z3Over},LED_BRIGHTNESS)`,
         underOn,
         "COMPLETE",
         "",
         "ACTION LIGHTS_OFF",
-        "    SET(X_LED_DRIVE,4,0)",
+        `    SET(X_LED_DRIVE,${col.z3Over},0)`,
         underOff,
         "COMPLETE"
       ].join("\n");
     }
-    return [
-      "ACTION LIGHTS_ON",
-      "    SET(GPO6,1)",
-      "    SET(GPO7,1)",
-      "    SET(GPO8,1)",
+
+    const g6 = col.z2Gpo.includes(6) ? 1 : 0;
+    const g7 = col.z2Gpo.includes(7) ? 1 : 0;
+    const g8 = col.z2Gpo.includes(8) ? 1 : 0;
+    const z2Lines = ["ACTION LIGHTS_ON"];
+    if (col.id === "UV") {
+      z2Lines.push("    # Note: 365nm UV requires MWP Z3 UV channel; using GPO8 (Blue) fallback on Z2");
+    }
+    z2Lines.push(
+      `    SET(GPO6,${g6})`,
+      `    SET(GPO7,${g7})`,
+      `    SET(GPO8,${g8})`,
       "COMPLETE",
       "",
       "ACTION LIGHTS_OFF",
@@ -2415,7 +2995,47 @@
       "    SET(GPO7,0)",
       "    SET(GPO8,0)",
       "COMPLETE"
-    ].join("\n");
+    );
+    return z2Lines.join("\n");
+  }
+
+  function buildSliceLightLines(cfg, activeLights) {
+    const byId = {};
+    for (const l of (activeLights || [])) byId[l.id] = l;
+
+    if (cfg.hw === "Z3") {
+      const order = ["UV", "BLUE", "GREEN", "WHITE", "RED"];
+      const lines = [];
+      for (const id of order) {
+        const col = LED_COLORS[id];
+        const pwm = byId[id] ? byId[id].pwm : 0;
+        lines.push(`    SET(X_LED_DRIVE,${col.z3Over},${pwm})`);
+      }
+      if (cfg.useUnderLight) {
+        for (const id of order) {
+          const col = LED_COLORS[id];
+          const pwm = byId[id] ? byId[id].pwm : 0;
+          lines.push(`    SET(X_LED_DRIVE,${col.z3Under},${pwm})`);
+        }
+      }
+      return lines;
+    }
+
+    const activeGpo = new Set();
+    let hasUv = false;
+    for (const l of (activeLights || [])) {
+      if (l.id === "UV") hasUv = true;
+      for (const g of l.colObj.z2Gpo) activeGpo.add(g);
+    }
+    const z2 = [];
+    if (hasUv) z2.push("    # UV fallback to GPO8 (Blue) on legacy Z2");
+    if (activeGpo.size === 0) z2.push("    LIGHTS(ALL,OFF)");
+    z2.push(
+      `    SET(GPO6,${activeGpo.has(6) ? 1 : 0})`,
+      `    SET(GPO7,${activeGpo.has(7) ? 1 : 0})`,
+      `    SET(GPO8,${activeGpo.has(8) ? 1 : 0})`
+    );
+    return z2;
   }
 
   // STEP 1: Calibration
@@ -2577,7 +3197,22 @@
     const startDark = (cfg.stimId === "baseline" && cfg.sp.baseLight === "DARK") ||
       (cfg.stimId === "ld_transitions" && cfg.sp.ldStart === "DARK") ||
       (cfg.stimId === "light_on_pulse") ||
-      (cfg.stimId === "vibration_startle" && cfg.sp.vibAmbient === "DARK");
+      (cfg.stimId === "vibration_startle" && cfg.sp.vibAmbient === "DARK") ||
+      (cfg.stimId === "multi_phase" && cfg.sp.mpAcclimLight === "DARK") ||
+      (cfg.stimId === "temp_ramp" && cfg.sp.rampLight === "DARK");
+
+    const mpCompiledForStep3 = cfg.stimId === "multi_phase"
+      ? compileMultiTrackSlices(cfg.timelineClips, cfg.sp.mpTimelineSec, cfg.sp.timeBinSec, cfg.thermostatTemp)
+      : null;
+
+    const step3UseTherm = cfg.stimId === "temp_ramp" ||
+      (mpCompiledForStep3 && mpCompiledForStep3.hasAnyTempClip) ||
+      cfg.useThermostat;
+    const step3Temp = cfg.stimId === "temp_ramp"
+      ? computeTempRampSteps(cfg.sp.rampStartTemp, cfg.sp.rampEndTemp, cfg.sp.rampStepTemp)[0]
+      : (mpCompiledForStep3 && mpCompiledForStep3.hasAnyTempClip
+          ? mpCompiledForStep3.initialTemp
+          : cfg.thermostatTemp);
 
     const lines = [`# Step 3: Organism Tracking Check (${p.name})`];
     if (userLine) lines.push(userLine);
@@ -2600,8 +3235,8 @@
       lines.push("DEFINE X_LED_DRIVE 30039");
       lines.push(`DEFINE LED_BRIGHTNESS ${cfg.ledDriveVal}`);
     }
-    if (cfg.useThermostat) {
-      lines.push(`SET(THERMOSTAT,${cfg.thermostatTemp})`);
+    if (step3UseTherm) {
+      lines.push(`SET(THERMOSTAT,${step3Temp})`);
     } else {
       lines.push(`# SET(THERMOSTAT,${cfg.thermostatTemp})  # Thermostat disabled`);
     }
@@ -2727,7 +3362,8 @@
     }
 
     const isCircadian = cfg.stimId === "circadian";
-    const hasTrials = ["ld_transitions", "light_off_startle", "light_on_pulse", "vibration_startle"].includes(cfg.stimId);
+    const hasTrials = ["ld_transitions", "light_off_startle", "light_on_pulse", "vibration_startle", "multi_phase", "temp_ramp"].includes(cfg.stimId);
+    const activeLightTag = (cfg.ledColorObj && cfg.ledColorObj.tag) ? cfg.ledColorObj.tag : "LIGHT";
 
     let metaHeaders;
     if (isCircadian) {
@@ -2743,13 +3379,15 @@
     const extraActions = [];
     let totalRuntimeSec = 0;
     let totalRows = 0;
+    let initialTempOverride = null;
+    let restoreTempAtEnd = null;
 
     if (cfg.stimId === "baseline") {
       const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
       const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
       const dur = Math.max(bin, parseInt(sp.durationSec, 10) || 600);
       const numBins = Math.max(1, Math.round(dur / bin));
-      const lightLabel = sp.baseLight === "DARK" ? "DARK" : "LIGHT";
+      const lightLabel = sp.baseLight === "DARK" ? "DARK" : activeLightTag;
       const lightAction = sp.baseLight === "DARK" ? "LIGHTS_OFF" : "LIGHTS_ON";
 
       topDefines.push(
@@ -2803,7 +3441,7 @@
 
       const firstBlock = startLight
         ? [
-            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("PHASE: LIGHT")}")`,
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("PHASE: " + activeLightTag)}")`,
             "    INVOKE(LIGHTS_ON,1)",
             "    INVOKE(SAMPLE_LIGHT,PHASE_BINS)"
           ]
@@ -2820,7 +3458,7 @@
             "    INVOKE(SAMPLE_DARK,PHASE_BINS)"
           ]
         : [
-            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("PHASE: LIGHT")}")`,
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("PHASE: " + activeLightTag)}")`,
             "    INVOKE(LIGHTS_ON,1)",
             "    INVOKE(SAMPLE_LIGHT,PHASE_BINS)"
           ];
@@ -2836,7 +3474,7 @@
           "",
           "COMPLETE"
         ].join("\n"),
-        buildSampleAction("SAMPLE_LIGHT", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:LIGHT|COUNTER2|COUNTER1", dataExprs),
+        buildSampleAction("SAMPLE_LIGHT", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}|COUNTER2|COUNTER1`, dataExprs),
         buildSampleAction("SAMPLE_DARK", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DARK|COUNTER2|COUNTER1", dataExprs)
       );
 
@@ -3014,7 +3652,7 @@
             "",
             "    SET(COUNTER1,COUNTER_INC)",
             '    LOGDATA(DATA_SNAPSHOT,"begin")',
-            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("LIGHT FLASH")}")`,
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(activeLightTag + " FLASH")}")`,
             "    INVOKE(LIGHTS_ON,1)",
             "    WAIT(PULSE_DURATION)",
             "    INVOKE(LIGHTS_OFF,1)",
@@ -3023,7 +3661,7 @@
             '    LOGDATA(DATA_SELECT,"begin")',
             '    LOGDATA(DATA_DELTA,"end")',
             "",
-            '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:LIGHT_FLASH|COUNTER2|COUNTER1")',
+            `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_FLASH|COUNTER2|COUNTER1")`,
             ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
             "    LOGRUN()",
             "",
@@ -3036,7 +3674,7 @@
             "ACTION FLASH_TRIAL",
             "",
             "    SET(COUNTER2,COUNTER_INC)",
-            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("LIGHT FLASH")}")`,
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(activeLightTag + " FLASH")}")`,
             "    INVOKE(LIGHTS_ON,1)",
             "    INVOKE(SAMPLE_FLASH,PULSE_BINS)",
             "    INVOKE(LIGHTS_OFF,1)",
@@ -3045,7 +3683,7 @@
             "",
             "COMPLETE"
           ].join("\n"),
-          buildSampleAction("SAMPLE_FLASH", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:LIGHT_FLASH|COUNTER2|COUNTER1", dataExprs)
+          buildSampleAction("SAMPLE_FLASH", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_FLASH|COUNTER2|COUNTER1`, dataExprs)
         );
       }
 
@@ -3195,7 +3833,7 @@
           "ACTION RUN_HOUR",
           "",
           "    IF @PHASE_VAR = 1",
-          '        LOAD(OVERLAY_TEXT,"1,1:DAY @100 LIGHT HR @101  ")',
+          `        LOAD(OVERLAY_TEXT,"1,1:DAY @100 ${activeLightTag.padEnd(5, " ")} HR @101  ")`,
           "    ELSE",
           '        LOAD(OVERLAY_TEXT,"1,1:DAY @100 DARK  HR @101  ")',
           "    ENDIF",
@@ -3218,7 +3856,7 @@
           '    LOGDATA(DATA_DELTA,"end")',
           "",
           "    IF @PHASE_VAR = 1",
-          '        LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:LIGHT|@100|@101|COUNTER1")',
+          `        LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}|@100|@101|COUNTER1")`,
           "    ELSE",
           '        LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DARK|@100|@101|COUNTER1")',
           "    ENDIF",
@@ -3232,6 +3870,132 @@
       const hrsTotal = days * (lightHrs + darkHrs);
       totalRuntimeSec = cfg.autorefTimeout + hrsTotal * (2 * halfBins * bin + autoref);
       totalRows = hrsTotal * 2 * halfBins;
+
+    } else if (cfg.stimId === "multi_phase") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const cycles = Math.max(1, parseInt(sp.mpCycles, 10) || 1);
+      const acclimLight = sp.mpAcclimLight || "DARK";
+      const comp = compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp);
+      const bin = comp.bin;
+
+      topDefines.push(
+        `DEFINE ACCLIMATION_SEC ${acclim}`,
+        `DEFINE TIME_BIN ${bin}`,
+        `DEFINE NUM_CYCLES ${cycles}`
+      );
+      for (const sl of comp.slices) {
+        topDefines.push(`DEFINE S${sl.idx}_BINS ${sl.bins}  # ${sl.startSec}s-${sl.endSec}s (${sl.csvTag})`);
+      }
+
+      if (comp.hasAnyTempClip) {
+        initialTempOverride = comp.initialTemp;
+        if (comp.anyTempChange) {
+          restoreTempAtEnd = comp.initialTemp;
+        }
+      }
+
+      const acclimLightObjs = acclimLight === "DARK"
+        ? []
+        : [{ id: acclimLight, pct: cfg.ledPct, pwm: cfg.ledDriveVal, colObj: LED_COLORS[acclimLight] || LED_COLORS.WHITE }];
+
+      mainSchedule.push(
+        ...buildSliceLightLines(cfg, acclimLightObjs),
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
+        "    WAIT(ACCLIMATION_SEC)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+        "    AUTOREFERENCE()",
+        "__START_RECORDING__",
+        "    INVOKE(TIMELINE_CYCLE,NUM_CYCLES)"
+      );
+
+      const seqLines = [
+        "ACTION TIMELINE_CYCLE",
+        "",
+        "    SET(COUNTER2,COUNTER_INC)"
+      ];
+      for (const sl of comp.slices) {
+        seqLines.push(`    INVOKE(RUN_S${sl.idx},1)`);
+      }
+      seqLines.push("", "COMPLETE");
+      extraActions.push(seqLines.join("\n"));
+
+      for (const sl of comp.slices) {
+        const runLines = [
+          `ACTION RUN_S${sl.idx}`,
+          "",
+          ...buildSliceLightLines(cfg, sl.lights)
+        ];
+        if (sl.effectiveTemp !== null) {
+          runLines.push(`    SET(THERMOSTAT,${sl.effectiveTemp})`);
+        }
+        runLines.push(
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(sl.overlayText)}")`,
+          `    INVOKE(SAMPLE_S${sl.idx},S${sl.idx}_BINS)`,
+          "",
+          "COMPLETE"
+        );
+
+        extraActions.push(
+          runLines.join("\n"),
+          buildSampleAction(`SAMPLE_S${sl.idx}`, `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${sl.csvTag}|COUNTER2|COUNTER1`, dataExprs)
+        );
+      }
+
+      totalRuntimeSec = acclim + cfg.autorefTimeout + cycles * comp.totalBins * bin;
+      totalRows = cycles * comp.totalBins;
+
+    } else if (cfg.stimId === "temp_ramp") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const holdSec = Math.max(bin, parseInt(sp.rampHoldSec, 10) || 300);
+      const stepBins = Math.max(1, Math.round(holdSec / bin));
+      const steps = computeTempRampSteps(sp.rampStartTemp, sp.rampEndTemp, sp.rampStepTemp);
+      const lightAction = sp.rampLight === "LIGHT" ? "LIGHTS_ON" : "LIGHTS_OFF";
+
+      initialTempOverride = steps[0];
+      if (steps.length > 1) {
+        restoreTempAtEnd = steps[0];
+      }
+
+      topDefines.push(
+        `DEFINE ACCLIMATION_SEC ${acclim}`,
+        `DEFINE TIME_BIN ${bin}`,
+        `DEFINE STEP_BINS ${stepBins}  # ${stepBins * bin}s hold per temperature step (${steps.length} step(s))`
+      );
+
+      mainSchedule.push(
+        `    INVOKE(${lightAction},1)`,
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIM " + steps[0] + "C")}")`,
+        "    WAIT(ACCLIMATION_SEC)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+        "    AUTOREFERENCE()",
+        "__START_RECORDING__",
+        "    INVOKE(THERMAL_RAMP,1)"
+      );
+
+      const rampLines = ["ACTION THERMAL_RAMP", ""];
+      steps.forEach((t, idx) => {
+        const sNum = idx + 1;
+        rampLines.push(
+          "    SET(COUNTER2,COUNTER_INC)",
+          `    SET(THERMOSTAT,${t})`,
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("TEMP TARGET " + t + "C")}")`,
+          `    INVOKE(SAMPLE_T${sNum},STEP_BINS)`,
+          ""
+        );
+      });
+      rampLines.push("COMPLETE");
+      extraActions.push(rampLines.join("\n"));
+
+      steps.forEach((t, idx) => {
+        const sNum = idx + 1;
+        extraActions.push(
+          buildSampleAction(`SAMPLE_T${sNum}`, `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:TEMP_${t}C|COUNTER2|COUNTER1`, dataExprs)
+        );
+      });
+
+      totalRuntimeSec = acclim + cfg.autorefTimeout + steps.length * stepBins * bin;
+      totalRows = steps.length * stepBins;
     }
 
     // Assemble full Step 4 Zanscript
@@ -3262,7 +4026,9 @@
     }
 
     out.push("");
-    if (cfg.useThermostat) {
+    if (initialTempOverride !== null) {
+      out.push(`SET(THERMOSTAT,${initialTempOverride})`);
+    } else if (cfg.useThermostat) {
       out.push(`SET(THERMOSTAT,${cfg.thermostatTemp})`);
     } else {
       out.push(`# SET(THERMOSTAT,${cfg.thermostatTemp})  # Thermostat disabled`);
@@ -3363,6 +4129,9 @@
     }
     if (cfg.videoMode !== "off") {
       out.push("    VIDEOSTOP");
+    }
+    if (restoreTempAtEnd !== null) {
+      out.push(`    SET(THERMOSTAT,${restoreTempAtEnd})  # Restore baseline temperature`);
     }
     out.push(
       '    LOAD(OVERLAY_CLEAR,"")',
@@ -4028,15 +4797,688 @@
             <input type="number" min="1" max="600" step="1" data-sp="circBinSec" value="${sp.circBinSec}">
           </div>
         </div>`;
+    } else if (id === "multi_phase") {
+      const hwIsZ3 = document.getElementById("hwVersion").value === "Z3";
+      const lightOpts = [
+        ["DARK", "Dark (IR Only)"],
+        ["WHITE", "White (~6000K)"],
+        ["BLUE", "Blue (470 nm)"],
+        ["GREEN", "Green (530 nm)"],
+        ["RED", "Red (625 nm)"],
+        ["UV", "UV (365 nm)"]
+      ];
+      const acclimOpts = lightOpts.map(([val, lbl]) =>
+        `<option value="${val}" ${sp.mpAcclimLight === val ? "selected" : ""}>${lbl}</option>`
+      ).join("");
+
+      const tracksHtml = NLE_TRACKS.map(tr => `
+        <div class="nle-track-row" data-track-row="${tr.id}">
+          <div class="nle-track-hdr">
+            <div class="nle-track-title">
+              <span class="nle-swatch" style="background:${tr.swatch};"></span>
+              <span class="nle-track-name">${tr.label}</span>
+            </div>
+            <button type="button" class="nle-track-add" data-nle-add="${tr.id}" title="Add clip to ${tr.label} track">+</button>
+          </div>
+          <div class="nle-lane" data-nle-lane="${tr.id}"></div>
+        </div>
+      `).join("");
+
+      box.innerHTML = `
+        <div class="form-grid">
+          <div class="field">
+            <label>Timeline Length (sec)</label>
+            <input type="number" min="10" max="7200" step="10" data-sp="mpTimelineSec" value="${sp.mpTimelineSec}">
+          </div>
+          <div class="field">
+            <label>Sequence Cycles (Loops)</label>
+            <input type="number" min="1" max="50" step="1" data-sp="mpCycles" value="${sp.mpCycles}">
+          </div>
+          <div class="field">
+            <label>Acclimation Light</label>
+            <select data-sp="mpAcclimLight">${acclimOpts}</select>
+          </div>
+          <div class="field">
+            <label>Acclimation (sec)</label>
+            <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
+          </div>
+          <div class="field">
+            <label>Time Bin / Grid Snap (sec)</label>
+            <input type="number" min="1" max="600" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
+          </div>
+        </div>
+
+        <div class="nle-section" id="nleRoot">
+          <div class="nle-toolbar">
+            <div class="nle-presets">
+              <button type="button" class="btn btn-xs" data-mp-preset="bg_opto">Preset: White BG + Opto Overlap</button>
+              <button type="button" class="btn btn-xs" data-mp-preset="rgb_overlap">Preset: RGB Cross-Overlap</button>
+              <button type="button" class="btn btn-xs" data-mp-preset="sequential">Preset: Sequential Sweep</button>
+            </div>
+            <button type="button" class="btn btn-xs" id="nleClearBtn">Clear Clips</button>
+          </div>
+
+          <div class="nle-workspace" tabindex="-1">
+            <div class="nle-header-row">
+              <div class="nle-corner"><span>TRACKS</span><span>+ ADD</span></div>
+              <div class="nle-ruler" id="nleRuler"></div>
+            </div>
+            ${tracksHtml}
+          </div>
+
+          <div class="nle-inspector" id="nleInspector"></div>
+        </div>
+
+        <div class="proto-note">
+          <strong>Multi-Track Compiler:</strong> Drag across any empty track lane to draw a bar, drag a bar to move, drag its left/right grips to stretch, or press <span class="nle-kbd">Backspace</span> / <span class="nle-kbd">Delete</span> to remove. Overlapping bars across tracks run simultaneously on hardware without blinking unchanged LED channels.
+        </div>`;
+
+      let rafId = null;
+      function scheduleRefresh() {
+        if (typeof window.requestAnimationFrame === "function") {
+          if (rafId !== null) return;
+          rafId = window.requestAnimationFrame(() => {
+            rafId = null;
+            refreshAll();
+          });
+        } else {
+          refreshAll();
+        }
+      }
+
+      function flushRefresh() {
+        if (rafId !== null && typeof window.cancelAnimationFrame === "function") {
+          window.cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        refreshAll();
+      }
+
+      function blurTextFocusForTimeline() {
+        const ae = document.activeElement;
+        if (ae && ae.tagName && ["INPUT", "SELECT", "TEXTAREA"].includes(ae.tagName.toUpperCase()) && typeof ae.blur === "function") {
+          ae.blur();
+        }
+      }
+
+      function getTimelineBounds() {
+        const bin = Math.max(1, parseFloat(state.stimParams.timeBinSec) || 1);
+        const totalBins = Math.max(1, Math.round((Math.max(bin, parseFloat(state.stimParams.mpTimelineSec) || 180)) / bin));
+        return { bin, totalSec: totalBins * bin };
+      }
+
+      function snapSec(sec, bin) {
+        return Math.round(sec / bin) * bin;
+      }
+
+      function getSameTrackNeighborBounds(clip) {
+        const { totalSec } = getTimelineBounds();
+        const others = state.timelineClips.filter(c => c.track === clip.track && c.id !== clip.id);
+        let minS = 0;
+        let maxE = totalSec;
+        for (const o of others) {
+          if (o.endSec <= clip.startSec + 0.0001 && o.endSec > minS) minS = o.endSec;
+          if (o.startSec >= clip.endSec - 0.0001 && o.startSec < maxE) maxE = o.startSec;
+        }
+        return { minS, maxE };
+      }
+
+      function getTrackFreeGaps(trackId) {
+        const { bin, totalSec } = getTimelineBounds();
+        const occupied = state.timelineClips
+          .filter(c => c.track === trackId && c.startSec < totalSec && c.endSec > 0)
+          .map(c => [Math.max(0, c.startSec), Math.min(totalSec, c.endSec)])
+          .sort((a, b) => a[0] - b[0]);
+
+        const gaps = [];
+        let cursor = 0;
+        for (const [s, e] of occupied) {
+          if (s - cursor >= bin) gaps.push([cursor, s]);
+          cursor = Math.max(cursor, e);
+        }
+        if (totalSec - cursor >= bin) gaps.push([cursor, totalSec]);
+        return gaps;
+      }
+
+      function findGapContainingSec(trackId, sec) {
+        const gaps = getTrackFreeGaps(trackId);
+        return gaps.find(([gs, ge]) => sec >= gs - 0.001 && sec <= ge + 0.001) || null;
+      }
+
+      function findFreeSlotOnTrack(trackId, preferredCenterSec) {
+        const { bin, totalSec } = getTimelineBounds();
+        const gaps = getTrackFreeGaps(trackId);
+        if (gaps.length === 0) return null;
+
+        let chosen = gaps[0];
+        if (typeof preferredCenterSec === "number") {
+          const hit = gaps.find(([gs, ge]) => preferredCenterSec >= gs && preferredCenterSec <= ge);
+          if (hit) chosen = hit;
+          else {
+            chosen = gaps.reduce((best, g) => {
+              const dBest = Math.min(Math.abs(preferredCenterSec - best[0]), Math.abs(preferredCenterSec - best[1]));
+              const dCur = Math.min(Math.abs(preferredCenterSec - g[0]), Math.abs(preferredCenterSec - g[1]));
+              return dCur < dBest ? g : best;
+            }, gaps[0]);
+          }
+        } else {
+          chosen = gaps.reduce((best, g) => (g[1] - g[0] > best[1] - best[0] ? g : best), gaps[0]);
+        }
+
+        const [gs, ge] = chosen;
+        const defaultWidth = Math.max(bin, snapSec(Math.min(ge - gs, Math.max(bin * 2, totalSec * 0.16)), bin));
+        let start = typeof preferredCenterSec === "number"
+          ? snapSec(preferredCenterSec - defaultWidth / 2, bin)
+          : gs;
+        start = Math.max(gs, Math.min(ge - defaultWidth, start));
+        const end = Math.min(ge, start + defaultWidth);
+        return end > start ? [start, end] : null;
+      }
+
+      function addClipToTrack(trackId, preferredSec) {
+        const slot = findFreeSlotOnTrack(trackId, preferredSec);
+        if (!slot) {
+          showToast(`No free space left on ${trackId} track`);
+          return;
+        }
+        const baseT = parseFloat(document.getElementById("thermostatTemp").value) || 22;
+        const newClip = {
+          id: ++_nextClipId,
+          track: trackId,
+          startSec: slot[0],
+          endSec: slot[1],
+          val: trackId === "TEMP" ? baseT : 100
+        };
+        state.timelineClips.push(newClip);
+        state.selectedClipId = newClip.id;
+        syncNleDom(true, false);
+        flushRefresh();
+      }
+
+      function deleteSelectedClip() {
+        if (state.selectedClipId === null) return false;
+        const before = state.timelineClips.length;
+        state.timelineClips = state.timelineClips.filter(c => c.id !== state.selectedClipId);
+        state.selectedClipId = null;
+        if (state.timelineClips.length !== before) {
+          syncNleDom(true, false);
+          flushRefresh();
+          return true;
+        }
+        return false;
+      }
+
+      function deselectClip() {
+        if (state.selectedClipId === null) return;
+        state.selectedClipId = null;
+        syncNleDom(true, false);
+      }
+
+      function nudgeSelectedClip(binDelta) {
+        const sel = state.timelineClips.find(c => c.id === state.selectedClipId);
+        if (!sel) return;
+        const { bin } = getTimelineBounds();
+        const dur = sel.endSec - sel.startSec;
+        const bounds = getSameTrackNeighborBounds(sel);
+        let ns = snapSec(sel.startSec + binDelta * bin, bin);
+        ns = Math.max(bounds.minS, Math.min(bounds.maxE - dur, ns));
+        if (ns !== sel.startSec) {
+          sel.startSec = ns;
+          sel.endSec = ns + dur;
+          syncNleDom(false, false);
+          flushRefresh();
+        }
+      }
+
+      function updateLiveHud() {
+        const durEl = document.getElementById("nleInspDur");
+        if (!durEl) return;
+        const sel = state.timelineClips.find(c => c.id === state.selectedClipId);
+        if (!sel) return;
+        durEl.textContent = `${Math.max(0, sel.endSec - sel.startSec)}s`;
+      }
+
+      function syncNleInspector() {
+        const insp = document.getElementById("nleInspector");
+        if (!insp) return;
+        const { bin, totalSec } = getTimelineBounds();
+        const sel = state.timelineClips.find(c => c.id === state.selectedClipId);
+        if (!sel) {
+          insp.innerHTML = `<span class="nle-insp-hint"><strong>Drag on any empty track</strong> to draw a bar (or double-click / click <strong>+</strong>) &middot; Drag bar to move &middot; Drag ends to stretch &middot; <span class="nle-kbd">Backspace</span> to delete.</span>`;
+          return;
+        }
+        const tr = NLE_TRACKS.find(t => t.id === sel.track) || NLE_TRACKS[0];
+        const isTemp = tr.kind === "temp";
+        const valLabel = isTemp ? "Temp (°C)" : "Brightness (%)";
+        const valDisabled = (!isTemp && !hwIsZ3) ? "disabled" : "";
+        const valMin = isTemp ? "10" : "5";
+        const valMax = isTemp ? "40" : "100";
+        const valStep = isTemp ? "0.5" : "1";
+        const durSec = Math.max(0, sel.endSec - sel.startSec);
+
+        insp.innerHTML = `
+          <div class="nle-insp-fields">
+            <span class="badge-hw" style="background:${tr.bg}; color:${tr.text}; border-color:${tr.border};">${tr.label} (${tr.sub})</span>
+            <label class="nle-insp-group">Start
+              <input type="number" id="nleInspStart" min="0" max="${totalSec - bin}" step="${bin}" value="${sel.startSec}">
+            </label>
+            <label class="nle-insp-group">End
+              <input type="number" id="nleInspEnd" min="${bin}" max="${totalSec}" step="${bin}" value="${sel.endSec}">
+            </label>
+            <span class="nle-hud" id="nleInspDur">${durSec}s</span>
+            <label class="nle-insp-group">${valLabel}
+              <input type="range" id="nleInspRange" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled}>
+              <input type="number" id="nleInspVal" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled}>
+            </label>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button type="button" class="btn btn-xs" id="nleDelClipBtn" title="Shortcut: Backspace or Delete">Delete</button>
+          </div>`;
+
+        const sInp = document.getElementById("nleInspStart");
+        const eInp = document.getElementById("nleInspEnd");
+        const rInp = document.getElementById("nleInspRange");
+        const vInp = document.getElementById("nleInspVal");
+        const dBtn = document.getElementById("nleDelClipBtn");
+
+        const applyStartEnd = (normalize) => {
+          const bounds = getSameTrackNeighborBounds(sel);
+          let ns = snapSec(parseFloat(sInp.value) || 0, bin);
+          let ne = snapSec(parseFloat(eInp.value) || bin, bin);
+          ns = Math.max(bounds.minS, Math.min(sel.endSec - bin, ns));
+          ne = Math.min(bounds.maxE, Math.max(ns + bin, ne));
+          sel.startSec = ns;
+          sel.endSec = ne;
+          if (normalize) { sInp.value = ns; eInp.value = ne; }
+          syncNleDom(false, false);
+          flushRefresh();
+        };
+        sInp.addEventListener("change", () => applyStartEnd(true));
+        eInp.addEventListener("change", () => applyStartEnd(true));
+
+        const applyVal = (rawVal, fromRange) => {
+          const raw = parseFloat(rawVal);
+          if (!Number.isFinite(raw)) return;
+          sel.val = isTemp
+            ? Math.min(40, Math.max(10, Number(raw.toFixed(1))))
+            : Math.min(100, Math.max(5, Math.round(raw)));
+          if (fromRange && vInp) vInp.value = sel.val;
+          if (!fromRange && rInp) rInp.value = sel.val;
+          syncNleDom(false, false);
+          scheduleRefresh();
+        };
+        if (rInp) {
+          rInp.addEventListener("input", () => applyVal(rInp.value, true));
+          rInp.addEventListener("change", () => flushRefresh());
+        }
+        vInp.addEventListener("input", () => applyVal(vInp.value, false));
+        vInp.addEventListener("change", () => { vInp.value = sel.val; flushRefresh(); });
+
+        dBtn.addEventListener("click", () => deleteSelectedClip());
+        updateLiveHud();
+      }
+
+      function formatClipLabel(c, tr, totalSec) {
+        const dur = Math.max(0, c.endSec - c.startSec);
+        const ratio = dur / Math.max(1, totalSec);
+        if (ratio < 0.055) return "";
+        const main = tr.kind === "temp" ? `${c.val}°C` : (hwIsZ3 ? `${c.val}%` : "ON");
+        return ratio >= 0.18 ? `${main} (${c.startSec}-${c.endSec}s)` : main;
+      }
+
+      let cachedGridPct = null;
+      function syncNleDom(rebuildInspector, rebuildRuler = true) {
+        const ruler = document.getElementById("nleRuler");
+        if (!ruler) return;
+        const { totalSec } = getTimelineBounds();
+
+        if (rebuildRuler || cachedGridPct === null) {
+          const candidates = [5, 10, 15, 20, 30, 60, 120, 300, 600, 900, 1800];
+          const tickStep = candidates.find(s => totalSec / s <= 8) || 1800;
+          const ticks = [];
+          for (let t = 0; t <= totalSec; t += tickStep) ticks.push(t);
+          if (ticks[ticks.length - 1] !== totalSec) ticks.push(totalSec);
+
+          ruler.innerHTML = ticks.map((t, idx) => {
+            const pct = ((t / totalSec) * 100).toFixed(3);
+            const isEnd = idx === ticks.length - 1;
+            const lbl = t >= 300 && t % 60 === 0 ? `${t / 60}m` : `${t}s`;
+            return `<div class="nle-tick${isEnd ? " is-end" : ""}" style="left:${pct}%">${lbl}</div>`;
+          }).join("");
+          cachedGridPct = ((tickStep / totalSec) * 100).toFixed(4);
+        }
+
+        for (const tr of NLE_TRACKS) {
+          const lane = box.querySelector(`[data-nle-lane="${tr.id}"]`);
+          if (!lane) continue;
+          if (rebuildRuler && cachedGridPct) {
+            lane.style.backgroundSize = `${cachedGridPct}% 100%`;
+          }
+
+          const trackClips = state.timelineClips.filter(c => c.track === tr.id && c.startSec < totalSec && c.endSec > 0);
+          const existingEls = new Map();
+          Array.from(lane.children).forEach(el => {
+            existingEls.set(parseInt(el.getAttribute("data-clip-id"), 10), el);
+          });
+
+          const seen = new Set();
+          for (const c of trackClips) {
+            seen.add(c.id);
+            const effStart = Math.max(0, c.startSec);
+            const effEnd = Math.min(totalSec, c.endSec);
+            const leftPct = ((effStart / totalSec) * 100).toFixed(3);
+            const widthPct = (Math.max(0.8, ((effEnd - effStart) / totalSec) * 100)).toFixed(3);
+
+            let el = existingEls.get(c.id);
+            if (!el) {
+              el = document.createElement("div");
+              el.className = "nle-clip";
+              el.setAttribute("data-clip-id", String(c.id));
+              el.style.background = tr.bg;
+              el.style.borderColor = tr.border;
+              el.style.color = tr.text;
+              el.innerHTML = `<div class="nle-handle nle-handle-l" data-handle="l"></div><span class="nle-clip-label"></span><div class="nle-handle nle-handle-r" data-handle="r"></div>`;
+              lane.appendChild(el);
+            }
+            el.style.left = leftPct + "%";
+            el.style.width = widthPct + "%";
+            el.classList.toggle("selected", c.id === state.selectedClipId);
+            const lblEl = el.querySelector(".nle-clip-label");
+            if (lblEl) lblEl.textContent = formatClipLabel(c, tr, totalSec);
+          }
+
+          existingEls.forEach((el, idKey) => {
+            if (!seen.has(idKey)) lane.removeChild(el);
+          });
+        }
+
+        if (rebuildInspector) {
+          syncNleInspector();
+        } else {
+          const sel = state.timelineClips.find(c => c.id === state.selectedClipId);
+          if (sel) {
+            const sInp = document.getElementById("nleInspStart");
+            const eInp = document.getElementById("nleInspEnd");
+            if (sInp && document.activeElement !== sInp) sInp.value = sel.startSec;
+            if (eInp && document.activeElement !== eInp) eInp.value = sel.endSec;
+          }
+          updateLiveHud();
+        }
+      }
+
+      // Bind track '+' add buttons
+      box.querySelectorAll("[data-nle-add]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          blurTextFocusForTimeline();
+          addClipToTrack(btn.getAttribute("data-nle-add"));
+        });
+      });
+
+      // Bind Clear Clips
+      const clrBtn = document.getElementById("nleClearBtn");
+      if (clrBtn) {
+        clrBtn.addEventListener("click", () => {
+          state.timelineClips = [];
+          state.selectedClipId = null;
+          syncNleDom(true, false);
+          flushRefresh();
+        });
+      }
+
+      // Bind Presets
+      box.querySelectorAll("[data-mp-preset]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const pType = btn.getAttribute("data-mp-preset");
+          const baseT = parseFloat(document.getElementById("thermostatTemp").value) || 22;
+          state.stimParams.mpTimelineSec = 180;
+          const tlInp = box.querySelector('[data-sp="mpTimelineSec"]');
+          if (tlInp) tlInp.value = 180;
+
+          if (pType === "bg_opto") {
+            state.timelineClips = [
+              { id: ++_nextClipId, track: "WHITE", startSec: 0,   endSec: 180, val: 35 },
+              { id: ++_nextClipId, track: "BLUE",  startSec: 30,  endSec: 50,  val: 100 },
+              { id: ++_nextClipId, track: "RED",   startSec: 80,  endSec: 100, val: 100 },
+              { id: ++_nextClipId, track: "BLUE",  startSec: 130, endSec: 150, val: 100 },
+              { id: ++_nextClipId, track: "TEMP",  startSec: 0,   endSec: 90,  val: baseT },
+              { id: ++_nextClipId, track: "TEMP",  startSec: 90,  endSec: 180, val: Math.min(40, baseT + 4) }
+            ];
+          } else if (pType === "rgb_overlap") {
+            state.timelineClips = [
+              { id: ++_nextClipId, track: "BLUE",  startSec: 0,   endSec: 80,  val: 100 },
+              { id: ++_nextClipId, track: "GREEN", startSec: 50,  endSec: 130, val: 100 },
+              { id: ++_nextClipId, track: "RED",   startSec: 100, endSec: 180, val: 100 },
+              { id: ++_nextClipId, track: "TEMP",  startSec: 0,   endSec: 180, val: baseT }
+            ];
+          } else if (pType === "sequential") {
+            state.timelineClips = [
+              { id: ++_nextClipId, track: "BLUE",  startSec: 20,  endSec: 50,  val: 100 },
+              { id: ++_nextClipId, track: "GREEN", startSec: 75,  endSec: 105, val: 100 },
+              { id: ++_nextClipId, track: "RED",   startSec: 130, endSec: 160, val: 100 }
+            ];
+          }
+          state.selectedClipId = state.timelineClips.length ? state.timelineClips[0].id : null;
+          syncNleDom(true, true);
+          flushRefresh();
+        });
+      });
+
+      // Bind Interactive Lane Drag-to-Draw, Double-Click Insert, & Bar Move / Stretch
+      box.querySelectorAll("[data-nle-lane]").forEach(lane => {
+        lane.addEventListener("dblclick", (e) => {
+          const hitClip = e.target.closest ? e.target.closest(".nle-clip") : null;
+          if (hitClip) return;
+          blurTextFocusForTimeline();
+          const trackId = lane.getAttribute("data-nle-lane");
+          const rect = lane.getBoundingClientRect();
+          const { totalSec } = getTimelineBounds();
+          const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
+          addClipToTrack(trackId, clickRatio * totalSec);
+        });
+
+        lane.addEventListener("mousedown", (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          blurTextFocusForTimeline();
+
+          const trackId = lane.getAttribute("data-nle-lane");
+          const rect = lane.getBoundingClientRect();
+          const { bin, totalSec } = getTimelineBounds();
+          const startX = e.clientX;
+
+          const clipEl = e.target.closest ? e.target.closest(".nle-clip") : null;
+
+          // Case 1: Empty lane -> Drag to draw a bar (plain single click simply deselects!)
+          if (!clipEl) {
+            const clickRatio = Math.max(0, Math.min(1, (startX - rect.left) / Math.max(1, rect.width)));
+            const clickSec = clickRatio * totalSec;
+            const gap = findGapContainingSec(trackId, clickSec);
+            if (!gap) {
+              deselectClip();
+              return;
+            }
+            const [gapMin, gapMax] = gap;
+            const anchorSec = Math.max(gapMin, Math.min(gapMax, snapSec(clickSec, bin)));
+            const baseT = parseFloat(document.getElementById("thermostatTemp").value) || 22;
+            let draftClip = null;
+
+            const onDrawMove = (me) => {
+              if (!draftClip && Math.abs(me.clientX - startX) < 4) return;
+              const curRatio = Math.max(0, Math.min(1, (me.clientX - rect.left) / Math.max(1, rect.width)));
+              const curSnap = Math.max(gapMin, Math.min(gapMax, snapSec(curRatio * totalSec, bin)));
+              let s = Math.min(anchorSec, curSnap);
+              let ed = Math.max(anchorSec, curSnap);
+              if (ed - s < bin) {
+                if (me.clientX >= startX) {
+                  ed = Math.min(gapMax, s + bin);
+                  s = Math.max(gapMin, ed - bin);
+                } else {
+                  s = Math.max(gapMin, ed - bin);
+                  ed = Math.min(gapMax, s + bin);
+                }
+              }
+              if (ed <= s) return;
+
+              if (!draftClip) {
+                draftClip = {
+                  id: ++_nextClipId,
+                  track: trackId,
+                  startSec: s,
+                  endSec: ed,
+                  val: trackId === "TEMP" ? baseT : 100
+                };
+                state.timelineClips.push(draftClip);
+                state.selectedClipId = draftClip.id;
+                syncNleDom(true, false);
+              } else {
+                draftClip.startSec = s;
+                draftClip.endSec = ed;
+                syncNleDom(false, false);
+              }
+              updateLiveHud("Drawing");
+              scheduleRefresh();
+            };
+
+            const onDrawUp = () => {
+              window.removeEventListener("mousemove", onDrawMove);
+              window.removeEventListener("mouseup", onDrawUp);
+              if (!draftClip) {
+                deselectClip();
+              } else {
+                syncNleDom(true, false);
+                flushRefresh();
+              }
+            };
+
+            window.addEventListener("mousemove", onDrawMove);
+            window.addEventListener("mouseup", onDrawUp);
+            return;
+          }
+
+          // Case 2: Existing bar -> Select, Move body, or Stretch left/right grip
+          const clipId = parseInt(clipEl.getAttribute("data-clip-id"), 10);
+          const clip = state.timelineClips.find(c => c.id === clipId);
+          if (!clip) return;
+
+          const selectionChanged = state.selectedClipId !== clipId;
+          state.selectedClipId = clipId;
+          syncNleDom(selectionChanged, false);
+
+          const cRect = clipEl.getBoundingClientRect();
+          const handleAttr = e.target.getAttribute("data-handle");
+          const edgePx = cRect.width > 0 ? Math.min(12, Math.max(5, cRect.width * 0.28)) : 8;
+          let mode = "move";
+          if (handleAttr === "l" || (cRect.width > 0 && startX - cRect.left <= edgePx)) mode = "left";
+          else if (handleAttr === "r" || (cRect.width > 0 && cRect.right - startX <= edgePx)) mode = "right";
+
+          clipEl.classList.add("is-dragging");
+          const origStart = clip.startSec;
+          const origEnd = clip.endSec;
+          const dur = origEnd - origStart;
+          const bounds = getSameTrackNeighborBounds(clip);
+
+          const onMove = (me) => {
+            const dxSec = ((me.clientX - startX) / Math.max(1, rect.width)) * totalSec;
+            if (mode === "move") {
+              let ns = snapSec(origStart + dxSec, bin);
+              ns = Math.max(bounds.minS, Math.min(bounds.maxE - dur, ns));
+              clip.startSec = ns;
+              clip.endSec = ns + dur;
+            } else if (mode === "left") {
+              let ns = snapSec(origStart + dxSec, bin);
+              ns = Math.max(bounds.minS, Math.min(origEnd - bin, ns));
+              clip.startSec = ns;
+            } else if (mode === "right") {
+              let ne = snapSec(origEnd + dxSec, bin);
+              ne = Math.min(bounds.maxE, Math.max(origStart + bin, ne));
+              clip.endSec = ne;
+            }
+            syncNleDom(false, false);
+            updateLiveHud(mode === "move" ? "Moving" : "Stretching");
+            scheduleRefresh();
+          };
+
+          const onUp = () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            clipEl.classList.remove("is-dragging");
+            syncNleInspector();
+            flushRefresh();
+          };
+
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", onUp);
+        });
+      });
+
+      syncNleDom(true, true);
+      box._syncNleDom = (rebuildInsp) => syncNleDom(rebuildInsp, true);
+      box._deleteSelectedClip = deleteSelectedClip;
+      box._deselectClip = deselectClip;
+      box._nudgeSelectedClip = nudgeSelectedClip;
+    } else if (id === "temp_ramp") {
+      const stepsPreview = computeTempRampSteps(sp.rampStartTemp, sp.rampEndTemp, sp.rampStepTemp);
+      box.innerHTML = `
+        <div class="form-grid">
+          <div class="field">
+            <label>Start Temperature (°C)</label>
+            <input type="number" min="10" max="40" step="0.5" data-sp="rampStartTemp" value="${sp.rampStartTemp}">
+          </div>
+          <div class="field">
+            <label>End Temperature (°C)</label>
+            <input type="number" min="10" max="40" step="0.5" data-sp="rampEndTemp" value="${sp.rampEndTemp}">
+          </div>
+          <div class="field">
+            <label>Step Increment (°C)</label>
+            <input type="number" min="0.5" max="15" step="0.5" data-sp="rampStepTemp" value="${sp.rampStepTemp}">
+          </div>
+          <div class="field">
+            <label>Hold Duration per Step (sec)</label>
+            <input type="number" min="10" max="14400" step="30" data-sp="rampHoldSec" value="${sp.rampHoldSec}">
+          </div>
+          <div class="field">
+            <label>Chamber Lighting</label>
+            <select data-sp="rampLight">
+              <option value="DARK" ${sp.rampLight === "DARK" ? "selected" : ""}>Dark (IR Tracking Only)</option>
+              <option value="LIGHT" ${sp.rampLight === "LIGHT" ? "selected" : ""}>Stimulus Light ON (Page 1 wavelength)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Time Bin (sec)</label>
+            <input type="number" min="1" max="600" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
+          </div>
+          <div class="field">
+            <label>Acclimation at Start Temp (sec)</label>
+            <input type="number" min="0" max="7200" step="30" data-sp="acclimSec" value="${sp.acclimSec}">
+          </div>
+        </div>
+        <div class="proto-note" id="rampStepsPreviewNote">
+          <strong>Generated Plateaus (${stepsPreview.length}):</strong> ${stepsPreview.map(t => t + " °C").join(" &rarr; ")}.<br>
+          Standard MWP heaters regulate from room ambient up to +10 °C above ambient (&plusmn;0.5 °C) and automatically return to Start Temp when the assay finishes. Ensure the cooling fan is spinning.
+        </div>`;
     }
 
     box.querySelectorAll("[data-sp]").forEach(el => {
+      const spKey = el.getAttribute("data-sp");
       el.addEventListener("input", () => {
-        state.stimParams[el.getAttribute("data-sp")] = el.value;
+        state.stimParams[spKey] = el.value;
+        if (state.stimId === "multi_phase" && box._syncNleDom && (spKey === "mpTimelineSec" || spKey === "timeBinSec")) {
+          box._syncNleDom(true);
+        }
+        if (state.stimId === "temp_ramp") {
+          const noteEl = document.getElementById("rampStepsPreviewNote");
+          if (noteEl) {
+            const st = computeTempRampSteps(state.stimParams.rampStartTemp, state.stimParams.rampEndTemp, state.stimParams.rampStepTemp);
+            noteEl.innerHTML = `<strong>Generated Plateaus (${st.length}):</strong> ${st.map(t => t + " °C").join(" &rarr; ")}.<br>Standard MWP heaters regulate from room ambient up to +10 °C above ambient (&plusmn;0.5 °C) and automatically return to Start Temp when the assay finishes. Ensure the cooling fan is spinning.`;
+          }
+        }
         refreshAll();
       });
       el.addEventListener("change", () => {
-        state.stimParams[el.getAttribute("data-sp")] = el.value;
+        state.stimParams[spKey] = el.value;
+        if (state.stimId === "multi_phase" && box._syncNleDom && (spKey === "mpTimelineSec" || spKey === "timeBinSec")) {
+          box._syncNleDom(true);
+        }
         refreshAll();
       });
     });
@@ -4048,37 +5490,40 @@
     const total = document.getElementById("timelineTotal");
     const sp = cfg.sp;
     const segs = [];
+    const activeCls = (cfg.ledColorObj && cfg.ledColorObj.tlCls) ? cfg.ledColorObj.tlCls : "tl-light";
+    const activeShort = (cfg.ledColorObj && cfg.ledColorObj.id !== "WHITE") ? cfg.ledColorObj.short : "Light";
 
     if (cfg.stimId === "baseline") {
       if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
       segs.push({
-        cls: sp.baseLight === "DARK" ? "tl-dark" : "tl-light",
+        cls: sp.baseLight === "DARK" ? "tl-dark" : activeCls,
         w: Math.max(10, +sp.durationSec),
-        txt: sp.baseLight === "DARK" ? "Dark Recording" : "Light Recording"
+        txt: sp.baseLight === "DARK" ? "Dark Recording" : `${activeShort} Recording`
       });
-      desc.textContent = `Constant ${sp.baseLight.toLowerCase()} recording`;
+      desc.textContent = sp.baseLight === "DARK" ? "Constant dark recording" : `Constant ${activeShort.toLowerCase()} recording`;
     } else if (cfg.stimId === "ld_transitions") {
       if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
       const n = Math.min(6, Math.max(1, parseInt(sp.ldCycles, 10) || 1));
       const startL = sp.ldStart !== "DARK";
+      const lTag = cfg.ledColor === "WHITE" ? "L" : cfg.ledColor.slice(0, 2);
       for (let i = 0; i < n; i++) {
-        segs.push({ cls: startL ? "tl-light" : "tl-dark", w: +sp.ldPhaseSec, txt: startL ? "L" : "D" });
-        segs.push({ cls: startL ? "tl-dark" : "tl-light", w: +sp.ldPhaseSec, txt: startL ? "D" : "L" });
+        segs.push({ cls: startL ? activeCls : "tl-dark", w: +sp.ldPhaseSec, txt: startL ? lTag : "D" });
+        segs.push({ cls: startL ? "tl-dark" : activeCls, w: +sp.ldPhaseSec, txt: startL ? "D" : lTag });
       }
-      desc.textContent = `${sp.ldCycles} x (${sp.ldPhaseSec}s Light / ${sp.ldPhaseSec}s Dark)`;
+      desc.textContent = `${sp.ldCycles} x (${sp.ldPhaseSec}s ${activeShort} / ${sp.ldPhaseSec}s Dark)`;
     } else if (cfg.stimId === "light_off_startle" || cfg.stimId === "light_on_pulse") {
       const isOff = cfg.stimId === "light_off_startle";
       if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
-      if (+sp.preBaselineSec > 0) segs.push({ cls: isOff ? "tl-light" : "tl-dark", w: +sp.preBaselineSec, txt: "Base" });
+      if (+sp.preBaselineSec > 0) segs.push({ cls: isOff ? activeCls : "tl-dark", w: +sp.preBaselineSec, txt: "Base" });
       const n = Math.min(8, Math.max(1, parseInt(sp.numPulses, 10) || 1));
       for (let i = 0; i < n; i++) {
-        segs.push({ cls: "tl-pulse", w: Math.max(4, +sp.itiSec * 0.18), txt: "" });
-        segs.push({ cls: isOff ? "tl-light" : "tl-dark", w: +sp.itiSec, txt: "" });
+        segs.push({ cls: isOff ? "tl-pulse" : activeCls, w: Math.max(4, +sp.itiSec * 0.18), txt: "" });
+        segs.push({ cls: isOff ? activeCls : "tl-dark", w: +sp.itiSec, txt: "" });
       }
-      desc.textContent = `${sp.numPulses} pulses (${sp.pulseDurSec}s pulse, ${sp.itiSec}s ITI)`;
+      desc.textContent = `${sp.numPulses} ${isOff ? "dark" : activeShort.toLowerCase()} pulses (${sp.pulseDurSec}s pulse, ${sp.itiSec}s ITI)`;
     } else if (cfg.stimId === "vibration_startle") {
       if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
-      const baseCls = sp.vibAmbient === "LIGHT" ? "tl-light" : "tl-dark";
+      const baseCls = sp.vibAmbient === "LIGHT" ? activeCls : "tl-dark";
       if (+sp.preBaselineSec > 0) segs.push({ cls: baseCls, w: +sp.preBaselineSec, txt: "Base" });
       const n = Math.min(8, Math.max(1, parseInt(sp.numPulses, 10) || 1));
       for (let i = 0; i < n; i++) {
@@ -4089,16 +5534,55 @@
     } else if (cfg.stimId === "circadian") {
       const n = Math.min(5, Math.max(1, parseInt(sp.numDays, 10) || 1));
       for (let i = 0; i < n; i++) {
-        if (+sp.lightHours > 0) segs.push({ cls: "tl-light", w: +sp.lightHours, txt: `${sp.lightHours}h L` });
+        if (+sp.lightHours > 0) segs.push({ cls: activeCls, w: +sp.lightHours, txt: `${sp.lightHours}h L` });
         if (+sp.darkHours > 0) segs.push({ cls: "tl-dark", w: +sp.darkHours, txt: `${sp.darkHours}h D` });
       }
-      desc.textContent = `${sp.numDays} cycle(s) of ${sp.lightHours}h Light : ${sp.darkHours}h Dark`;
+      desc.textContent = `${sp.numDays} cycle(s) of ${sp.lightHours}h ${activeShort} : ${sp.darkHours}h Dark`;
+    } else if (cfg.stimId === "multi_phase") {
+      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
+      const cyc = Math.min(4, Math.max(1, parseInt(sp.mpCycles, 10) || 1));
+      const comp = compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp);
+      for (let c = 0; c < cyc; c++) {
+        comp.slices.forEach(sl => {
+          const nLights = sl.lights.length;
+          const cls = nLights === 0 ? "tl-dark" : (nLights === 1 ? sl.lights[0].colObj.tlCls : "tl-overlap");
+          const lightTokens = sl.lights.map(l => l.id === "UV" ? "UV" : l.id[0]);
+          const lbl = nLights === 0
+            ? "Dark"
+            : (nLights === 1 ? sl.lights[0].colObj.short : lightTokens.join("+"));
+          const tSuffix = sl.effectiveTemp !== null ? ` ${sl.effectiveTemp}°C` : "";
+          const w = Math.max(2, sl.endSec - sl.startSec);
+          const prev = segs[segs.length - 1];
+          if (cls === "tl-overlap" && prev && prev.cls === "tl-overlap") {
+            prev.w += w;
+            lightTokens.forEach(tok => {
+              if (!prev._toks.includes(tok)) prev._toks.push(tok);
+            });
+            prev.txt = `Overlap (${prev._toks.join("+")})`;
+          } else {
+            segs.push({ cls, w, txt: `S${sl.idx}: ${lbl}${tSuffix}`, _toks: lightTokens.slice() });
+          }
+        });
+      }
+      desc.textContent = `${sp.mpCycles}x timeline (${comp.totalSec}s · ${comp.slices.length} slice${comp.slices.length === 1 ? "" : "s"}${comp.hasAnyTempClip ? " + temp track" : ""})`;
+    } else if (cfg.stimId === "temp_ramp") {
+      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
+      const steps = computeTempRampSteps(sp.rampStartTemp, sp.rampEndTemp, sp.rampStepTemp);
+      const minT = Math.min(...steps), maxT = Math.max(...steps);
+      const span = Math.max(1, maxT - minT);
+      steps.forEach(t => {
+        const ratio = (t - minT) / span;
+        const bucket = ratio < 0.25 ? "tl-temp-1" : (ratio < 0.55 ? "tl-temp-2" : (ratio < 0.8 ? "tl-temp-3" : "tl-temp-4"));
+        segs.push({ cls: bucket, w: Math.max(10, parseFloat(sp.rampHoldSec) || 300), txt: `${t}°C` });
+      });
+      desc.textContent = `${steps.length} thermal step(s): ${steps[0]}°C -> ${steps[steps.length - 1]}°C (${sp.rampHoldSec}s/step)`;
     }
 
     const sumW = segs.reduce((a, b) => a + b.w, 0) || 1;
+    bar.classList.toggle("has-overlap", segs.some(s => s.cls === "tl-overlap"));
     bar.innerHTML = segs.map(s => {
-      const pct = ((s.w / sumW) * 100).toFixed(2);
-      return `<div class="tl-seg ${s.cls}" style="width:${pct}%">${pct > 11 ? s.txt : ""}</div>`;
+      const pct = (s.w / sumW) * 100;
+      return `<div class="tl-seg ${s.cls}" style="flex:${s.w} 0 0">${pct > 11 ? s.txt : ""}</div>`;
     }).join("");
 
     total.textContent = `Est. Runtime: ${formatDuration(s4.totalRuntimeSec)}`;
@@ -4123,8 +5607,14 @@
     document.getElementById("previewMainScript").textContent = s4.filename;
     document.getElementById("nameAsciiWarn").classList.toggle("show", cfg.hasNonAsciiWarning);
 
-    // Header badge
+    // Header badge & underneath channel label
     document.getElementById("hwBadge").textContent = "MWP " + cfg.hw;
+    const underLbl = document.getElementById("underlightText");
+    if (underLbl) {
+      underLbl.textContent = cfg.ledColor === "WHITE"
+        ? "Drive Underneath LED (Ch 12)"
+        : `Drive Underneath LED (Ch ${cfg.ledColorObj.z3Under} · ${cfg.ledColorObj.short})`;
+    }
     const orgObj = ORGANISM_PRESETS.find(o => o.id === state.organism);
 
     // Visual previews & geometry status
@@ -4291,7 +5781,7 @@
 
     // General Assay / Hardware Inputs
     [
-      "videoMode", "chk_tracks", "chk_heatmap", "expPrefix", "hwVersion",
+      "videoMode", "chk_tracks", "chk_heatmap", "expPrefix", "hwVersion", "ledColor",
       "targetSize", "detThreshold", "msdThreshold", "autorefTimeout",
       "thermostatTemp", "chk_thermostat", "ledBrightness", "chk_underlight"
     ].forEach(id => {
@@ -4303,7 +5793,12 @@
         }
         refreshAll();
       });
-      el.addEventListener("change", refreshAll);
+      el.addEventListener("change", () => {
+        if (id === "hwVersion" && state.stimId === "multi_phase") {
+          renderStimParams();
+        }
+        refreshAll();
+      });
     });
 
     // Config Modal Events
@@ -4315,7 +5810,38 @@
     });
     if (typeof document.addEventListener === "function") {
       document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closeConfigModal();
+        const modal = document.getElementById("configModalBackdrop");
+        if (modal && modal.classList.contains("open")) {
+          if (e.key === "Escape") closeConfigModal();
+          return;
+        }
+        const curPage = WIZARD_PAGES[currentPageIdx];
+        if (!curPage || curPage.id !== "stimulus" || state.stimId !== "multi_phase") return;
+
+        const ae = document.activeElement;
+        const tag = ae && ae.tagName ? ae.tagName.toUpperCase() : "";
+        const inType = ae && ae.getAttribute ? String(ae.getAttribute("type") || "").toLowerCase() : "";
+        const isTypingField =
+          (tag === "INPUT" && inType !== "range" && inType !== "checkbox" && inType !== "button") ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          Boolean(ae && ae.isContentEditable);
+        if (isTypingField) return;
+
+        const spBox = document.getElementById("stimParamsBox");
+        if (!spBox) return;
+
+        if ((e.key === "Backspace" || e.key === "Delete") && state.selectedClipId !== null) {
+          e.preventDefault();
+          if (spBox._deleteSelectedClip) spBox._deleteSelectedClip();
+        } else if (e.key === "Escape" && state.selectedClipId !== null) {
+          e.preventDefault();
+          if (spBox._deselectClip) spBox._deselectClip();
+        } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && state.selectedClipId !== null) {
+          e.preventDefault();
+          const stepMul = e.shiftKey ? 5 : 1;
+          if (spBox._nudgeSelectedClip) spBox._nudgeSelectedClip((e.key === "ArrowLeft" ? -1 : 1) * stepMul);
+        }
       });
     }
 
@@ -4425,9 +5951,20 @@
       state.plateId = "24well";
       state.stimId = "ld_transitions";
       state.activeStep = 4;
+      state.timelineClips = cloneDefaultTimelineClips();
+      state.selectedClipId = state.timelineClips.length > 1 ? state.timelineClips[1].id : (state.timelineClips[0] ? state.timelineClips[0].id : null);
+      state.stimParams.mpTimelineSec = 180;
+      state.stimParams.mpAcclimLight = "DARK";
+      state.stimParams.mpCycles = 1;
+      state.stimParams.rampStartTemp = 20;
+      state.stimParams.rampEndTemp = 30;
+      state.stimParams.rampStepTemp = 2;
+      state.stimParams.rampHoldSec = 300;
+      state.stimParams.rampLight = "DARK";
       document.getElementById("userName").value = "";
       document.getElementById("expPrefix").value = "";
       document.getElementById("hwVersion").value = "Z3";
+      document.getElementById("ledColor").value = "WHITE";
       document.getElementById("chk_dist").checked = true;
       document.getElementById("chk_msd").checked = true;
       document.getElementById("chk_zones").checked = false;
@@ -4490,13 +6027,33 @@
     setText("sumFolder", `${s4.bundleFolder}/`);
 
     setText("sumHw", "MWP " + cfg.hw);
+    const colLabel = cfg.stimId === "multi_phase"
+      ? "Multi-wavelength LEDs"
+      : (cfg.ledColor === "WHITE" ? "Overhead LED" : `Overhead ${cfg.ledColorObj.short}`);
     setText("sumHwSub", cfg.hw === "Z3"
-      ? `Overhead LED ${cfg.ledPct}%${cfg.useUnderLight ? " + underneath" : ""}`
-      : "GPO6-8 lighting");
+      ? `${colLabel}${cfg.stimId === "multi_phase" ? "" : " " + cfg.ledPct + "%"}${cfg.useUnderLight ? " + underneath" : ""}`
+      : `GPO6-8 (${cfg.stimId === "multi_phase" ? "multi-color" : cfg.ledColorObj.short})`);
+
+    let tempSummary;
+    if (cfg.stimId === "temp_ramp") {
+      const st = computeTempRampSteps(cfg.sp.rampStartTemp, cfg.sp.rampEndTemp, cfg.sp.rampStepTemp);
+      tempSummary = `${st[0]}->${st[st.length - 1]} °C ramp`;
+    } else if (cfg.stimId === "multi_phase") {
+      const comp = compileMultiTrackSlices(cfg.timelineClips, cfg.sp.mpTimelineSec, cfg.sp.timeBinSec, cfg.thermostatTemp);
+      if (comp.hasAnyTempClip && comp.slices.length > 0) {
+        const temps = comp.slices.map(sl => sl.effectiveTemp);
+        const minT = Math.min(...temps), maxT = Math.max(...temps);
+        tempSummary = minT === maxT ? `${minT} °C track` : `${minT}-${maxT} °C track`;
+      } else {
+        tempSummary = cfg.useThermostat ? cfg.thermostatTemp + " °C" : "ambient";
+      }
+    } else {
+      tempSummary = cfg.useThermostat ? cfg.thermostatTemp + " °C" : "ambient";
+    }
 
     setText("sumOrganism", orgObj ? orgObj.label : "Custom");
     setText("sumOrganismSub",
-      `${cfg.targetSize} mm · threshold ${cfg.detThreshold} · ${cfg.useThermostat ? cfg.thermostatTemp + " °C" : "ambient"}`);
+      `${cfg.targetSize} mm · threshold ${cfg.detThreshold} · ${tempSummary}`);
 
     setText("sumPlate", cfg.plate.name);
     setText("sumPlateSub", `${cfg.plate.meta} · ${cfg.plate.arenaBmp}.bmp`);
