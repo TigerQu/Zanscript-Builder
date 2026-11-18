@@ -777,6 +777,64 @@
     }
   }
 
+  /* Standard vs. Advanced protocol sections */
+  .stim-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .stim-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .stim-section-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .stim-advanced {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px dashed var(--border);
+  }
+
+  .stim-advanced-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .stim-grid .option-tile.stim-adv-tile,
+  .option-tile.stim-adv-tile {
+    width: 100%;
+    padding: 14px 16px;
+    border-style: dashed;
+  }
+
+  .option-tile.stim-adv-tile:hover,
+  .option-tile.stim-adv-tile.active {
+    border-style: solid;
+  }
+
+  .option-tile.stim-adv-tile .tile-name {
+    font-size: 13.5px;
+  }
+
+  .option-tile.stim-adv-tile .tile-meta {
+    max-width: 640px;
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
   @media (max-width: 479px) {
     .stim-grid {
       grid-template-columns: 1fr;
@@ -2817,7 +2875,19 @@
           <h3 class="card-title">Protocol</h3>
           <span class="card-hint">Select assay schedule</span>
         </div>
+        <div class="stim-section-head">
+          <span class="stim-section-label">Standard protocols</span>
+          <span class="stim-section-hint">Preset schedules &middot; just set the timing</span>
+        </div>
         <div class="stim-grid" id="stimGrid"></div>
+
+        <div class="stim-advanced">
+          <div class="stim-section-head">
+            <span class="stim-section-label">Advanced</span>
+            <span class="stim-section-hint">Design your own sequence from scratch</span>
+          </div>
+          <div class="stim-advanced-grid" id="stimGridAdvanced"></div>
+        </div>
       </div>
 
       <div class="card">
@@ -3318,7 +3388,8 @@
     { id: "light_on_pulse", name: "Light-On Flash", meta: "Bright flashes in dark" },
     { id: "vibration_startle", name: "Vibration Startle", meta: "Stepper motor tap + ITI" },
     { id: "circadian", name: "Long-Term Cycle", meta: "Multi-hour / multi-day L:D" },
-    { id: "multi_phase", name: "Multi-Track Timeline", meta: "Top/Bot LEDs & temp tracks" },
+    { id: "multi_phase", name: "Multi-Track Timeline", meta: "Top/Bot LEDs & temp tracks", advanced: true,
+      desc: "Draw your own sequence on a timeline editor: separate top and bottom LED tracks (White, 470, 530, 625, UV) plus a temperature track, repeated for any number of cycles." },
     { id: "temp_ramp", name: "Temperature Step / Ramp", meta: "Stepped thermal curve (°C)" }
   ];
 
@@ -5962,12 +6033,16 @@
 
   function renderStimGrid() {
     const wrap = document.getElementById("stimGrid");
+    const advWrap = document.getElementById("stimGridAdvanced");
     wrap.innerHTML = "";
+    if (advWrap) advWrap.innerHTML = "";
     for (const s of STIMULI) {
+      const isAdv = Boolean(s.advanced && advWrap);
       const tile = document.createElement("button");
       tile.type = "button";
-      tile.className = "option-tile" + (state.stimId === s.id ? " active" : "");
-      tile.innerHTML = `<span class="tile-name">${s.name}</span><span class="tile-meta">${s.meta}</span>`;
+      tile.className = "option-tile" + (isAdv ? " stim-adv-tile" : "") + (state.stimId === s.id ? " active" : "");
+      tile.setAttribute("data-stim", s.id);
+      tile.innerHTML = `<span class="tile-name">${s.name}</span><span class="tile-meta">${isAdv ? (s.desc || s.meta) : s.meta}</span>`;
       tile.addEventListener("click", () => {
         const changed = state.stimId !== s.id;
         state.stimId = s.id;
@@ -5979,7 +6054,7 @@
         renderStimParams();
         refreshAll();
       });
-      wrap.appendChild(tile);
+      (isAdv ? advWrap : wrap).appendChild(tile);
     }
   }
 
