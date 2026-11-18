@@ -41,6 +41,8 @@ Inspect syntax-highlighted Zanscripts and CSV column schemas for all four workfl
 - **Curated Organism Presets**: Instant tracking and temperature defaults for *Daphnia magna*, *Drosophila* (Adult), *C. elegans*, *Planaria*, and *Zebrafish Larvae*, plus full manual customization.
 - **Composable CSV Metrics & Video Modes**: Combine centroid distance (`DIST_*`), pixel motility (`MSD_*`), 50/50 inner/outer zone metrics (`ZD_*`, `ZC_*`, `ZT_*`), and optional per-frame raw millimeter coordinates (`_XY` CSV), alongside timelapse (`1 fps`, `0.2 fps`) or `30 fps` video, live track traces, and end-of-assay heatmaps.
 - **Zantiks-Safe Naming**: Automatically extracts researcher surnames and sanitizes study tags into space-free ASCII identifiers accepted by the Zantiks Control Console compiler.
+- **Save, Share & Reopen Experiments**: Every choice auto-saves in your browser. **Save as file** downloads the whole design as `*_experiment.json`; **Open…** loads that file — or a scripts `.zip` downloaded from the app, which now includes `experiment.json` — to restore it exactly. Plate calibration offsets always stay with your own unit.
+- **Pre-flight Checks**: The Export page lists warnings and notes before you download (heater range, short pulses vs. time bin, Z3-only features on Z2 units, UV LEDs, very large video / XY files, factory plate offsets, and more), each with a button that jumps to the page where it can be fixed.
 
 ---
 
@@ -49,14 +51,31 @@ Inspect syntax-highlighted Zanscripts and CSV column schemas for all four workfl
 ```text
 Zanscript-Builder/
 ├── index.html                      # Redirect entry point for GitHub Pages
-├── zantiks_script_generator.html   # Standalone web app (UI, previews, .zs generator, ZIP bundler)
+├── zantiks_script_generator.html   # The app: page markup; loads css/ and js/
+├── css/                            # Styles, one file per area (base, components, stimulus, data, export, modal)
+├── js/                             # App code as plain scripts, loaded in order:
+│   ├── catalogs.js                 #   organisms, plates, LEDs, protocols
+│   ├── state.js, helpers.js        #   app state, plate-config store, naming & formatting helpers
+│   ├── read-config.js              #   turns the form into one config object
+│   ├── generators.js               #   the .zs generators for Steps 1-4
+│   ├── sampler.js, simulator.js    #   sequence preview (also contains refreshAll)
+│   ├── stimulus-editor.js          #   protocol forms and the multi-track timeline editor
+│   ├── timeline.js, ui-setup.js    #   timeline bar, organism / plate / modal rendering
+│   ├── export-utils.js, events.js  #   code highlighting, ZIP writer, event bindings
+│   ├── wizard.js                   #   step-by-step navigation and Run Summary
+│   ├── experiment-io.js            #   save / open / auto-save experiments
+│   ├── preflight.js                #   Export-page checks
+│   └── main.js                     #   start-up (must load last)
 ├── zantiks_plate_config.js         # External plate geometry calibration profile (mm)
+├── tests/                          # Automated tests: scenarios (experiment files) + golden script output
+├── package.json                    # Test tooling only (the app needs no install or build)
+├── .github/workflows/tests.yml     # Runs the tests on every push and pull request
 ├── assets/                         # Walkthrough GIFs for documentation
 ├── LICENSE                         # MIT License
 └── README.md                       # Documentation & hardware verification matrix
 ```
 
-> **Note:** When running locally, keep `zantiks_plate_config.js` in the same folder as `zantiks_script_generator.html` so custom plate calibration profiles load automatically over `file://` without browser CORS restrictions.
+> **Note:** When running locally, keep `css/`, `js/` and `zantiks_plate_config.js` next to `zantiks_script_generator.html` (just clone or download the whole folder). Everything loads over `file://` with no server, build step or install.
 
 ---
 
@@ -80,6 +99,8 @@ Zanscript-Builder/
    - Click **Download All 4 Scripts (.zip)** (also available in the top bar on every page) to get the complete experiment folder and `README_STEPS.txt`, **or**
    - Switch between tabs (**Step 1** – **Step 4**) to **Copy Script** / **Download `.zs`** individually.
    - *Tip:* Click the filename badge above the code preview to copy the `.zs`-stripped service name directly for pasting into Zantiks' **Add Service** dialog.
+   - Read the **Pre-flight Checks** at the top of the page first.
+4. **Keep or share the design**: it auto-saves in this browser. Use **Save as file** in the Run Summary to share it, and **Open…** to load an `experiment.json` or a downloaded scripts `.zip`.
 
 ---
 
@@ -214,6 +235,23 @@ Different MWP units or plate manufacturers can exhibit slight positional shifts 
 - `colStep`, `rowStep`: Center-to-center horizontal and vertical spacing between adjacent wells.
 - `r`: Well radius for round wells (`DISC`) or full side length for square wells (`SQUARE`).
 - `rDz`: Inner center zone (`Z2`) radius or side length (`Auto 50%` sets `rDz = r * √0.5` so inner and outer zones have equal area).
+
+---
+
+## Development & Tests
+
+The app is plain HTML, CSS and JavaScript with no build step: edit the files in `css/` and `js/` and reload the page.
+
+Automated tests make sure changes don't silently alter the generated scripts. Each file in `tests/scenarios/` is an experiment saved by the app (14 of them, covering every protocol, both hardware revisions and several plates); the tests load each one and compare the four `.zs` scripts and `README_STEPS.txt` byte-for-byte with `tests/golden/`. They also check that every page loads without errors, that open → save and `.zip` round trips are lossless, and that auto-save survives a reload.
+
+```bash
+npm install                          # once: installs Playwright (test tool only)
+npx playwright install chromium      # once: browser used by the tests
+npm test                             # run all tests
+npm run test:update                  # after an INTENTIONAL change to the scripts: rewrite tests/golden/
+```
+
+The same tests run automatically on GitHub for every push to `main` and every pull request (see the **Actions** tab). To add a scenario, set up the experiment in the app, click **Save as file**, put the `.json` in `tests/scenarios/`, and run `npm run test:update` to create its golden file.
 
 ---
 

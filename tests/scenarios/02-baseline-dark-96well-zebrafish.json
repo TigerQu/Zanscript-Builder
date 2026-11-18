@@ -1,0 +1,107 @@
+{
+  "format": "zanscript-builder-experiment",
+  "version": 1,
+  "savedAt": "2026-11-17T00:00:00.000Z",
+  "experiment": {
+    "organism": "zebrafish",
+    "plateId": "96well",
+    "stimId": "baseline",
+    "inputs": {
+      "userName": "",
+      "expPrefix": "",
+      "hwVersion": "Z3",
+      "ledColor": "WHITE",
+      "ledMount": "OVERHEAD",
+      "ledBrightness": "100",
+      "targetSize": "2",
+      "detThreshold": "6",
+      "msdThreshold": "6",
+      "autorefTimeout": "60",
+      "thermostatTemp": "28",
+      "chk_thermostat": true,
+      "chk_dist": true,
+      "chk_msd": true,
+      "chk_zones": true,
+      "chk_xy": true,
+      "videoMode": "full",
+      "chk_tracks": true,
+      "chk_heatmap": false
+    },
+    "stimParams": {
+      "baseLight": "DARK",
+      "acclimSec": 120,
+      "durationSec": "900",
+      "timeBinSec": 1,
+      "ldStart": "LIGHT",
+      "ldPhaseSec": 300,
+      "ldCycles": 2,
+      "preBaselineSec": 60,
+      "numPulses": 5,
+      "pulseDurSec": 1,
+      "itiSec": 30,
+      "vibIntensity": "U0",
+      "vibAmbient": "DARK",
+      "lightHours": 16,
+      "darkHours": 8,
+      "numDays": 2,
+      "circBinSec": 10,
+      "mpTimelineSec": 180,
+      "mpAcclimLight": "DARK",
+      "mpCycles": 1,
+      "rampStartTemp": 20,
+      "rampEndTemp": 30,
+      "rampStepTemp": 2,
+      "rampHoldSec": 300,
+      "rampLight": "DARK"
+    },
+    "timelineClips": [
+      {
+        "track": "WHITE",
+        "startSec": 0,
+        "endSec": 180,
+        "val": 35
+      },
+      {
+        "track": "BLUE",
+        "startSec": 30,
+        "endSec": 50,
+        "val": 100
+      },
+      {
+        "track": "RED",
+        "startSec": 80,
+        "endSec": 100,
+        "val": 100
+      },
+      {
+        "track": "BLUE",
+        "startSec": 130,
+        "endSec": 150,
+        "val": 100
+      },
+      {
+        "track": "TEMP",
+        "startSec": 0,
+        "endSec": 90,
+        "val": 22
+      },
+      {
+        "track": "TEMP",
+        "startSec": 90,
+        "endSec": 180,
+        "val": 26
+      }
+    ],
+    "showUnderTracks": false
+  },
+  "plateGeometry": {
+    "plateId": "96well",
+    "xOffset": 14.15,
+    "yOffset": 11.24,
+    "colStep": 9,
+    "rowStep": 9,
+    "r": 3.5,
+    "rDz": 2.47
+  },
+  "description": "Baseline in the dark, 96-well, zebrafish, zones + raw XY, full video"
+}
