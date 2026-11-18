@@ -3,6 +3,24 @@
 "use strict";
 
 const STORAGE_KEY_PLATES = "zantiks_mwp_plate_config_v1";
+const STORAGE_KEY_Z3_RGB_MAP = "zantiks_mwp_z3_rgb_map_v1";
+
+const Z3_RGB_MAPS = {
+  DOCS: {
+    id: "DOCS",
+    label: "Official Zantiks Docs (Ch 1:Blue, 3:Green, 5:Red)",
+    BLUE:  [1, 9],
+    GREEN: [3, 11],
+    RED:   [5, 13]
+  },
+  GRB_SHIFT: {
+    id: "GRB_SHIFT",
+    label: "Alternate Batch / GRB-Shifted (Ch 1:Green, 3:Red, 5:Blue)",
+    BLUE:  [5, 13],
+    GREEN: [1, 9],
+    RED:   [3, 11]
+  }
+};
 
 // ---------------------------------------------------------------------------
 // 1. Reference Catalogs (Derived from official Zantiks MWP .zs scripts)
@@ -162,3 +180,44 @@ const NLE_TRACKS = [
   { id: "U_UV",    group: "BOT", colorId: "UV",    label: "UV 365",    sub: "Bot Ch 8",  kind: "light", swatch: "#c084fc", bg: "#f3e8ff", border: "#7e22ce", text: "#4c1d95" },
   { id: "TEMP",    group: "ENV", colorId: null,    label: "Temp °C",   sub: "Therm",     kind: "temp",  swatch: "#f97316", bg: "#fed7aa", border: "#ea580c", text: "#7c2d12" }
 ];
+
+function applyZ3RgbMapToCatalogs(mapId) {
+  const validId = Z3_RGB_MAPS[mapId] ? mapId : "DOCS";
+  const m = Z3_RGB_MAPS[validId];
+  LED_COLORS.BLUE.z3Over = m.BLUE[0];
+  LED_COLORS.BLUE.z3Under = m.BLUE[1];
+  LED_COLORS.GREEN.z3Over = m.GREEN[0];
+  LED_COLORS.GREEN.z3Under = m.GREEN[1];
+  LED_COLORS.RED.z3Over = m.RED[0];
+  LED_COLORS.RED.z3Under = m.RED[1];
+
+  for (const tr of NLE_TRACKS) {
+    if (tr.kind === "light" && tr.colorId && LED_COLORS[tr.colorId]) {
+      const c = LED_COLORS[tr.colorId];
+      tr.sub = tr.group === "BOT" ? `Bot Ch ${c.z3Under}` : `Top Ch ${c.z3Over}`;
+    }
+  }
+
+  if (typeof document !== "undefined") {
+    const mapSel = document.getElementById("z3RgbMap");
+    const hwSel = document.getElementById("hwVersion");
+    if (mapSel) {
+      mapSel.value = validId;
+      if (hwSel) mapSel.disabled = hwSel.value !== "Z3";
+    }
+    const colSel = document.getElementById("ledColor");
+    if (colSel && colSel.options) {
+      const optText = {
+        WHITE: `White (~6000K - Z3 Ch ${LED_COLORS.WHITE.z3Over} / ${LED_COLORS.WHITE.z3Under})`,
+        BLUE:  `Blue (470 nm - Z3 Ch ${LED_COLORS.BLUE.z3Over} / ${LED_COLORS.BLUE.z3Under})`,
+        GREEN: `Green (530 nm - Z3 Ch ${LED_COLORS.GREEN.z3Over} / ${LED_COLORS.GREEN.z3Under})`,
+        RED:   `Red (625 nm - Z3 Ch ${LED_COLORS.RED.z3Over} / ${LED_COLORS.RED.z3Under})`,
+        UV:    `UV (365 nm - Z3 Ch ${LED_COLORS.UV.z3Over} / ${LED_COLORS.UV.z3Under}, if fitted)`
+      };
+      for (const opt of colSel.options) {
+        if (optText[opt.value]) opt.textContent = optText[opt.value];
+      }
+    }
+  }
+  return validId;
+}

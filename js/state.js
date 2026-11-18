@@ -229,17 +229,46 @@ const state = {
   timelineClips: cloneDefaultTimelineClips(),
   selectedClipId: 2,
   showUnderTracks: false,
+  unitZ3RgbMap: "DOCS",
+  z3RgbMap: "DOCS",
   stimParams: cloneDefaultStimParams()
 };
 
+function loadInitialZ3RgbMap() {
+  let saved = "DOCS";
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(STORAGE_KEY_Z3_RGB_MAP);
+      if (raw && Z3_RGB_MAPS[raw]) saved = raw;
+    }
+  } catch (_) {}
+  state.unitZ3RgbMap = saved;
+  state.z3RgbMap = saved;
+  applyZ3RgbMapToCatalogs(saved);
+}
+
+function saveUnitZ3RgbMap(mapId) {
+  const validId = applyZ3RgbMapToCatalogs(mapId);
+  state.unitZ3RgbMap = validId;
+  state.z3RgbMap = validId;
+  try {
+    if (typeof localStorage !== "undefined") {
+      if (validId === "DOCS") localStorage.removeItem(STORAGE_KEY_Z3_RGB_MAP);
+      else localStorage.setItem(STORAGE_KEY_Z3_RGB_MAP, validId);
+    }
+  } catch (_) {}
+  return validId;
+}
+
 // Resets all assay state and form controls to factory defaults while preserving
-// calibrated plateGeometries, profileName, plateConfigUpdatedAt, and unsavedFileChanges.
+// calibrated plateGeometries, profileName, plateConfigUpdatedAt, unsavedFileChanges, and unitZ3RgbMap.
 function resetAssayFieldsAndDom() {
   state.organism = "daphnia";
   state.plateId = "24well";
   state.stimId = "ld_transitions";
   state.activeStep = 4;
   state.showUnderTracks = false;
+  state.z3RgbMap = state.unitZ3RgbMap || "DOCS";
   state.timelineClips = cloneDefaultTimelineClips();
   state.selectedClipId = 2;
   state.stimParams = cloneDefaultStimParams();
@@ -249,7 +278,10 @@ function resetAssayFieldsAndDom() {
     simState.speed = 1;
   }
 
-  if (typeof document === "undefined") return;
+  if (typeof document === "undefined") {
+    applyZ3RgbMapToCatalogs(state.z3RgbMap);
+    return;
+  }
 
   const setVal = (id, v) => {
     const el = document.getElementById(id);
@@ -267,6 +299,7 @@ function resetAssayFieldsAndDom() {
   setVal("ledColor", "WHITE");
   setVal("ledBrightness", 100);
   setVal("ledMount", "OVERHEAD");
+  applyZ3RgbMapToCatalogs(state.z3RgbMap);
 
   setChk("chk_dist", true);
   setChk("chk_msd", true);

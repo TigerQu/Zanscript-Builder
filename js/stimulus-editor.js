@@ -538,11 +538,13 @@ function renderStimParams() {
     }
 
     function formatClipLabel(c, tr, totalSec) {
-      const dur = Math.max(0, c.endSec - c.startSec);
+      const effStart = Math.max(0, c.startSec);
+      const effEnd = Math.min(totalSec, c.endSec);
+      const dur = Math.max(0, effEnd - effStart);
       const ratio = dur / Math.max(1, totalSec);
       if (ratio < 0.055) return "";
       const main = tr.kind === "temp" ? `${c.val}°C` : (hwIsZ3 ? `${c.val}%` : "ON");
-      return ratio >= 0.18 ? `${main} (${c.startSec}-${c.endSec}s)` : main;
+      return ratio >= 0.18 ? `${main} (${effStart}-${effEnd}s)` : main;
     }
 
     let cachedGridPct = null;

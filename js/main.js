@@ -5,6 +5,7 @@
 // Initialize app
 function init() {
   loadInitialPlateConfig();
+  loadInitialZ3RgbMap();
   resetAssayFieldsAndDom();
 
   // Bring back the last experiment edited in this browser (if any)

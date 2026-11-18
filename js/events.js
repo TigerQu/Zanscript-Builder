@@ -144,7 +144,7 @@ function bindEvents() {
   [
     "videoMode", "chk_tracks", "chk_heatmap", "expPrefix", "hwVersion", "ledColor",
     "targetSize", "detThreshold", "msdThreshold", "autorefTimeout",
-    "thermostatTemp", "chk_thermostat", "ledBrightness", "ledMount"
+    "thermostatTemp", "chk_thermostat", "ledBrightness", "ledMount", "z3RgbMap"
   ].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -156,8 +156,12 @@ function bindEvents() {
       refreshAll();
     });
     el.addEventListener("change", () => {
-      if (id === "hwVersion" && state.stimId === "multi_phase") {
-        renderStimParams();
+      if (id === "z3RgbMap") {
+        saveUnitZ3RgbMap(el.value);
+        if (state.stimId === "multi_phase") renderStimParams();
+      } else if (id === "hwVersion") {
+        applyZ3RgbMapToCatalogs(state.z3RgbMap);
+        if (state.stimId === "multi_phase") renderStimParams();
       }
       refreshAll();
     });

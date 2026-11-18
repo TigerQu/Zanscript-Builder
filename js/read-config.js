@@ -32,6 +32,9 @@ function readConfig() {
   const autorefTimeout = Math.max(0, parseInt(document.getElementById("autorefTimeout").value, 10) || 60);
   const thermostatTemp = parseFloat(document.getElementById("thermostatTemp").value) || 22;
   const useThermostat = document.getElementById("chk_thermostat").checked;
+  const z3RgbMapEl = document.getElementById("z3RgbMap");
+  const z3RgbMap = applyZ3RgbMapToCatalogs(z3RgbMapEl ? z3RgbMapEl.value : state.z3RgbMap);
+  state.z3RgbMap = z3RgbMap;
   const ledColorRaw = document.getElementById("ledColor") ? document.getElementById("ledColor").value : "WHITE";
   const ledColorObj = LED_COLORS[ledColorRaw] || LED_COLORS.WHITE;
   const ledPct = Math.min(100, Math.max(5, parseFloat(document.getElementById("ledBrightness").value) || 100));
@@ -71,6 +74,7 @@ function readConfig() {
     ledPct,
     ledDriveVal,
     ledMount,
+    z3RgbMap,
     useTopLight,
     useUnderLight,
     useDist,

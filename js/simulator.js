@@ -278,8 +278,12 @@ function renderSimulatorFrame(cfgIn) {
     const thermStr = sampled.tempC !== null ? `THERMOSTAT=${sampled.tempC.toFixed(1)}\u00B0C` : "THERMOSTAT=OFF";
     const vibStr = sampled.vibration ? ` \u00B7 <code>ZCOMMAND("${sampled.vibration} ...")</code>` : "";
     if (cfg.hw === "Z3") {
-      const topOrder = [["UV", 0], ["BLUE", 1], ["GREEN", 3], ["WHITE", 4], ["RED", 5]];
-      const botOrder = [["UV", 8], ["BLUE", 9], ["GREEN", 11], ["WHITE", 12], ["RED", 13]];
+      const topOrder = ledIds
+        .map(cid => [cid, LED_COLORS[cid].z3Over])
+        .sort((a, b) => a[1] - b[1]);
+      const botOrder = ledIds
+        .map(cid => [cid, LED_COLORS[cid].z3Under])
+        .sort((a, b) => a[1] - b[1]);
       const topPairs = topOrder
         .filter(([cid]) => (sampled.topChannels[cid] || 0) > 0)
         .map(([cid, ch]) => `Ch${ch}:${Math.round(((sampled.topChannels[cid] || 0) / 100) * 4095)}`);

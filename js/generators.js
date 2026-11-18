@@ -135,7 +135,7 @@ function buildSliceLightLines(cfg, topLights, bottomLights, forceManageBottom) {
   for (const l of (bottomLights || [])) botById[l.id] = l;
 
   if (cfg.hw === "Z3") {
-    const order = ["UV", "BLUE", "GREEN", "WHITE", "RED"];
+    const order = ["UV", "BLUE", "GREEN", "WHITE", "RED"].sort((a, b) => LED_COLORS[a].z3Over - LED_COLORS[b].z3Over);
     const allClips = cfg.timelineClips || [];
     const acclimId = (cfg.sp && cfg.sp.mpAcclimLight) || "DARK";
     const hasTopRgbNow = Boolean(topById.BLUE || topById.GREEN || topById.RED);
@@ -394,6 +394,9 @@ function generateStep3(cfg) {
   if (cfg.hw === "Z3") {
     lines.push("DEFINE X_LED_DRIVE 30039");
     lines.push(`DEFINE LED_BRIGHTNESS ${cfg.ledDriveVal}`);
+    if (cfg.z3RgbMap === "GRB_SHIFT") {
+      lines.push("# Z3 RGB Channel Map: Alternate Batch (Ch 1/9=Green, 3/11=Red, 5/13=Blue)");
+    }
   }
   if (step3UseTherm) {
     lines.push(`SET(THERMOSTAT,${step3Temp})`);
@@ -1180,6 +1183,9 @@ function generateStep4(cfg) {
   if (cfg.hw === "Z3") {
     out.push("DEFINE X_LED_DRIVE 30039");
     out.push(`DEFINE LED_BRIGHTNESS ${cfg.ledDriveVal}`);
+    if (cfg.z3RgbMap === "GRB_SHIFT") {
+      out.push("# Z3 RGB Channel Map: Alternate Batch (Ch 1/9=Green, 3/11=Red, 5/13=Blue)");
+    }
   }
   if (cfg.useTracks) {
     out.push("DEFINE X_DRAWTRACKS 30011");

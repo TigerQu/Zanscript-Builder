@@ -45,19 +45,23 @@ function buildExperimentPayload() {
     if (el) inputs[id] = prop === "checked" ? Boolean(el.checked) : String(el.value);
   }
   const geo = state.plateGeometries[state.plateId];
+  const experiment = {
+    organism: state.organism,
+    plateId: state.plateId,
+    stimId: state.stimId,
+    inputs,
+    stimParams: { ...state.stimParams },
+    timelineClips: state.timelineClips.map(c => ({ track: c.track, startSec: c.startSec, endSec: c.endSec, val: c.val })),
+    showUnderTracks: Boolean(state.showUnderTracks)
+  };
+  if (state.z3RgbMap && state.z3RgbMap !== "DOCS") {
+    experiment.z3RgbMap = state.z3RgbMap;
+  }
   return {
     format: EXPERIMENT_FORMAT,
     version: EXPERIMENT_VERSION,
     savedAt: new Date().toISOString(),
-    experiment: {
-      organism: state.organism,
-      plateId: state.plateId,
-      stimId: state.stimId,
-      inputs,
-      stimParams: { ...state.stimParams },
-      timelineClips: state.timelineClips.map(c => ({ track: c.track, startSec: c.startSec, endSec: c.endSec, val: c.val })),
-      showUnderTracks: Boolean(state.showUnderTracks)
-    },
+    experiment,
     // For reference only (not applied on open): the offsets these scripts were generated with
     plateGeometry: geo ? { plateId: state.plateId, ...geo } : null
   };
@@ -142,6 +146,14 @@ function applyExperimentData(payload, opts) {
 
   if (typeof pauseSimulator === "function" && render) pauseSimulator();
   resetAssayFieldsAndDom();
+
+  if (exp.z3RgbMap) {
+    if (Z3_RGB_MAPS[exp.z3RgbMap]) {
+      state.z3RgbMap = applyZ3RgbMapToCatalogs(exp.z3RgbMap);
+    } else {
+      notes.push(`unknown z3RgbMap "${exp.z3RgbMap}"`);
+    }
+  }
 
   const presetObj = ORGANISM_PRESETS.find(o => o.id === exp.organism);
   if (exp.organism === "custom" || presetObj) {

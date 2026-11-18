@@ -532,6 +532,69 @@ try {
         ok ? "" : JSON.stringify(gateCheck));
       await page.close();
     }
+
+    // 6g. Z3 RGB Channel Map (DOCS default vs GRB_SHIFT hardware batch) + truncated NLE clip label
+    {
+      const { page } = await openFreshPage("#study");
+      const mapCheck = await page.evaluate(() => {
+        const defaultMap = document.getElementById("z3RgbMap").value;
+
+        // Switch to GRB_SHIFT (1:Green, 3:Red, 5:Blue) via UI change event
+        const sel = document.getElementById("z3RgbMap");
+        sel.value = "GRB_SHIFT";
+        sel.dispatchEvent(new Event("change"));
+
+        document.getElementById("ledColor").value = "BLUE";
+        document.getElementById("ledMount").value = "BOTH";
+        refreshAll();
+        const blueSingleCode = refreshAll._latestBundle[4].code;
+        const blueOptLabel = [...document.getElementById("ledColor").options].find(o => o.value === "BLUE").textContent;
+
+        // Multi-track: Blue 0-40s, Green 40-80s, Red 80-100s, White 0-180s on a 100s timeline
+        state.stimId = "multi_phase";
+        state.stimParams.mpTimelineSec = 100;
+        state.timelineClips = [
+          { id: 1, track: "WHITE", startSec: 0, endSec: 180, val: 35 },
+          { id: 2, track: "BLUE", startSec: 0, endSec: 40, val: 100 },
+          { id: 3, track: "GREEN", startSec: 40, endSec: 80, val: 100 },
+          { id: 4, track: "U_RED", startSec: 80, endSec: 100, val: 100 }
+        ];
+        state.selectedClipId = 2;
+        renderStimParams();
+        refreshAll();
+        setSimulatorTime(195); // acclim(120) + autoref(60) = 180s -> t=195s is inside S1 (Blue + White)
+
+        const mpCode = refreshAll._latestBundle[4].code;
+        const s1Block = mpCode.split("ACTION RUN_S1")[1].split("COMPLETE")[0];
+        const s2Block = mpCode.split("ACTION RUN_S2")[1].split("COMPLETE")[0];
+        const s3Block = mpCode.split("ACTION RUN_S3")[1].split("COMPLETE")[0];
+        const whiteClipText = document.querySelector('.nle-clip[data-clip-id="1"] .nle-clip-label').textContent;
+        const hwReadout = document.getElementById("simHwReadout").textContent;
+        const savedPayload = buildExperimentPayload();
+
+        // Reset Assay should preserve unit's GRB_SHIFT wiring preference!
+        document.getElementById("resetBtn").click();
+        const keptAfterReset = document.getElementById("z3RgbMap").value === "GRB_SHIFT" && state.z3RgbMap === "GRB_SHIFT";
+
+        return {
+          defaultDocs: defaultMap === "DOCS",
+          blueSingleCh5And13: blueSingleCode.includes("SET(X_LED_DRIVE,5,LED_BRIGHTNESS)") &&
+            blueSingleCode.includes("SET(X_LED_DRIVE,13,LED_BRIGHTNESS)"),
+          blueOptLabelUpdated: blueOptLabel.includes("Ch 5 / 13"),
+          s1BlueOnCh5: s1Block.includes("SET(X_LED_DRIVE,5,4095)") && s1Block.includes("SET(X_LED_DRIVE,1,0)"),
+          s2GreenOnCh1: s2Block.includes("SET(X_LED_DRIVE,1,4095)") && s2Block.includes("SET(X_LED_DRIVE,5,0)"),
+          s3BotRedOnCh11: s3Block.includes("SET(X_LED_DRIVE,11,4095)"),
+          truncatedClipLabel: whiteClipText === "35% (0-100s)",
+          simReadoutCh5: hwReadout.includes("Ch5:4095") && hwReadout.includes("Ch4:1433"),
+          payloadHasMap: savedPayload.experiment.z3RgbMap === "GRB_SHIFT",
+          keptAfterReset
+        };
+      });
+      const ok = Object.values(mapCheck).every(Boolean);
+      report(ok, "Z3 RGB Channel Map (DOCS vs GRB_SHIFT) updates .zs, UI, simulator, & persists per unit + truncated clip label",
+        ok ? "" : JSON.stringify(mapCheck));
+      await page.close();
+    }
   }
 } finally {
   await browser.close();
