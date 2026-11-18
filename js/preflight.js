@@ -12,29 +12,49 @@ const PREFLIGHT_ROOM_TEMP_C = 22;     // assumed room temperature for the heater
 const PREFLIGHT_HEATER_RISE_C = 10;   // MWP heaters regulate up to ~+10 °C above ambient
 const VIDEO_FPS = { "1fps": 1, "0.2fps": 0.2, "full": 30, "off": 0 };
 
-function collectTargetTemps(cfg) {
-  const temps = [];
-  if (cfg.useThermostat) temps.push(cfg.thermostatTemp);
+function resolveTargetTempInfo(cfg, mpComp) {
+  const sp = cfg.sp || state.stimParams;
   if (cfg.stimId === "temp_ramp") {
-    temps.push(...computeTempRampSteps(cfg.sp.rampStartTemp, cfg.sp.rampEndTemp, cfg.sp.rampStepTemp));
+    const steps = computeTempRampSteps(sp.rampStartTemp, sp.rampEndTemp, sp.rampStepTemp).filter(Number.isFinite);
+    return { temps: [...new Set(steps)], page: "stimulus" };
   }
   if (cfg.stimId === "multi_phase") {
-    for (const c of cfg.timelineClips) if (c.track === "TEMP") temps.push(parseFloat(c.val));
+    const comp = mpComp || compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp);
+    if (comp.hasAnyTempClip) {
+      const sliceTemps = comp.slices.map(s => s.effectiveTemp).filter(Number.isFinite);
+      return { temps: [...new Set(sliceTemps)], page: "stimulus" };
+    }
+    if (cfg.useThermostat && Number.isFinite(cfg.thermostatTemp)) {
+      return { temps: [cfg.thermostatTemp], page: "organism" };
+    }
+    return { temps: [], page: "organism" };
   }
-  return temps.filter(Number.isFinite);
+  if (cfg.useThermostat && Number.isFinite(cfg.thermostatTemp)) {
+    return { temps: [cfg.thermostatTemp], page: "organism" };
+  }
+  return { temps: [], page: "organism" };
+}
+
+function collectTargetTemps(cfg, mpComp) {
+  return resolveTargetTempInfo(cfg, mpComp).temps;
 }
 
 function fmtNum(n) {
   return Math.round(n).toLocaleString("en-US");
 }
 
-function computePreflightChecks(cfg, bundle) {
+function computePreflightChecks(cfgIn, bundleIn) {
+  const cfg = cfgIn || (typeof refreshAll === "function" && refreshAll._latestCfg) || readConfig();
+  const bundle = bundleIn || (typeof refreshAll === "function" && refreshAll._latestBundle) || generateAllSteps(cfg);
   const s4 = bundle[4];
-  const sp = cfg.sp;
+  const sp = cfg.sp || state.stimParams;
   const out = [];
   const add = (level, title, detail, page) => out.push({ level, title, detail: detail || "", page: page || "" });
   const runtimeH = s4.totalRuntimeSec / 3600;
   const stim = STIMULI.find(s => s.id === cfg.stimId);
+  const mpComp = cfg.stimId === "multi_phase"
+    ? compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp)
+    : null;
 
   // Names
   if (cfg.hasNonAsciiWarning) {
@@ -45,23 +65,67 @@ function computePreflightChecks(cfg, bundle) {
       `Files will be named "${s4.bundleFolder}". Add a name on the Study page to tell runs apart.`, "study");
   }
 
-  // Temperature
-  const temps = collectTargetTemps(cfg);
+  // Temperature (matches exact Step 3 / Step 4 SET(THERMOSTAT, ...) generation)
+  const { temps, page: tempPage } = resolveTargetTempInfo(cfg, mpComp);
   if (temps.length) {
     const maxT = Math.max(...temps), minT = Math.min(...temps);
     const ceiling = PREFLIGHT_ROOM_TEMP_C + PREFLIGHT_HEATER_RISE_C;
     if (maxT > ceiling) {
       add("warn", `Target temperature up to ${maxT} °C`,
         `MWP heaters regulate from room temperature up to about ${PREFLIGHT_HEATER_RISE_C} °C above it (about ${ceiling} °C in a ${PREFLIGHT_ROOM_TEMP_C} °C room). Check that your room is warm enough.`,
-        cfg.stimId === "temp_ramp" || cfg.stimId === "multi_phase" ? "stimulus" : "organism");
+        tempPage);
     }
     if (minT < PREFLIGHT_ROOM_TEMP_C - 2) {
       add("warn", `Target temperature as low as ${minT} °C`,
         "The heater can't cool below room temperature, so this target may never be reached.",
-        cfg.stimId === "temp_ramp" || cfg.stimId === "multi_phase" ? "stimulus" : "organism");
+        tempPage);
     }
     add("info", "Thermostat in use: check the fan",
       "Before starting, make sure the unit's cooling / circulation fan is connected and spinning.", "organism");
+
+    // Thermal equilibration & passive cooling lag notices
+    if (cfg.stimId === "temp_ramp") {
+      const steps = computeTempRampSteps(sp.rampStartTemp, sp.rampEndTemp, sp.rampStepTemp);
+      if (steps.length > 1) {
+        const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+        const holdRaw = Math.max(bin, parseInt(sp.rampHoldSec, 10) || 300);
+        const actualHoldSec = Math.max(1, Math.round(holdRaw / bin)) * bin;
+        const hasCooling = steps.some((t, i) => i > 0 && t < steps[i - 1] - 0.01);
+        if (actualHoldSec < 1200) {
+          add("info", `Short temperature hold (${actualHoldSec} s per step)`,
+            `Chamber water typically needs ~20-30 min per step to equilibrate${hasCooling ? " (and cools passively without active refrigeration)" : ""}. Use the logged TEMP_C column for actual measured temperature.`,
+            "stimulus");
+        } else if (hasCooling) {
+          add("info", "Downward temperature steps cool passively",
+            "Standard MWP units have no active chiller; cooling relies on ambient heat dissipation. Use the logged TEMP_C column for actual temperature.",
+            "stimulus");
+        }
+      }
+    } else if (cfg.stimId === "multi_phase" && mpComp && mpComp.anyTempChange) {
+      let minHoldAfterChange = Infinity;
+      let hasCooling = false;
+      for (let i = 1; i < mpComp.slices.length; i++) {
+        const prevT = mpComp.slices[i - 1].effectiveTemp;
+        const curT = mpComp.slices[i].effectiveTemp;
+        if (Math.abs(curT - prevT) > 0.01) {
+          if (curT < prevT - 0.01) hasCooling = true;
+          let hold = 0;
+          for (let j = i; j < mpComp.slices.length && Math.abs(mpComp.slices[j].effectiveTemp - curT) <= 0.01; j++) {
+            hold += mpComp.slices[j].bins * mpComp.bin;
+          }
+          if (hold < minHoldAfterChange) minHoldAfterChange = hold;
+        }
+      }
+      if (minHoldAfterChange < 1200) {
+        add("info", `Rapid mid-run temperature shift (${minHoldAfterChange} s window)`,
+          `Chamber water typically needs ~20-30 min to equilibrate${hasCooling ? " (and cools passively)" : ""}. Use the logged TEMP_C column for actual measured temperature.`,
+          "stimulus");
+      } else if (hasCooling) {
+        add("info", "Mid-run temperature drop cools passively",
+          "Standard MWP units have no active chiller; cooling relies on ambient heat dissipation. Check TEMP_C in the CSV.",
+          "stimulus");
+      }
+    }
   }
 
   // Short pulses
@@ -72,33 +136,72 @@ function computePreflightChecks(cfg, bundle) {
   }
 
   // Acclimation
-  if (cfg.stimId !== "circadian" && parseFloat(sp.acclimSec) === 0) {
+  if (cfg.stimId !== "circadian" && (parseFloat(sp.acclimSec) || 0) <= 0) {
     add("info", "No acclimation period", "Recording starts right after the plate goes in.", "stimulus");
   }
 
-  // Multi-track specifics
+  // UV LED check (only when Ch 0 / Ch 8 UV is actually driven in Step 3 / Step 4)
+  let usesUv = false;
+  let uvPage = "study";
   if (cfg.stimId === "multi_phase") {
-    const lightClips = cfg.timelineClips.filter(c => c.track !== "TEMP");
-    if (!cfg.timelineClips.length) {
-      add("warn", "Multi-track timeline is empty", "The run will stay dark (IR tracking only) for the whole timeline.", "stimulus");
-    } else if (!lightClips.length) {
+    usesUv = sp.mpAcclimLight === "UV" ||
+      mpComp.slices.some(sl => sl.topLights.some(l => l.id === "UV") || sl.bottomLights.some(l => l.id === "UV"));
+    uvPage = "stimulus";
+  } else if (cfg.stimId === "baseline") {
+    usesUv = sp.baseLight !== "DARK" && cfg.ledColor === "UV";
+  } else if (cfg.stimId === "vibration_startle") {
+    usesUv = sp.vibAmbient === "LIGHT" && cfg.ledColor === "UV";
+  } else if (cfg.stimId === "temp_ramp") {
+    usesUv = sp.rampLight === "LIGHT" && cfg.ledColor === "UV";
+  } else if (cfg.stimId === "circadian") {
+    usesUv = (parseFloat(sp.lightHours) || 0) > 0 && cfg.ledColor === "UV";
+  } else {
+    // ld_transitions, light_off_startle, light_on_pulse
+    usesUv = cfg.ledColor === "UV";
+  }
+
+  // Multi-track & Legacy MWP Z2 checks
+  if (cfg.stimId === "multi_phase") {
+    const hasCompiledLight = mpComp.slices.some(sl => sl.topLights.length > 0 || sl.bottomLights.length > 0);
+    if (!mpComp.hasAnyTempClip && !hasCompiledLight) {
+      if (!cfg.timelineClips.length) {
+        add("warn", "Multi-track timeline is empty", "The run will stay dark (IR tracking only) for the whole timeline.", "stimulus");
+      } else {
+        add("warn", "Multi-track timeline has no active clips",
+          "All clips lie outside the timeline length, so the run will stay dark (IR tracking only) for the whole timeline.", "stimulus");
+      }
+    } else if (!hasCompiledLight) {
       add("info", "No LED clips on the timeline", "Only temperature changes; the chamber stays dark (IR only).", "stimulus");
     }
+
     if (cfg.hw !== "Z3") {
-      if (lightClips.length) {
+      if (hasCompiledLight) {
         add("info", "Brightness levels need an MWP Z3", "On Z2 / Z2S units LED clips simply switch lights on or off.", "study");
       }
-      if (cfg.timelineClips.some(c => String(c.track).startsWith("U_"))) {
-        add("warn", "Bottom LED clips need an MWP Z3", "Bottom LEDs use Z3 channels 8-13.", "stimulus");
+      if (mpComp.hasAnyBottomClip) {
+        add("warn", "Bottom LED clips need an MWP Z3", "Bottom LEDs use Z3 channels 8-13; MWP Z2 / Z2S GPO6-8 has no independent underneath channel.", "stimulus");
+      } else if (sp.mpAcclimLight !== "DARK" && cfg.ledMount !== "OVERHEAD") {
+        add("warn", "Underneath LED mount needs an MWP Z3", "MWP Z2 / Z2S GPO6-8 has no independent underneath channel.", "study");
       }
+      if (usesUv) {
+        add("warn", "UV (365 nm) requires an MWP Z3", "MWP Z2 / Z2S GPO6-8 is RGB only (no 365 nm UV channel); UV falls back to GPO8 (Blue).", "stimulus");
+      }
+    }
+  } else if (cfg.hw !== "Z3") {
+    if (cfg.ledMount !== "OVERHEAD") {
+      add("warn", "Underneath LED mount needs an MWP Z3", "MWP Z2 / Z2S GPO6-8 has no independent underneath channel.", "study");
+    }
+    if (cfg.ledColor === "UV") {
+      add("warn", "UV (365 nm) requires an MWP Z3", "MWP Z2 / Z2S GPO6-8 is RGB only (no 365 nm UV channel); generated scripts fall back to GPO8 (Blue).", "study");
+    }
+    if (cfg.ledPct < 100) {
+      add("info", "Brightness levels need an MWP Z3", "On Z2 / Z2S units GPO6-8 channels switch full on or off without PWM dimming.", "study");
     }
   }
 
-  // UV
-  const usesUvClip = cfg.stimId === "multi_phase" && cfg.timelineClips.some(c => c.track === "UV" || c.track === "U_UV");
-  const usesUvLight = cfg.stimId !== "multi_phase" && cfg.stimId !== "temp_ramp" && cfg.ledColor === "UV";
-  if (usesUvClip || usesUvLight) {
-    add("info", "UV light selected", "UV (365 nm) LEDs are only present on units fitted with them.", usesUvClip ? "stimulus" : "study");
+  // UV (on MWP Z3, where UV is an optional hardware LED option)
+  if (usesUv && cfg.hw === "Z3") {
+    add("info", "UV light selected", "UV (365 nm) LEDs are only present on units fitted with them.", uvPage);
   }
 
   // Video size
@@ -136,6 +239,10 @@ function computePreflightChecks(cfg, bundle) {
 
   const rank = { warn: 0, info: 1, ok: 2 };
   return out.sort((a, b) => rank[a.level] - rank[b.level]);
+}
+
+function runPreflightChecks(cfg, bundle) {
+  return computePreflightChecks(cfg, bundle);
 }
 
 const PREFLIGHT_PAGE_LABELS = {

@@ -198,7 +198,7 @@ COMPLETE
 # Required asset(s) in unit Assets folder: "aPD.bmp"
 
 DEFINE TIME_BIN 30
-DEFINE HALF_HOUR_BINS 59  # 2 x 59 x 30s + 60s autoref = ~1 hour
+DEFINE HALF_HOUR_BINS 55  # 2 x 55 x 30s + 300s autoref = ~1 hour
 DEFINE LIGHT_HOURS 12
 DEFINE DARK_HOURS 12
 DEFINE NUM_DAYS 3
@@ -214,8 +214,8 @@ DEFINE X_TRACKTIME 30016
 # SET(THERMOSTAT,21)  # Thermostat disabled
 SET(TARGET_SIZE,3)
 SET(DETECTOR_THRESHOLD,6)
-SET(AUTOREF_MODE,MOVEMENT)
-SET(AUTOREF_TIMEOUT,60)
+SET(AUTOREF_MODE,2)
+SET(AUTOREF_TIMEOUT,300)
 TargetMarker(1.8,1,1)
 SET(MSD_MODE,ON)
 SET(MSD_THRESHOLD,6)
@@ -321,7 +321,7 @@ Config Profile   : Default
 Plate Geometry   : X_OFFSET=67, Y_OFFSET=43, COL_STEP=19.3, ROW_STEP=19.3, RADIUS=44, INNER_ZONE=31.8 mm
 Hardware Target  : MWP Z3
 Stimulus Protocol: Long-Term Cycle
-Estimated Runtime: 72h 01m (8496 CSV rows)
+Estimated Runtime: 72h 05m (7920 CSV rows)
 
 EXECUTION ORDER IN ZANTIKS CONTROL CONSOLE
 ------------------------------------------

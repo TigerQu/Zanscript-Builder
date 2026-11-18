@@ -183,6 +183,7 @@ function bindEvents() {
       const ae = document.activeElement;
       const tag = ae && ae.tagName ? ae.tagName.toUpperCase() : "";
       const inType = ae && ae.getAttribute ? String(ae.getAttribute("type") || "").toLowerCase() : "";
+      const isRangeInput = tag === "INPUT" && inType === "range";
       const isTypingField =
         (tag === "INPUT" && inType !== "range" && inType !== "checkbox" && inType !== "button") ||
         tag === "TEXTAREA" ||
@@ -199,7 +200,7 @@ function bindEvents() {
       } else if (e.key === "Escape" && state.selectedClipId !== null) {
         e.preventDefault();
         if (spBox._deselectClip) spBox._deselectClip();
-      } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && state.selectedClipId !== null) {
+      } else if (!isRangeInput && (e.key === "ArrowLeft" || e.key === "ArrowRight") && state.selectedClipId !== null) {
         e.preventDefault();
         const stepMul = e.shiftKey ? 5 : 1;
         if (spBox._nudgeSelectedClip) spBox._nudgeSelectedClip((e.key === "ArrowLeft" ? -1 : 1) * stepMul);
@@ -308,51 +309,11 @@ function bindEvents() {
     showToast(`Downloaded ${folder}_scripts.zip`);
   });
 
-  // Reset Assay button (preserves calibrated plate offsets!)
+  // Reset Assay button (preserves calibrated plate offsets & clears autosave synchronously!)
   document.getElementById("resetBtn").addEventListener("click", () => {
     pauseSimulator();
-    simState.tSec = 0;
-    simState.speed = 1;
-    const spSel = document.getElementById("simSpeedSel");
-    if (spSel) spSel.value = "1";
-
-    state.organism = "daphnia";
-    state.plateId = "24well";
-    state.stimId = "ld_transitions";
-    state.activeStep = 4;
-    state.showUnderTracks = false;
-    state.timelineClips = cloneDefaultTimelineClips();
-    state.selectedClipId = state.timelineClips.length > 1 ? state.timelineClips[1].id : (state.timelineClips[0] ? state.timelineClips[0].id : null);
-    state.stimParams.mpTimelineSec = 180;
-    state.stimParams.mpAcclimLight = "DARK";
-    state.stimParams.mpCycles = 1;
-    state.stimParams.rampStartTemp = 20;
-    state.stimParams.rampEndTemp = 30;
-    state.stimParams.rampStepTemp = 2;
-    state.stimParams.rampHoldSec = 300;
-    state.stimParams.rampLight = "DARK";
-    document.getElementById("userName").value = "";
-    document.getElementById("expPrefix").value = "";
-    document.getElementById("hwVersion").value = "Z3";
-    document.getElementById("ledColor").value = "WHITE";
-    document.getElementById("chk_dist").checked = true;
-    document.getElementById("chk_msd").checked = true;
-    document.getElementById("chk_zones").checked = false;
-    document.getElementById("chk_xy").checked = false;
-    document.getElementById("videoMode").value = "1fps";
-    document.getElementById("chk_tracks").checked = true;
-    document.getElementById("chk_heatmap").checked = false;
-    document.getElementById("ledBrightness").value = 100;
-    const mountEl = document.getElementById("ledMount");
-    if (mountEl) mountEl.value = "OVERHEAD";
-
-    const daph = ORGANISM_PRESETS[0];
-    document.getElementById("targetSize").value = daph.targetSize;
-    document.getElementById("detThreshold").value = daph.detThreshold;
-    document.getElementById("msdThreshold").value = daph.msdThreshold;
-    document.getElementById("thermostatTemp").value = daph.temp;
-    document.getElementById("chk_thermostat").checked = daph.thermostat;
-    document.getElementById("autorefTimeout").value = 60;
+    clearExperimentAutosave();
+    resetAssayFieldsAndDom();
 
     syncGeoInputsToActivePlate();
     syncCheckStyles();
@@ -360,10 +321,9 @@ function bindEvents() {
     renderPlateGrid();
     renderStimGrid();
     renderStimParams();
-    document.querySelectorAll("#stepTabs .tab-btn").forEach(b => {
-      b.classList.toggle("active", b.getAttribute("data-step") === "4");
-    });
     refreshAll();
+    clearExperimentAutosave();
+    setText("autosaveStatus", "Auto-saved in this browser");
     showToast("Reset assay settings (plate calibration kept)");
   });
 }

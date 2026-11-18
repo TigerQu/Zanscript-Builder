@@ -900,7 +900,7 @@ function generateStep4(cfg) {
     const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
     const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
     const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    const autoref = Math.min(300, Math.max(10, cfg.autorefTimeout || 60));
+    const autoref = 300;
     const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
     const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
 
@@ -988,7 +988,7 @@ function generateStep4(cfg) {
     );
 
     const hrsTotal = days * (lightHrs + darkHrs);
-    totalRuntimeSec = cfg.autorefTimeout + hrsTotal * (2 * halfBins * bin + autoref);
+    totalRuntimeSec = autoref + hrsTotal * (2 * halfBins * bin + autoref);
     totalRows = hrsTotal * 2 * halfBins;
 
   } else if (cfg.stimId === "multi_phase") {
@@ -1162,8 +1162,8 @@ function generateStep4(cfg) {
   out.push(
     `SET(TARGET_SIZE,${cfg.targetSize})`,
     `SET(DETECTOR_THRESHOLD,${cfg.detThreshold})`,
-    "SET(AUTOREF_MODE,MOVEMENT)",
-    `SET(AUTOREF_TIMEOUT,${cfg.stimId === "circadian" ? Math.min(300, Math.max(10, cfg.autorefTimeout || 60)) : cfg.autorefTimeout})`,
+    cfg.stimId === "circadian" ? "SET(AUTOREF_MODE,2)" : "SET(AUTOREF_MODE,MOVEMENT)",
+    `SET(AUTOREF_TIMEOUT,${cfg.stimId === "circadian" ? 300 : cfg.autorefTimeout})`,
     `TargetMarker(${Math.max(1, Number((cfg.targetSize * 0.6).toFixed(1)))},1,1)`
   );
 

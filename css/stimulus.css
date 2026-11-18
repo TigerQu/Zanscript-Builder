@@ -17,6 +17,13 @@
   cursor: pointer;
 }
 
+.sim-panel:has(#simScrubber:focus-visible) .timeline-bar {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(9, 105, 218, 0.18);
+}
+
 .timeline-bar .tl-seg {
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.55);
 }

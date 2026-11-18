@@ -868,7 +868,7 @@ function renderStimParams() {
 
         const cRect = clipEl.getBoundingClientRect();
         const handleAttr = e.target.getAttribute("data-handle");
-        const edgePx = cRect.width > 0 ? Math.min(12, Math.max(5, cRect.width * 0.28)) : 8;
+        const edgePx = cRect.width > 0 ? Math.min(10, Math.max(5, cRect.width * 0.28)) : 8;
         let mode = "move";
         if (handleAttr === "l" || (cRect.width > 0 && startX - cRect.left <= edgePx)) mode = "left";
         else if (handleAttr === "r" || (cRect.width > 0 && cRect.right - startX <= edgePx)) mode = "right";

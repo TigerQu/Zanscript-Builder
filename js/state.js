@@ -187,19 +187,8 @@ function computeTempRampSteps(startRaw, endRaw, stepRaw) {
   return steps;
 }
 
-const state = {
-  organism: "daphnia",
-  plateId: "24well",
-  stimId: "ld_transitions",
-  activeStep: 4,
-  profileName: "",
-  plateConfigUpdatedAt: null,
-  unsavedFileChanges: false,
-  plateGeometries: cloneDefaultGeometries(),
-  timelineClips: cloneDefaultTimelineClips(),
-  selectedClipId: 2,
-  showUnderTracks: false,
-  stimParams: {
+function cloneDefaultStimParams() {
+  return {
     baseLight: "LIGHT",
     acclimSec: 120,
     durationSec: 600,
@@ -225,5 +214,77 @@ const state = {
     rampStepTemp: 2,
     rampHoldSec: 300,
     rampLight: "DARK"
-  }
+  };
+}
+
+const state = {
+  organism: "daphnia",
+  plateId: "24well",
+  stimId: "ld_transitions",
+  activeStep: 4,
+  profileName: "",
+  plateConfigUpdatedAt: null,
+  unsavedFileChanges: false,
+  plateGeometries: cloneDefaultGeometries(),
+  timelineClips: cloneDefaultTimelineClips(),
+  selectedClipId: 2,
+  showUnderTracks: false,
+  stimParams: cloneDefaultStimParams()
 };
+
+// Resets all assay state and form controls to factory defaults while preserving
+// calibrated plateGeometries, profileName, plateConfigUpdatedAt, and unsavedFileChanges.
+function resetAssayFieldsAndDom() {
+  state.organism = "daphnia";
+  state.plateId = "24well";
+  state.stimId = "ld_transitions";
+  state.activeStep = 4;
+  state.showUnderTracks = false;
+  state.timelineClips = cloneDefaultTimelineClips();
+  state.selectedClipId = 2;
+  state.stimParams = cloneDefaultStimParams();
+
+  if (typeof simState !== "undefined") {
+    simState.tSec = 0;
+    simState.speed = 1;
+  }
+
+  if (typeof document === "undefined") return;
+
+  const setVal = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = String(v);
+  };
+  const setChk = (id, c) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = Boolean(c);
+  };
+
+  setVal("simSpeedSel", "1");
+  setVal("userName", "");
+  setVal("expPrefix", "");
+  setVal("hwVersion", "Z3");
+  setVal("ledColor", "WHITE");
+  setVal("ledBrightness", 100);
+  setVal("ledMount", "OVERHEAD");
+
+  setChk("chk_dist", true);
+  setChk("chk_msd", true);
+  setChk("chk_zones", false);
+  setChk("chk_xy", false);
+  setVal("videoMode", "1fps");
+  setChk("chk_tracks", true);
+  setChk("chk_heatmap", false);
+
+  const daph = ORGANISM_PRESETS[0];
+  setVal("targetSize", daph.targetSize);
+  setVal("detThreshold", daph.detThreshold);
+  setVal("msdThreshold", daph.msdThreshold);
+  setVal("thermostatTemp", daph.temp);
+  setChk("chk_thermostat", daph.thermostat);
+  setVal("autorefTimeout", 60);
+
+  document.querySelectorAll("#stepTabs .tab-btn").forEach(b => {
+    b.classList.toggle("active", b.getAttribute("data-step") === "4");
+  });
+}

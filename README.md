@@ -71,7 +71,7 @@ Zanscript-Builder/
 ├── package.json                    # Test tooling only (the app needs no install or build)
 ├── .github/workflows/tests.yml     # Runs the tests on every push and pull request
 ├── assets/                         # Walkthrough GIFs for documentation
-├── LICENSE                         # MIT License
+├── LICENSE                         # GNU AGPLv3 License
 └── README.md                       # Documentation & hardware verification matrix
 ```
 

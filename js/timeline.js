@@ -227,13 +227,13 @@ function renderTimeline(cfg, s4) {
     const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
     const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
     const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    const autoref = Math.min(300, Math.max(10, autorefBase || 60));
+    const autoref = 300;
     const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
     const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
     const hourDur = 2 * halfBins * bin + autoref;
     const n = Math.min(5, days);
-    preSetupSec = autorefBase;
-    let cursor = autorefBase;
+    preSetupSec = autoref;
+    let cursor = autoref;
     for (let i = 0; i < n; i++) {
       if (lightHrs > 0) {
         const segT0 = segs.length === 0 ? 0 : cursor;

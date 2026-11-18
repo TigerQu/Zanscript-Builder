@@ -81,17 +81,83 @@ function coerceLike(value, sample) {
   return sample;
 }
 
+// Sanitize imported timelineClips: valid track IDs, startSec >= 0, endSec > startSec,
+// clamped finite val (TEMP: [10, 40] default 22; LED: rounded [5, 100] default 100),
+// and trim/drop same-track overlaps in ascending start-time order while preserving cross-track order.
+function sanitizeTimelineClips(rawClips) {
+  const validTracks = new Set(NLE_TRACKS.map(t => t.id));
+  const byTrack = new Map();
+  let idx = 0;
+  for (const c of rawClips) {
+    const slot = idx++;
+    if (!c || typeof c !== "object" || !validTracks.has(c.track)) continue;
+    const rawS = parseFloat(c.startSec);
+    const rawE = parseFloat(c.endSec);
+    if (!Number.isFinite(rawS) || !Number.isFinite(rawE)) continue;
+    const startSec = Math.max(0, rawS);
+    const endSec = rawE;
+    if (endSec <= startSec) continue;
+    const rawVal = parseFloat(c.val);
+    const val = c.track === "TEMP"
+      ? (Number.isFinite(rawVal) ? Math.min(40, Math.max(10, Number(rawVal.toFixed(1)))) : 22)
+      : (Number.isFinite(rawVal) ? Math.min(100, Math.max(5, Math.round(rawVal))) : 100);
+    if (!byTrack.has(c.track)) byTrack.set(c.track, { slots: [], list: [] });
+    const bucket = byTrack.get(c.track);
+    bucket.slots.push(slot);
+    bucket.list.push({ track: c.track, startSec, endSec, val, _slot: slot });
+  }
+
+  const placed = [];
+  for (const { slots, list } of byTrack.values()) {
+    list.sort((a, b) => (a.startSec - b.startSec) || (a._slot - b._slot));
+    const kept = [];
+    let cursor = 0;
+    for (const item of list) {
+      const s = Math.max(cursor, item.startSec);
+      if (item.endSec <= s) continue;
+      kept.push({ track: item.track, startSec: s, endSec: item.endSec, val: item.val });
+      cursor = item.endSec;
+    }
+    for (let i = 0; i < kept.length; i++) {
+      placed.push({ order: slots[i], clip: kept[i] });
+    }
+  }
+
+  placed.sort((a, b) => a.order - b.order);
+  return placed.map((entry, i) => ({
+    id: i + 1,
+    track: entry.clip.track,
+    startSec: entry.clip.startSec,
+    endSec: entry.clip.endSec,
+    val: entry.clip.val
+  }));
+}
+
 // Apply a payload to state + form controls. With { render: false } only the
 // data is applied (used during start-up, which renders everything afterwards).
 function applyExperimentData(payload, opts) {
   const render = !opts || opts.render !== false;
-  const exp = payload.experiment || {};
+  const exp = (payload && payload.experiment) || {};
   const notes = [];
 
   if (typeof pauseSimulator === "function" && render) pauseSimulator();
-  if (typeof simState !== "undefined") simState.tSec = 0;
+  resetAssayFieldsAndDom();
 
-  if (exp.organism === "custom" || ORGANISM_PRESETS.some(o => o.id === exp.organism)) state.organism = exp.organism;
+  const presetObj = ORGANISM_PRESETS.find(o => o.id === exp.organism);
+  if (exp.organism === "custom" || presetObj) {
+    state.organism = exp.organism;
+    if (presetObj && exp.organism !== "custom" && typeof document !== "undefined") {
+      const setIf = (id, val) => { const el = document.getElementById(id); if (el) el.value = String(val); };
+      setIf("targetSize", presetObj.targetSize);
+      setIf("detThreshold", presetObj.detThreshold);
+      setIf("msdThreshold", presetObj.msdThreshold);
+      setIf("thermostatTemp", presetObj.temp);
+      const thEl = document.getElementById("chk_thermostat");
+      if (thEl) thEl.checked = Boolean(presetObj.thermostat);
+      const msdEl = document.getElementById("chk_msd");
+      if (msdEl) msdEl.checked = Boolean(presetObj.suggestMsd);
+    }
+  }
   if (FACTORY_PLATES[exp.plateId]) state.plateId = exp.plateId;
   else if (exp.plateId) notes.push(`unknown plate "${exp.plateId}"`);
   if (STIMULI.some(s => s.id === exp.stimId)) state.stimId = exp.stimId;
@@ -104,13 +170,7 @@ function applyExperimentData(payload, opts) {
   }
 
   if (Array.isArray(exp.timelineClips)) {
-    const validTracks = new Set(NLE_TRACKS.map(t => t.id));
-    const clips = [];
-    for (const c of exp.timelineClips) {
-      const s = parseFloat(c && c.startSec), e = parseFloat(c && c.endSec), v = parseFloat(c && c.val);
-      if (!c || !validTracks.has(c.track) || !Number.isFinite(s) || !Number.isFinite(e) || e <= s) continue;
-      clips.push({ id: clips.length + 1, track: c.track, startSec: s, endSec: e, val: Number.isFinite(v) ? v : 100 });
-    }
+    const clips = sanitizeTimelineClips(exp.timelineClips);
     state.timelineClips = clips;
     _nextClipId = Math.max(_nextClipId, clips.length + 1);
     state.selectedClipId = null;
@@ -133,8 +193,20 @@ function applyExperimentData(payload, opts) {
     }
   }
 
+  // Ensure at least one exported CSV metric is enabled
+  if (typeof document !== "undefined") {
+    const anyMetric = ["chk_dist", "chk_msd", "chk_zones", "chk_xy"].some(id => {
+      const el = document.getElementById(id);
+      return Boolean(el && el.checked);
+    });
+    if (!anyMetric) {
+      const distEl = document.getElementById("chk_dist");
+      if (distEl) distEl.checked = true;
+    }
+  }
+
   // Calibration stays with this browser/unit; just tell the user if it differs
-  const saved = payload.plateGeometry;
+  const saved = payload && payload.plateGeometry;
   const current = state.plateGeometries[state.plateId];
   if (saved && current && saved.plateId === state.plateId) {
     const differs = GEO_FIELDS.some(f => Math.abs((parseFloat(saved[f]) || 0) - (parseFloat(current[f]) || 0)) > 0.001);
@@ -156,6 +228,18 @@ function applyExperimentData(payload, opts) {
 // ---- Auto-save to this browser -------------------------------------------
 let _autosaveTimer = null;
 let _autosaveReady = false; // only start saving once start-up has finished
+
+function clearExperimentAutosave() {
+  if (_autosaveTimer !== null) {
+    clearTimeout(_autosaveTimer);
+    _autosaveTimer = null;
+  }
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(STORAGE_KEY_EXPERIMENT);
+    }
+  } catch (_) {}
+}
 
 function scheduleExperimentAutosave() {
   if (!_autosaveReady) return;

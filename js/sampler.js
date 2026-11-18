@@ -190,21 +190,21 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
     const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
     const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    const autoref = Math.min(300, Math.max(10, autorefBase || 60));
+    const autoref = 300;
     const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
     const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
     const hourDur = 2 * halfBins * bin + autoref;
     const hrsPerDay = lightHrs + darkHrs;
     const hrsTotal = days * hrsPerDay;
-    totalRuntimeSec = autorefBase + hrsTotal * hourDur;
+    totalRuntimeSec = autoref + hrsTotal * hourDur;
     const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
 
-    if (t < autorefBase || hrsPerDay === 0) {
+    if (t < autoref || hrsPerDay === 0) {
       setSingleChannelOn(colId);
       phaseName = "AUTOREFERENCING";
     } else {
       const dayDur = hrsPerDay * hourDur;
-      const rel = Math.min(Math.max(0, days * dayDur - 0.0001), t - autorefBase);
+      const rel = Math.min(Math.max(0, days * dayDur - 0.0001), t - autoref);
       const dayIdx = Math.min(days - 1, Math.floor(rel / dayDur));
       const inDay = rel - dayIdx * dayDur;
       const hrIdx = Math.min(hrsPerDay - 1, Math.floor(inDay / hourDur));
