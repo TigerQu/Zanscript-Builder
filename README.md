@@ -98,7 +98,7 @@ Zanscript-Builder/
 3. **Export your scripts** on the **Export** page:
    - Click **Download All 4 Scripts (.zip)** (also available in the top bar on every page) to get the complete experiment folder and `README_STEPS.txt`, **or**
    - Switch between tabs (**Step 1** – **Step 4**) to **Copy Script** / **Download `.zs`** individually.
-   - *Tip:* Click the filename badge above the code preview to copy the `.zs`-stripped service name directly for pasting into Zantiks' **Add Service** dialog.
+   - *Tip:* Click **Copy Slot Name** (or the filename badge) to copy the `.zs`-stripped service name (e.g. `04_qu_24w`) for pasting once into Zantiks **Settings → Zanscript shortcuts (Slots 1–20)**. Rebuilding the same slot script updates it in place without re-entering Settings, while `LOGFILE(0, ...)` tags every exported CSV with full protocol details.
    - Read the **Pre-flight Checks** at the top of the page first.
 4. **Keep or share the design**: it auto-saves in this browser. Use **Save as file** in the Run Summary to share it, and **Open…** to load an `experiment.json` or a downloaded scripts `.zip`.
 
@@ -139,12 +139,12 @@ All generated script permutations pass automated static checks (block closure, A
 
 Each configuration produces four coordinated Zanscript files designed to be executed in order on the Zantiks Control Console:
 
-| Step | Script Filename Pattern | Physical Setup | Purpose |
+| Step | Script / Slot Filename Pattern | Physical Setup | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Step 1** | `01_[lastname_]calibration.zs` | Black 96-well Zantiks calibration plate | Runs `Calibration(0)` once to establish camera millimeter scale. Skip if the unit is already calibrated and undisturbed. |
-| **Step 2** | `02_[lastname_]assets_<plate>.zs` | **Empty** experimental plate | Draws well arenas and 50/50 outer/inner zones onto Live View and saves `<arenaBmp>.bmp` and `<zoneBmp>.bmp` into the unit's `Assets` folder. |
-| **Step 3** | `03_[lastname_]track_check_<plate>.zs` | Experimental plate **with organisms** | *(Optional)* 1–2 min pre-check sweeping `TARGET_SIZE` and `DETECTOR_THRESHOLD` (2 to 10) on video so you can verify clean crosshair lock without background flicker. |
-| **Step 4** | `04_<prefix>_<stimulus>_<plate>.zs` | Experimental plate **with organisms** | Main assay script: loads `.bmp` assets, runs acclimation + `AUTOREFERENCE()`, executes the stimulus schedule, records video/overlays, and exports CSV data. |
+| **Step 1** | `01_[lastname_]cal.zs` | Black 96-well Zantiks calibration plate | Runs `Calibration(0)` once to establish camera millimeter scale. Skip if the unit is already calibrated and undisturbed. |
+| **Step 2** | `02_<lastname\|mwp>_<plateShort>.zs` | **Empty** experimental plate | Draws well arenas and 50/50 outer/inner zones onto Live View and saves `<arenaBmp>.bmp` and `<zoneBmp>.bmp` into the unit's `Assets` folder (`6w`, `12w`, `24w`, `24c`, `24sq`, `48w`, `96w`, `96sq`, `pd`). |
+| **Step 3** | `03_<lastname\|mwp>_<plateShort>.zs` | Experimental plate **with organisms** | *(Optional)* 1–2 min pre-check sweeping `TARGET_SIZE` and `DETECTOR_THRESHOLD` (2 to 10) on video; tags output CSV via `LOGFILE(0, "..._track_check_...")`. |
+| **Step 4** | `04_<prefix>_<plateShort>.zs` | Experimental plate **with organisms** | Short, stable slot name (e.g. `04_qu_24w`) for Zantiks' 20 service slots; automatically tags exported summary CSV (`LOGFILE(0, ...)`), XY CSV (`LOGFILE(1, ...)`), video (`VIDEO(...)`), and `.zip` folder with full protocol & timing details. |
 
 ---
 

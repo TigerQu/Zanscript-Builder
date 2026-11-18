@@ -1,4 +1,4 @@
-===== 01_calibration.zs =====
+===== 01_cal.zs =====
 # Step 1: Camera Scale Calibration
 # Insert the black 96-well Zantiks calibration plate into the MWP stand.
 # Only needed once during initial setup or if the camera/stand is moved.
@@ -10,7 +10,7 @@ ACTION MAIN
 COMPLETE
 
 
-===== 02_assets_petri.zs =====
+===== 02_mwp_pd.zs =====
 # Step 2: Plate Arena & Dual-Zone Asset Builder (Petri Dish)
 # Config profile: Default MWP
 # Place an EMPTY Petri Dish plate into the MWP stand before running.
@@ -101,7 +101,7 @@ ACTION DRAW_GRID
 COMPLETE
 
 
-===== 03_track_check_petri.zs =====
+===== 03_mwp_pd.zs =====
 # Step 3: Organism Tracking Check (Petri Dish)
 # Optional 1-2 minute pre-check with animals loaded in the plate.
 # Sweeps TARGET_SIZE (2 to 5) and DETECTOR_THRESHOLD (2 to 10)
@@ -131,11 +131,12 @@ ACTION MAIN
     INVOKE(LIGHTS_ON,1)
     LOAD(ARENAS,"aPD.bmp")
 
+    LOGFILE(0,"mwp_track_check_pd")
     LOGCREATE("TEXT:RUNTIME|TEXT:UNIT_ID|TEXT:TEMP_C|TEXT:TARGET_SIZE|TEXT:DET_THRESHOLD|TEXT:TIME_BIN")
     LOGAPPEND("TEXT:DIST_A1")
     LOGRUN()
 
-    VIDEO(VIDEO_LENGTH,"mwp_track_check_petri")
+    VIDEO(VIDEO_LENGTH,"mwp_track_check_pd")
     LOAD(OVERLAY_TEXT,"1,1:AUTOREFERENCING       ")
     AUTOREFERENCE()
 
@@ -193,7 +194,7 @@ ACTION LIGHTS_OFF
 COMPLETE
 
 
-===== 04_mwp_circadian_petri.zs =====
+===== 04_mwp_pd.zs =====
 # Step 4: Main Assay Script (Petri Dish | Long-Term Cycle)
 # Required asset(s) in unit Assets folder: "aPD.bmp"
 
@@ -225,6 +226,7 @@ ACTION MAIN
     SET(COUNTER1,COUNTER_ZERO)
     LOAD(ARENAS,"aPD.bmp")
 
+    LOGFILE(0,"mwp_circadian_12l12d_3d_pd")
     INVOKE(SETUP_HEADERS,1)
 
     @DAY_VAR = 0
@@ -233,7 +235,7 @@ ACTION MAIN
     AUTOREFERENCE()
     SET(X_DRAWTRACKS,1)
     SET(X_TRACKTIME,15)
-    VIDEO(VIDEO_LENGTH,"mwp_circadian_petri")
+    VIDEO(VIDEO_LENGTH,"mwp_circadian_12l12d_3d_pd")
     VIDEOSKIP(29)
     INVOKE(RUN_DAY,NUM_DAYS)
 
@@ -325,18 +327,20 @@ Estimated Runtime: 72h 05m (7920 CSV rows)
 
 EXECUTION ORDER IN ZANTIKS CONTROL CONSOLE
 ------------------------------------------
-1. 01_calibration.zs
+1. 01_cal.zs
    - Run ONCE with the black 96-well calibration plate. Skip if already calibrated.
 
-2. 02_assets_petri.zs
+2. 02_mwp_pd.zs
    - Run ONCE with an EMPTY Petri Dish plate.
    - Generates "aPD.bmp" and "dzPD.bmp" inside the unit's Assets directory.
 
-3. 03_track_check_petri.zs (Optional)
+3. 03_mwp_pd.zs (Optional)
    - Run with organisms loaded to check TARGET_SIZE and DETECTOR_THRESHOLD on Live View.
 
-4. 04_mwp_circadian_petri.zs
+4. 04_mwp_pd.zs
    - Main assay script. Load your experimental plate, build, and run.
+   - Slot name for Settings -> Slots (1-20): "04_mwp_pd" (link once; rebuilding updates it in place).
+   - Exported CSV & video files are tagged automatically via LOGFILE(0,"mwp_circadian_12l12d_3d_pd").
    - Download exported .csv data from Control Console -> Data files when complete.
 
 UNIT REMINDERS

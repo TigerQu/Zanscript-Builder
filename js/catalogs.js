@@ -90,55 +90,55 @@ const ORGANISM_PRESETS = [
 
 const FACTORY_PLATES = {
   "6well": {
-    id: "6well", name: "6-Well", meta: "2 x 3 round",
+    id: "6well", shortCode: "6w", name: "6-Well", meta: "2 x 3 round",
     rows: 2, cols: 3, shape: "DISC",
     xOffset: 24.76, yOffset: 23.16, colStep: 39.12, rowStep: 39.12, r: 17.72, rDz: 12.73,
     arenaBmp: "a6", zoneBmp: "dz6", drawDelay: 0.3
   },
   "12well": {
-    id: "12well", name: "12-Well", meta: "3 x 4 round",
+    id: "12well", shortCode: "12w", name: "12-Well", meta: "3 x 4 round",
     rows: 3, cols: 4, shape: "DISC",
     xOffset: 24.94, yOffset: 16.79, colStep: 26.01, rowStep: 26.01, r: 11.4, rDz: 8.5,
     arenaBmp: "a12", zoneBmp: "dz12", drawDelay: 0.3
   },
   "24well": {
-    id: "24well", name: "24-Well", meta: "4 x 6 standard",
+    id: "24well", shortCode: "24w", name: "24-Well", meta: "4 x 6 standard",
     rows: 4, cols: 6, shape: "DISC",
     xOffset: 15.2, yOffset: 13.5, colStep: 19.47, rowStep: 19.16, r: 8.13, rDz: 5.6,
     arenaBmp: "a24", zoneBmp: "dz24", drawDelay: 0.25
   },
   "24costar": {
-    id: "24costar", name: "24-Well Costar", meta: "4 x 6 Costar",
+    id: "24costar", shortCode: "24c", name: "24-Well Costar", meta: "4 x 6 Costar",
     rows: 4, cols: 6, shape: "DISC",
     xOffset: 17.46, yOffset: 13.78, colStep: 19.3, rowStep: 19.3, r: 8.13, rDz: 5.65,
     arenaBmp: "a24c", zoneBmp: "dz24c", drawDelay: 0.25
   },
   "24square": {
-    id: "24square", name: "24-Well Square", meta: "4 x 6 square",
+    id: "24square", shortCode: "24sq", name: "24-Well Square", meta: "4 x 6 square",
     rows: 4, cols: 6, shape: "SQUARE",
     xOffset: 18.5, yOffset: 14.4, colStep: 18, rowStep: 18, r: 16.5, rDz: 12,
     arenaBmp: "a24sq", zoneBmp: "dz24sq", drawDelay: 0.25
   },
   "48well": {
-    id: "48well", name: "48-Well", meta: "6 x 8 round",
+    id: "48well", shortCode: "48w", name: "48-Well", meta: "6 x 8 round",
     rows: 6, cols: 8, shape: "DISC",
     xOffset: 18.4, yOffset: 10.28, colStep: 12.92, rowStep: 12.92, r: 5.19, rDz: 3.45,
     arenaBmp: "a48", zoneBmp: "dz48", drawDelay: 0.2
   },
   "96well": {
-    id: "96well", name: "96-Well", meta: "8 x 12 standard",
+    id: "96well", shortCode: "96w", name: "96-Well", meta: "8 x 12 standard",
     rows: 8, cols: 12, shape: "DISC",
     xOffset: 14.15, yOffset: 11.24, colStep: 9, rowStep: 9, r: 3.5, rDz: 2.47,
     arenaBmp: "a96", zoneBmp: "dz96", drawDelay: 0.15
   },
   "96square": {
-    id: "96square", name: "96-Well Square", meta: "8 x 12 square",
+    id: "96square", shortCode: "96sq", name: "96-Well Square", meta: "8 x 12 square",
     rows: 8, cols: 12, shape: "SQUARE",
     xOffset: 14.15, yOffset: 9.65, colStep: 9, rowStep: 9, r: 7.5, rDz: 4.5,
     arenaBmp: "a96_sq", zoneBmp: "dz96_sq", drawDelay: 0.15
   },
   "petri": {
-    id: "petri", name: "Petri Dish", meta: "1 x 1 (90 mm)",
+    id: "petri", shortCode: "pd", name: "Petri Dish", meta: "1 x 1 (90 mm)",
     rows: 1, cols: 1, shape: "DISC",
     xOffset: 67, yOffset: 43, colStep: 19.3, rowStep: 19.3, r: 44, rDz: 31.8,
     arenaBmp: "aPD", zoneBmp: "dzPD", drawDelay: 0.4

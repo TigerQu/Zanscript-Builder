@@ -1,4 +1,4 @@
-===== 01_lovelace_calibration.zs =====
+===== 01_lovelace_cal.zs =====
 # Step 1: Camera Scale Calibration
 # Researcher: Ada Lovelace (file tag: lovelace)
 # Insert the black 96-well Zantiks calibration plate into the MWP stand.
@@ -11,7 +11,7 @@ ACTION MAIN
 COMPLETE
 
 
-===== 02_lovelace_assets_24well.zs =====
+===== 02_lovelace_24w.zs =====
 # Step 2: Plate Arena & Dual-Zone Asset Builder (24-Well)
 # Researcher: Ada Lovelace (file tag: lovelace)
 # Config profile: Default MWP
@@ -103,7 +103,7 @@ ACTION DRAW_GRID
 COMPLETE
 
 
-===== 03_lovelace_track_check_24well.zs =====
+===== 03_lovelace_24w.zs =====
 # Step 3: Organism Tracking Check (24-Well)
 # Researcher: Ada Lovelace (file tag: lovelace)
 # Optional 1-2 minute pre-check with animals loaded in the plate.
@@ -134,6 +134,7 @@ ACTION MAIN
     INVOKE(LIGHTS_ON,1)
     LOAD(ARENAS,"a24.bmp")
 
+    LOGFILE(0,"lovelace_pilot1_track_check_24w")
     LOGCREATE("TEXT:RUNTIME|TEXT:UNIT_ID|TEXT:TEMP_C|TEXT:TARGET_SIZE|TEXT:DET_THRESHOLD|TEXT:TIME_BIN")
     LOGAPPEND("TEXT:DIST_A1|TEXT:DIST_A2|TEXT:DIST_A3|TEXT:DIST_A4|TEXT:DIST_A5|TEXT:DIST_A6")
     LOGAPPEND("TEXT:DIST_B1|TEXT:DIST_B2|TEXT:DIST_B3|TEXT:DIST_B4|TEXT:DIST_B5|TEXT:DIST_B6")
@@ -141,7 +142,7 @@ ACTION MAIN
     LOGAPPEND("TEXT:DIST_D1|TEXT:DIST_D2|TEXT:DIST_D3|TEXT:DIST_D4|TEXT:DIST_D5|TEXT:DIST_D6")
     LOGRUN()
 
-    VIDEO(VIDEO_LENGTH,"lovelace_pilot1_track_check_24well")
+    VIDEO(VIDEO_LENGTH,"lovelace_pilot1_track_check_24w")
     LOAD(OVERLAY_TEXT,"1,1:AUTOREFERENCING       ")
     AUTOREFERENCE()
 
@@ -201,7 +202,7 @@ ACTION LIGHTS_OFF
 COMPLETE
 
 
-===== 04_lovelace_pilot1_light_off_startle_24well.zs =====
+===== 04_lovelace_pilot1_24w.zs =====
 # Step 4: Main Assay Script (24-Well | Light-Off Startle)
 # Researcher: Ada Lovelace (file tag: lovelace)
 # Required asset(s) in unit Assets folder: "a24.bmp"
@@ -234,6 +235,7 @@ ACTION MAIN
     SET(COUNTER2,COUNTER_ZERO)
     LOAD(ARENAS,"a24.bmp")
 
+    LOGFILE(0,"lovelace_pilot1_light_off_7x0p5s_blue_24w")
     INVOKE(SETUP_HEADERS,1)
 
     INVOKE(LIGHTS_ON,1)
@@ -243,7 +245,7 @@ ACTION MAIN
     AUTOREFERENCE()
     SET(X_DRAWTRACKS,1)
     SET(X_TRACKTIME,15)
-    VIDEO(VIDEO_LENGTH,"lovelace_pilot1_light_off_startle_24well")
+    VIDEO(VIDEO_LENGTH,"lovelace_pilot1_light_off_7x0p5s_blue_24w")
     VIDEOSKIP(29)
     LOAD(OVERLAY_TEXT,"1,1:BASELINE              ")
     INVOKE(SAMPLE_BASELINE,BASELINE_BINS)
@@ -358,18 +360,20 @@ Estimated Runtime: 9m 22s (382 CSV rows)
 
 EXECUTION ORDER IN ZANTIKS CONTROL CONSOLE
 ------------------------------------------
-1. 01_lovelace_calibration.zs
+1. 01_lovelace_cal.zs
    - Run ONCE with the black 96-well calibration plate. Skip if already calibrated.
 
-2. 02_lovelace_assets_24well.zs
+2. 02_lovelace_24w.zs
    - Run ONCE with an EMPTY 24-Well plate.
    - Generates "a24.bmp" and "dz24.bmp" inside the unit's Assets directory.
 
-3. 03_lovelace_track_check_24well.zs (Optional)
+3. 03_lovelace_24w.zs (Optional)
    - Run with organisms loaded to check TARGET_SIZE and DETECTOR_THRESHOLD on Live View.
 
-4. 04_lovelace_pilot1_light_off_startle_24well.zs
+4. 04_lovelace_pilot1_24w.zs
    - Main assay script. Load your experimental plate, build, and run.
+   - Slot name for Settings -> Slots (1-20): "04_lovelace_pilot1_24w" (link once; rebuilding updates it in place).
+   - Exported CSV & video files are tagged automatically via LOGFILE(0,"lovelace_pilot1_light_off_7x0p5s_blue_24w").
    - Download exported .csv data from Control Console -> Data files when complete.
 
 UNIT REMINDERS

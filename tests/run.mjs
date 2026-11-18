@@ -595,6 +595,61 @@ try {
         ok ? "" : JSON.stringify(mapCheck));
       await page.close();
     }
+
+    // 6h. Short 20-slot .zs filenames (01..04_<lastName>_<plateShort>) + protocol-detailed LOGFILE(0, ...) CSV tags
+    {
+      const { page } = await openFreshPage("#study");
+      const slotCheck = await page.evaluate(() => {
+        document.getElementById("userName").value = "Tiger Qu";
+        document.getElementById("chk_xy").checked = true;
+        state.plateId = "24well";
+        state.stimId = "ld_transitions";
+        refreshAll();
+
+        const ldBundle = refreshAll._latestBundle;
+        const ldFiles = [ldBundle[1].filename, ldBundle[2].filename, ldBundle[3].filename, ldBundle[4].filename];
+        const ldCode = ldBundle[4].code;
+        const ldSlug = ldBundle[4].bundleFolder;
+
+        // Switch protocol on same plate -> .zs slot filename stays identical, LOGFILE(0) / VIDEO / XY tags change!
+        state.stimId = "multi_phase";
+        refreshAll();
+        const mpBundle = refreshAll._latestBundle;
+        const mpFile4 = mpBundle[4].filename;
+        const mpCode = mpBundle[4].code;
+        const mpSlug = mpBundle[4].bundleFolder;
+
+        // Optional Study Tag + Costar plate
+        document.getElementById("expPrefix").value = "2";
+        state.plateId = "24costar";
+        refreshAll();
+        const taggedFile4 = refreshAll._latestBundle[4].filename;
+        const taggedStep2 = refreshAll._latestBundle[2].filename;
+
+        const hasPlaceholderAttr = document.querySelectorAll("input[placeholder]").length > 0;
+        const hasCopySlotBtn = Boolean(document.getElementById("copySlotNameBtn"));
+
+        return {
+          shortFilesMatch: JSON.stringify(ldFiles) === JSON.stringify(["01_qu_cal.zs", "02_qu_24w.zs", "03_qu_24w.zs", "04_qu_24w.zs"]),
+          slotReusedAcrossProtocols: mpFile4 === "04_qu_24w.zs",
+          dataSlugsDiffer: ldSlug !== mpSlug && ldSlug === "qu_ld_2x300s_24w" && mpSlug === "qu_multi_track_1x180s_24w",
+          ldHasLogfile0: ldCode.includes('    LOGFILE(0,"qu_ld_2x300s_24w")') &&
+            ldCode.includes('LOGFILE(1,"qu_ld_2x300s_24w_XY")') &&
+            ldCode.includes('VIDEO(VIDEO_LENGTH,"qu_ld_2x300s_24w")'),
+          mpHasLogfile0: mpCode.includes('    LOGFILE(0,"qu_multi_track_1x180s_24w")') &&
+            mpCode.includes('LOGFILE(1,"qu_multi_track_1x180s_24w_XY")') &&
+            mpCode.includes('VIDEO(VIDEO_LENGTH,"qu_multi_track_1x180s_24w")'),
+          step3HasLogfile0: ldBundle[3].code.includes('    LOGFILE(0,"qu_track_check_24w")'),
+          taggedCostarMatch: taggedFile4 === "04_qu_2_24c.zs" && taggedStep2 === "02_qu_24c.zs",
+          noPlaceholders: !hasPlaceholderAttr,
+          hasCopySlotBtn
+        };
+      });
+      const ok = Object.values(slotCheck).every(Boolean);
+      report(ok, "Short 20-slot .zs filenames (04_<last>_<plate>) stay stable while LOGFILE(0, ...) tags full protocol details",
+        ok ? "" : JSON.stringify(slotCheck));
+      await page.close();
+    }
   }
 } finally {
   await browser.close();

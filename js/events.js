@@ -273,13 +273,16 @@ function bindEvents() {
     showToast("Reset all 9 plate formats to factory defaults");
   });
 
-  // Copy filename (without .zs for pasting into Zantiks Add Service dialog)
-  document.getElementById("copyFilenameBtn").addEventListener("click", () => {
-    const fname = refreshAll._latestBundle[state.activeStep].filename.replace(/\.zs$/, "");
-    navigator.clipboard.writeText(fname).then(() => {
-      showToast(`Copied service name: ${fname}`);
+  // Copy filename (without .zs for pasting into Zantiks Settings -> 20 Slots)
+  const copySlotName = () => {
+    const slotName = refreshAll._latestBundle[state.activeStep].filename.replace(/\.zs$/, "");
+    navigator.clipboard.writeText(slotName).then(() => {
+      showToast(`Copied slot name: ${slotName}`);
     });
-  });
+  };
+  document.getElementById("copyFilenameBtn").addEventListener("click", copySlotName);
+  const copySlotBtn = document.getElementById("copySlotNameBtn");
+  if (copySlotBtn) copySlotBtn.addEventListener("click", copySlotName);
 
   // Copy script code
   document.getElementById("copyCodeBtn").addEventListener("click", () => {

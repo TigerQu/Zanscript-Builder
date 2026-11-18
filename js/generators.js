@@ -15,6 +15,55 @@ function buildResearcherComment(cfg) {
   return null;
 }
 
+function numSlug(n) {
+  return String(n).replace(/\./g, "p").replace(/-/g, "m");
+}
+
+function buildAssayDataSlug(cfg) {
+  const p = cfg.plate;
+  const sp = cfg.sp || {};
+  const pShort = p.shortCode || p.id;
+  const col = (cfg.ledColor || "WHITE").toLowerCase();
+  const colOpt = col !== "white" ? `_${col}` : "";
+  let detail = cfg.stimId;
+
+  if (cfg.stimId === "baseline") {
+    const mode = sp.baseLight === "DARK" ? "dark" : col;
+    detail = `baseline_${mode}`;
+  } else if (cfg.stimId === "ld_transitions") {
+    const cycles = Math.max(1, parseInt(sp.ldCycles, 10) || 2);
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const phaseSec = Math.max(1, Math.round(Math.max(bin, parseInt(sp.ldPhaseSec, 10) || 300) / bin)) * bin;
+    detail = `ld_${cycles}x${numSlug(phaseSec)}s${colOpt}`;
+  } else if (cfg.stimId === "light_off_startle") {
+    const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+    const dur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
+    detail = `light_off_${pulses}x${numSlug(dur)}s${colOpt}`;
+  } else if (cfg.stimId === "light_on_pulse") {
+    const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+    const dur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
+    detail = `light_on_${pulses}x${numSlug(dur)}s${colOpt}`;
+  } else if (cfg.stimId === "vibration_startle") {
+    const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+    const vib = String(sp.vibIntensity || "U3").toLowerCase();
+    detail = `vibration_${pulses}x_${vib}`;
+  } else if (cfg.stimId === "circadian") {
+    const lHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
+    const dHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
+    const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
+    detail = `circadian_${lHrs}l${dHrs}d_${days}d${colOpt}`;
+  } else if (cfg.stimId === "multi_phase") {
+    const cycles = Math.max(1, parseInt(sp.mpCycles, 10) || 1);
+    const comp = compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp);
+    detail = `multi_track_${cycles}x${numSlug(comp.totalSec)}s`;
+  } else if (cfg.stimId === "temp_ramp") {
+    const steps = computeTempRampSteps(sp.rampStartTemp, sp.rampEndTemp, sp.rampStepTemp);
+    detail = `temp_ramp_${numSlug(steps[0])}to${numSlug(steps[steps.length - 1])}c`;
+  }
+
+  return sanitizeSlug(`${cfg.runPrefix}_${detail}_${pShort}`, 48) || `mwp_${pShort}`;
+}
+
 function buildZ3PortGateLines(colId, useTop, useUnder, turnOn) {
   const stateStr = turnOn ? "ON" : "OFF";
   const out = [];
@@ -219,7 +268,7 @@ function generateStep1(cfg) {
     ""
   ].join("\n");
 
-  const fname = cfg.lastName ? `01_${cfg.lastName}_calibration.zs` : "01_calibration.zs";
+  const fname = cfg.lastName ? `01_${cfg.lastName}_cal.zs` : "01_cal.zs";
 
   return {
     filename: fname,
@@ -334,7 +383,8 @@ function generateStep2(cfg) {
     ""
   ].join("\n");
 
-  const fname = cfg.lastName ? `02_${cfg.lastName}_assets_${p.id}.zs` : `02_assets_${p.id}.zs`;
+  const pShort = p.shortCode || p.id;
+  const fname = `02_${cfg.lastName || "mwp"}_${pShort}.zs`;
 
   return {
     filename: fname,
@@ -418,9 +468,10 @@ function generateStep3(cfg) {
     `    INVOKE(${startDark ? "LIGHTS_OFF" : "LIGHTS_ON"},1)`,
     `    LOAD(ARENAS,"${p.arenaBmp}.bmp")`,
     "",
+    `    LOGFILE(0,"${sanitizeSlug(`${cfg.runPrefix}_track_check_${p.shortCode || p.id}`, 48)}")`,
     headerBlock,
     "",
-    `    VIDEO(VIDEO_LENGTH,"${cfg.runPrefix}_track_check_${p.id}")`,
+    `    VIDEO(VIDEO_LENGTH,"${sanitizeSlug(`${cfg.runPrefix}_track_check_${p.shortCode || p.id}`, 48)}")`,
     '    LOAD(OVERLAY_TEXT,"1,1:AUTOREFERENCING       ")',
     "    AUTOREFERENCE()",
     "",
@@ -471,12 +522,14 @@ function generateStep3(cfg) {
     ""
   );
 
-  const fname = cfg.lastName ? `03_${cfg.lastName}_track_check_${p.id}.zs` : `03_track_check_${p.id}.zs`;
+  const pShort = p.shortCode || p.id;
+  const step3Tag = sanitizeSlug(`${cfg.runPrefix}_track_check_${pShort}`, 48);
+  const fname = `03_${cfg.lastName || "mwp"}_${pShort}.zs`;
 
   return {
     filename: fname,
     instruction: "<strong>Optional check:</strong> Load animals into the plate and watch Live View (or review the recorded video) to verify that the crosshair stays locked on each organism without background flicker.",
-    schemaText: `CSV Columns: ${metaHeaders.join(" | ")} | DIST_${cfg.wells[0]} ... DIST_${cfg.wells[cfg.wells.length - 1]}`,
+    schemaText: `CSV (${step3Tag}): ${metaHeaders.join(" | ")} | DIST_${cfg.wells[0]} ... DIST_${cfg.wells[cfg.wells.length - 1]}`,
     code: lines.join("\n")
   };
 }
@@ -488,7 +541,9 @@ function generateStep4(cfg) {
   const N = cfg.numWells;
   const arenaRange = N === 1 ? "A1" : `A1-${N}`;
   const userLine = buildResearcherComment(cfg);
-  const runSlug = `${cfg.runPrefix}_${cfg.stimId}_${p.id}`;
+  const pShort = p.shortCode || p.id;
+  const slotSlug = `${cfg.runPrefix}_${pShort}`;
+  const runSlug = buildAssayDataSlug(cfg);
 
   // Build well headers and data expression tokens in identical order
   const wellHeaders = [];
@@ -1249,6 +1304,7 @@ function generateStep4(cfg) {
 
   out.push(
     "",
+    `    LOGFILE(0,"${runSlug}")`,
     "    INVOKE(SETUP_HEADERS,1)"
   );
 
@@ -1355,13 +1411,13 @@ function generateStep4(cfg) {
   if (cfg.useZones) {
     metricSummaryParts.push(`ZD/ZC/ZT_${firstWell}_Z1..Z2`);
   }
-  let schemaDesc = `Summary CSV: ${metaHeaders.join(" | ")} | ${metricSummaryParts.join(" | ")}`;
+  let schemaDesc = `Summary CSV (${runSlug}): ${metaHeaders.join(" | ")} | ${metricSummaryParts.join(" | ")}`;
   if (cfg.useXy) {
     schemaDesc += `  +  XY CSV (${runSlug}_XY): RUNTIME | X_${firstWell} | Y_${firstWell} ...`;
   }
 
   return {
-    filename: `04_${runSlug}.zs`,
+    filename: `04_${slotSlug}.zs`,
     bundleFolder: runSlug,
     instruction: `<strong>Main experiment:</strong> Confirm <code>${p.arenaBmp}.bmp</code>${cfg.useZones ? ` and <code>${p.zoneBmp}.bmp</code>` : ""} exist in Assets, load your ${p.name} plate with organisms, and click <strong>Run</strong>.`,
     schemaText: schemaDesc,
@@ -1429,6 +1485,8 @@ function generateAllSteps(cfg) {
     "",
     `4. ${s4.filename}`,
     "   - Main assay script. Load your experimental plate, build, and run.",
+    `   - Slot name for Settings -> Slots (1-20): "${s4.filename.replace(/\.zs$/, "")}" (link once; rebuilding updates it in place).`,
+    `   - Exported CSV & video files are tagged automatically via LOGFILE(0,"${s4.bundleFolder}").`,
     "   - Download exported .csv data from Control Console -> Data files when complete.",
     "",
     "UNIT REMINDERS",

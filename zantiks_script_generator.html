@@ -73,8 +73,8 @@
           Use English letters (A-Z) and digits for names so Zantiks Build accepts the script filenames.
         </div>
         <div class="name-preview-bar">
-          <span>Bundle folder: <code id="previewFolderName">mwp_ld_transitions_24well/</code></span>
-          <span>Main script: <code id="previewMainScript">04_mwp_ld_transitions_24well.zs</code></span>
+          <span>Slot / script: <code id="previewMainScript">04_mwp_24w.zs</code></span>
+          <span>CSV &amp; bundle tag: <code id="previewFolderName">mwp_ld_2x300s_24w/</code></span>
         </div>
       </div>
 
@@ -484,10 +484,11 @@
 
         <div class="step-banner">
           <div class="step-banner-top">
-            <div class="filename-box" id="copyFilenameBtn" title="Click to copy safe script name">
-              <span id="currentFilename">04_mwp_ld_transitions_24well.zs</span>
+            <div class="filename-box" id="copyFilenameBtn" title="Click to copy slot name (without .zs)">
+              <span id="currentFilename">04_mwp_24w.zs</span>
             </div>
             <div class="step-banner-actions">
+              <button type="button" class="btn btn-sm" id="copySlotNameBtn" title="Copy service name without .zs for Zantiks Settings -> Slots (1-20)">Copy Slot Name</button>
               <button type="button" class="btn btn-sm" id="copyCodeBtn">Copy Script</button>
               <button type="button" class="btn btn-sm btn-primary" id="downloadSingleBtn">Download .zs</button>
             </div>
@@ -502,7 +503,7 @@
 
         <div class="safety-footer">
           <span><strong>Console Checklist:</strong> Click <strong>Save</strong> before <strong>Build</strong> in the web editor.</span>
-          <span><strong>Filenames:</strong> Never add spaces or parentheses.</span>
+          <span><strong>20 Service Slots:</strong> Set slot name (no <code>.zs</code>) in <strong>Settings</strong> once; rebuilding updates it in place.</span>
           <span><strong>Shutdown:</strong> Always shut down from Control Console before flipping power off.</span>
         </div>
       </div>
@@ -552,7 +553,7 @@
         <button type="button" class="summary-row" data-goto="study">
           <span class="summary-key">Study</span>
           <span class="summary-val" id="sumResearcher">Name not set</span>
-          <span class="summary-sub"><code id="sumFolder">mwp_ld_transitions_24well/</code></span>
+          <span class="summary-sub"><code id="sumFolder">mwp_ld_2x300s_24w/</code></span>
         </button>
         <button type="button" class="summary-row" data-goto="study">
           <span class="summary-key">Unit</span>

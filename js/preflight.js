@@ -62,7 +62,7 @@ function computePreflightChecks(cfgIn, bundleIn) {
       "They are dropped from file names. Use A-Z letters and digits so Zantiks Build accepts the scripts.", "study");
   } else if (!cfg.userFullClean) {
     add("info", "No researcher name",
-      `Files will be named "${s4.bundleFolder}". Add a name on the Study page to tell runs apart.`, "study");
+      `Slot name defaults to "${s4.filename.replace(/\.zs$/, "")}". Add your name on the Study page so your Zantiks slot stays separate from labmates.`, "study");
   }
 
   // Temperature (matches exact Step 3 / Step 4 SET(THERMOSTAT, ...) generation)

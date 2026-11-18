@@ -29,7 +29,7 @@ function setText(id, text) {
 
 function renderRunSummary(cfg, s4, orgObj) {
   setText("sumResearcher", cfg.userFullClean || "Name not set");
-  setText("sumFolder", `${s4.bundleFolder}/`);
+  setText("sumFolder", s4.filename);
 
   setText("sumHw", "MWP " + cfg.hw);
   if (cfg.hw === "Z3") {
