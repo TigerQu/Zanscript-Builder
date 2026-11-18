@@ -754,22 +754,21 @@
   }
 
   .stim-grid .option-tile {
-    padding: 10px 12px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
   }
 
   .stim-grid .option-tile .tile-name {
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.3;
-    letter-spacing: -0.01em;
   }
 
   .stim-grid .option-tile .tile-meta {
-    font-size: 11px;
-    line-height: 1.35;
-    margin-top: 2px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    margin-top: 3px;
   }
 
   @media (max-width: 759px) {
@@ -878,17 +877,16 @@
     box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
   }
 
-  /* Timeline Preview */
+  /* Timeline Preview (also the main scrubber of the sequence preview) */
   .timeline-bar-wrap {
     position: relative;
-    margin-top: 2px;
     user-select: none;
     -webkit-user-select: none;
   }
 
   .timeline-bar {
-    height: 22px;
-    border-radius: 4px;
+    height: 30px;
+    border-radius: var(--radius-sm);
     overflow: hidden;
     display: flex;
     border: 1px solid var(--border);
@@ -896,15 +894,23 @@
     cursor: pointer;
   }
 
+  .timeline-bar .tl-seg {
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.55);
+  }
+
+  .timeline-bar .tl-seg:last-child {
+    box-shadow: none;
+  }
+
   .timeline-playhead {
     position: absolute;
-    top: -3px;
-    bottom: -3px;
+    top: -5px;
+    bottom: -5px;
     left: 1px;
     width: 2px;
     transform: translateX(-50%);
-    background: #38bdf8;
-    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.85), 0 0 6px rgba(56, 189, 248, 0.65);
+    background: var(--accent);
+    border-radius: 1px;
     pointer-events: none;
     z-index: 6;
   }
@@ -912,31 +918,22 @@
   .timeline-playhead::before {
     content: "";
     position: absolute;
-    top: -3px;
+    top: -2px;
     left: 50%;
     transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 4.5px solid transparent;
-    border-right: 4.5px solid transparent;
-    border-top: 5.5px solid #0f172a;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--surface);
   }
 
   .timeline-playhead::after {
-    content: "";
-    position: absolute;
-    bottom: -3px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 4.5px solid transparent;
-    border-right: 4.5px solid transparent;
-    border-bottom: 5.5px solid #0f172a;
+    content: none;
   }
 
   .timeline-playhead.is-acclim {
-    opacity: 0.78;
+    opacity: 0.6;
   }
 
   .timeline-bar.has-overlap {
@@ -952,7 +949,7 @@
   .tl-seg {
     height: 100%;
     min-width: 0;
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -979,9 +976,9 @@
     color: #1e293b;
   }
 
-  /* AE / Premiere-Style Multi-Track NLE Timeline */
+  /* Multi-Track Timeline Editor (light theme, same language as the rest of the app) */
   .nle-section {
-    margin-top: 14px;
+    margin-top: 20px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
@@ -992,30 +989,28 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 10px;
     flex-wrap: wrap;
-    padding: 8px 12px;
+    padding: 10px 14px;
     background: var(--surface-subtle);
-    border-bottom: 1px solid var(--border-muted);
+    border-bottom: 1px solid var(--border);
   }
 
   .nle-preset-sel {
-    height: 26px;
-    padding: 0 8px;
-    line-height: 1;
+    height: 30px;
+    padding: 0 10px;
     font-family: var(--font-sans);
-    font-size: 11.5px;
+    font-size: 12.5px;
     font-weight: 500;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text);
     cursor: pointer;
-    max-width: 230px;
+    max-width: 260px;
   }
 
   .nle-preset-sel:hover {
-    background: #f3f4f6;
     border-color: #afb8c1;
   }
 
@@ -1026,27 +1021,26 @@
   }
 
   .nle-toolbar .btn-xs {
-    height: 26px;
-    padding: 0 10px;
-    font-size: 11.5px;
+    height: 30px;
+    padding: 0 12px;
+    font-size: 12px;
   }
 
   .nle-toolbar-right {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
   }
 
   .btn-toggle-active {
     background: var(--accent-soft);
-    border-color: var(--accent);
+    border-color: var(--accent-border);
     color: var(--accent);
     font-weight: 600;
   }
 
   .btn-toggle-active:hover {
     background: #c8ebff;
-    border-color: var(--accent-hover);
   }
 
   .nle-hud {
@@ -1055,8 +1049,8 @@
     font-weight: 600;
     color: var(--accent);
     background: var(--accent-soft);
-    border: 1px solid var(--accent-border);
-    padding: 2px 8px;
+    border: 1px solid rgba(9, 105, 218, 0.25);
+    padding: 2px 9px;
     border-radius: 999px;
     white-space: nowrap;
   }
@@ -1066,60 +1060,70 @@
   }
 
   .nle-workspace {
+    --nle-hdr-w: 188px;
     position: relative;
     user-select: none;
     -webkit-user-select: none;
-    background: #0f172a;
-    color: #e2e8f0;
+    background: var(--surface);
+    color: var(--text);
     outline: none;
+  }
+
+  @media (max-width: 560px) {
+    .nle-workspace {
+      --nle-hdr-w: 128px;
+    }
+
+    .nle-track-hdr .nle-mount-tag {
+      display: none;
+    }
   }
 
   .nle-header-row {
     display: grid;
-    grid-template-columns: 146px minmax(0, 1fr);
-    border-bottom: 1px solid #1e293b;
-    background: #0b1120;
+    grid-template-columns: var(--nle-hdr-w) minmax(0, 1fr);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-subtle);
   }
 
   .nle-corner {
-    padding: 5px 8px 5px 10px;
-    font-size: 10.5px;
-    font-weight: 600;
-    color: #94a3b8;
-    border-right: 1px solid #1e293b;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    padding: 0 14px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    border-right: 1px solid var(--border);
   }
 
   .nle-ruler {
     position: relative;
-    height: 24px;
+    height: 28px;
     overflow: hidden;
     cursor: pointer;
   }
 
   .nle-ruler:hover {
-    background: rgba(56, 189, 248, 0.08);
+    background: rgba(9, 105, 218, 0.05);
   }
 
   .nle-playhead {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 146px;
+    left: var(--nle-hdr-w);
     width: 2px;
     transform: translateX(-50%);
-    background: #38bdf8;
-    box-shadow: 0 0 0 1px rgba(11, 17, 32, 0.86), 0 0 8px rgba(56, 189, 248, 0.78);
+    background: var(--accent);
     pointer-events: none;
     z-index: 15;
     display: block;
   }
 
   .nle-playhead.is-acclim {
-    opacity: 0.62;
-    box-shadow: 0 0 0 1px rgba(11, 17, 32, 0.72), 0 0 4px rgba(56, 189, 248, 0.4);
+    opacity: 0.45;
   }
 
   .nle-playhead::before {
@@ -1130,24 +1134,13 @@
     transform: translateX(-50%);
     width: 0;
     height: 0;
-    border-left: 5.5px solid transparent;
-    border-right: 5.5px solid transparent;
-    border-top: 8px solid #38bdf8;
-    filter: drop-shadow(0 1px 1px rgba(11, 17, 32, 0.9));
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid var(--accent);
   }
 
   .nle-playhead::after {
-    content: "";
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-bottom: 6px solid #38bdf8;
-    filter: drop-shadow(0 -1px 1px rgba(11, 17, 32, 0.9));
+    content: none;
   }
 
   .nle-tick {
@@ -1156,8 +1149,8 @@
     bottom: 0;
     transform: translateX(-50%);
     font-family: var(--font-mono);
-    font-size: 10px;
-    color: #94a3b8;
+    font-size: 10.5px;
+    color: var(--text-muted);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1167,7 +1160,7 @@
   }
 
   .nle-tick:first-child {
-    transform: translateX(2px);
+    transform: translateX(4px);
     align-items: flex-start;
   }
 
@@ -1180,14 +1173,14 @@
     content: "";
     width: 1px;
     height: 5px;
-    background: #475569;
-    margin-top: 1px;
+    background: var(--border);
+    margin-top: 2px;
   }
 
   .nle-track-row {
     display: grid;
-    grid-template-columns: 146px minmax(0, 1fr);
-    border-bottom: 1px solid #1e293b;
+    grid-template-columns: var(--nle-hdr-w) minmax(0, 1fr);
+    border-bottom: 1px solid var(--border-muted);
   }
 
   .nle-track-row.nle-row-hidden {
@@ -1195,7 +1188,7 @@
   }
 
   .nle-track-row.nle-group-start {
-    border-top: 2px solid #334155;
+    border-top: 1px solid var(--border);
   }
 
   .nle-track-row:last-child {
@@ -1203,79 +1196,83 @@
   }
 
   .nle-track-hdr {
-    padding: 0 7px 0 8px;
-    height: 40px;
-    border-right: 1px solid #1e293b;
-    background: #111827;
+    height: 42px;
+    padding: 0 10px 0 14px;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 4px;
+    gap: 8px;
   }
 
-  .nle-track-row[data-track-group="BOT"] .nle-track-hdr {
-    background: #0d1626;
+  .nle-track-row[data-track-group="BOT"] .nle-track-hdr,
+  .nle-track-row[data-track-group="BOT"] .nle-lane {
+    background-color: #fffdf5;
+  }
+
+  .nle-track-row[data-track-group="ENV"] .nle-track-hdr,
+  .nle-track-row[data-track-group="ENV"] .nle-lane {
+    background-color: #fffaf5;
   }
 
   .nle-mount-tag {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: 9.5px;
     font-weight: 700;
-    padding: 1px 4px;
-    border-radius: 3px;
+    padding: 1px 5px;
+    border-radius: 4px;
     letter-spacing: 0.03em;
     flex-shrink: 0;
   }
 
   .nle-mount-top {
-    background: rgba(56, 189, 248, 0.16);
-    color: #7dd3fc;
-    border: 1px solid rgba(56, 189, 248, 0.35);
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid rgba(9, 105, 218, 0.25);
   }
 
   .nle-mount-bot {
-    background: rgba(250, 204, 21, 0.15);
-    color: #fde047;
-    border: 1px solid rgba(250, 204, 21, 0.35);
+    background: var(--warn-soft);
+    color: var(--warn);
+    border: 1px solid rgba(154, 103, 0, 0.28);
   }
 
   .nle-mount-env {
-    background: rgba(249, 115, 22, 0.16);
-    color: #fdba74;
-    border: 1px solid rgba(249, 115, 22, 0.35);
+    background: #fff1e5;
+    color: #bc4c00;
+    border: 1px solid rgba(188, 76, 0, 0.28);
   }
 
   .nle-mount-sum {
-    background: rgba(16, 185, 129, 0.16);
-    color: #6ee7b7;
-    border: 1px solid rgba(16, 185, 129, 0.38);
+    background: var(--success-soft);
+    color: var(--success);
+    border: 1px solid rgba(26, 127, 55, 0.28);
   }
 
   .nle-summary-row {
     display: grid;
-    grid-template-columns: 146px minmax(0, 1fr);
-    border-top: 2px solid #334155;
-    background: #0b1120;
+    grid-template-columns: var(--nle-hdr-w) minmax(0, 1fr);
+    border-top: 1px solid var(--border);
+    background: var(--surface-subtle);
   }
 
   .nle-summary-hdr {
-    padding: 0 7px 0 8px;
-    height: 30px;
-    border-right: 1px solid #1e293b;
-    background: #0b1120;
+    height: 36px;
+    padding: 0 10px 0 14px;
+    border-right: 1px solid var(--border);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 4px;
+    gap: 8px;
   }
 
   .nle-summary-bar {
     position: relative;
-    height: 30px;
+    height: 36px;
     display: flex;
     overflow: hidden;
     cursor: pointer;
-    background: #1e293b;
+    background: #eaeef2;
   }
 
   .nle-summary-bar.has-overlap {
@@ -1290,10 +1287,10 @@
 
   .nle-summary-bar .tl-seg {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 10.5px;
     padding: 0 4px;
     text-overflow: ellipsis;
-    box-shadow: inset -1px 0 0 rgba(15, 23, 42, 0.22);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.6);
   }
 
   .nle-summary-bar .tl-seg:last-child,
@@ -1304,32 +1301,35 @@
   .nle-track-title {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 7px;
     min-width: 0;
   }
 
   .nle-swatch {
-    width: 7px;
-    height: 7px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(31, 35, 40, 0.15);
   }
 
   .nle-track-name {
-    font-size: 11px;
+    font-size: 12.5px;
     font-weight: 600;
-    color: #f1f5f9;
+    color: var(--text);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .nle-track-add {
-    width: 21px;
-    height: 21px;
-    border-radius: 4px;
-    border: 1px solid #334155;
-    background: #1e293b;
-    color: #cbd5e1;
-    font-size: 13px;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 15px;
     line-height: 1;
     cursor: pointer;
     display: inline-flex;
@@ -1337,48 +1337,46 @@
     justify-content: center;
     padding: 0;
     flex-shrink: 0;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
   }
 
   .nle-track-add:hover {
-    background: #334155;
-    color: #ffffff;
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
   }
 
   .nle-lane {
     position: relative;
-    height: 40px;
-    background-color: #0f172a;
-    background-image: linear-gradient(to right, rgba(148, 163, 184, 0.09) 1px, transparent 1px);
+    height: 42px;
+    background-color: var(--surface);
+    background-image: linear-gradient(to right, var(--border-muted) 1px, transparent 1px);
     cursor: crosshair;
     overflow: hidden;
   }
 
-  .nle-track-row[data-track-group="BOT"] .nle-lane {
-    background-color: #0c1424;
-  }
-
   .nle-lane:hover {
-    background-color: #131c31;
+    background-color: #f5f9ff;
   }
 
   .nle-clip {
     position: absolute;
-    top: 4px;
-    height: 32px;
-    border-radius: 6px;
-    border: 1.5px solid transparent;
+    top: 6px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0 12px;
     cursor: grab;
     overflow: hidden;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 1px 2px rgba(31, 35, 40, 0.12);
     transition: box-shadow 0.08s;
   }
 
   .nle-clip:hover {
-    filter: brightness(1.03);
+    box-shadow: 0 2px 6px rgba(31, 35, 40, 0.18);
   }
 
   .nle-clip:active,
@@ -1387,7 +1385,7 @@
   }
 
   .nle-clip.selected {
-    box-shadow: 0 0 0 2px #ffffff, 0 3px 10px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
     z-index: 4;
   }
 
@@ -1405,7 +1403,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: min(12px, 28%);
+    width: min(10px, 28%);
     min-width: 5px;
     cursor: ew-resize;
     z-index: 2;
@@ -1419,97 +1417,162 @@
     width: 2px;
     height: 12px;
     border-radius: 2px;
-    background: rgba(0, 0, 0, 0.28);
-    transition: background 0.1s, transform 0.1s;
+    background: rgba(31, 35, 40, 0.28);
   }
 
   .nle-handle-l {
     left: 0;
-    border-right: 1px solid rgba(0, 0, 0, 0.12);
-    background: rgba(255, 255, 255, 0.32);
   }
 
   .nle-handle-r {
     right: 0;
-    border-left: 1px solid rgba(0, 0, 0, 0.12);
-    background: rgba(255, 255, 255, 0.32);
   }
 
   .nle-handle:hover {
-    background: rgba(255, 255, 255, 0.72);
+    background: rgba(255, 255, 255, 0.55);
   }
 
   .nle-handle:hover::after {
-    background: rgba(0, 0, 0, 0.6);
-    transform: scaleY(1.15);
+    background: rgba(31, 35, 40, 0.6);
   }
 
+  /* Clip inspector */
   .nle-inspector {
-    padding: 7px 12px;
+    padding: 14px 16px;
     background: var(--surface-subtle);
-    border-top: 1px solid var(--border-muted);
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .nle-insp-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 12px;
     flex-wrap: wrap;
-    min-height: 44px;
   }
 
-  .nle-insp-fields {
+  .nle-insp-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .nle-insp-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    color: var(--text-muted);
+    min-width: 0;
+    font-size: 13px;
     font-weight: 600;
   }
 
-  .nle-insp-group input[type="number"] {
-    width: 54px;
-    padding: 4px 5px;
+  .nle-insp-sub {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .nle-insp-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nle-insp-fields {
+    display: grid;
+    grid-template-columns: 120px 120px minmax(0, 1fr);
+    gap: 14px 16px;
+    align-items: end;
+  }
+
+  @media (max-width: 560px) {
+    .nle-insp-fields {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .nle-insp-field-wide {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .nle-insp-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .nle-insp-field label {
     font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .nle-insp-field input[type="number"] {
+    width: 100%;
+    padding: 7px 10px;
+    font-size: 13px;
     font-family: var(--font-mono);
     border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .nle-insp-field input[type="number"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
+  }
+
+  .nle-insp-field input:disabled {
+    background: #eaeef2;
+    color: var(--text-muted);
+  }
+
+  .nle-insp-slider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .nle-insp-slider input[type="range"] {
+    flex: 1 1 auto;
+    min-width: 80px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .nle-insp-slider input[type="number"] {
+    flex: 0 0 76px;
+    width: 76px;
+  }
+
+  .nle-kbd {
+    display: inline-block;
+    padding: 0 5px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 18px;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
     border-radius: 4px;
     background: var(--surface);
     color: var(--text);
   }
 
-  .nle-insp-group input[type="range"] {
-    width: 84px;
-    accent-color: var(--accent);
-    cursor: pointer;
-    margin: 0;
-  }
-
-  .nle-kbd {
-    display: inline-block;
-    padding: 1px 5px;
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--surface);
-    color: var(--text-muted);
-  }
-
   .nle-insp-hint {
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--text-muted);
-    line-height: 1.45;
+    line-height: 1.6;
+  }
+
+  .nle-insp-hint strong {
+    color: var(--text);
   }
 
   .proto-note {
-    margin-top: 12px;
-    padding: 8px 11px;
+    margin-top: 18px;
+    padding: 10px 14px;
     border-radius: var(--radius-sm);
     background: var(--surface-subtle);
     border: 1px solid var(--border-muted);
@@ -1523,14 +1586,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    height: 17px;
-    min-height: 17px;
-    max-height: 17px;
-    font-size: 11.5px;
-    line-height: 17px;
+    min-height: 18px;
+    font-size: 12px;
+    line-height: 18px;
     color: var(--text-muted);
-    margin-top: 0;
-    overflow: hidden;
     white-space: nowrap;
   }
 
@@ -1542,9 +1601,9 @@
   }
 
   .timeline-scrub-hint {
-    font-size: 11px;
+    font-size: 11.5px;
     color: var(--text-muted);
-    opacity: 0.82;
+    opacity: 0.85;
     flex-shrink: 0;
   }
 
@@ -1554,76 +1613,67 @@
     }
   }
 
-  /* Standalone Card 3: Flat 2D Light & Environment Sequence Simulator (Strictly Planar 2D) */
+  /* Sequence Preview: light transport + dark "camera" viewports */
   .card.sim-card {
     padding: 0;
     overflow: hidden;
   }
 
   .card.sim-card .card-header {
-    padding: 16px var(--card-pad-x) 14px;
-    margin-bottom: 0;
-    border-bottom: 1px solid var(--border-muted);
-    background: var(--surface);
+    padding: var(--card-pad-y) var(--card-pad-x) 0;
+    margin-bottom: 16px;
   }
 
   .sim-panel {
-    margin: 0;
-    border: none;
-    border-radius: 0;
     background: var(--surface);
-    overflow: hidden;
   }
 
   .sim-transport {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 14px var(--card-pad-x);
-    background: var(--surface-subtle);
-    border-bottom: 1px solid var(--border-muted);
+    gap: 12px;
+    padding: 0 var(--card-pad-x) 20px;
   }
 
   .sim-controls-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: nowrap;
-    width: 100%;
-    height: 26px;
-    min-height: 26px;
-    max-height: 26px;
+    gap: 10px 14px;
+    flex-wrap: wrap;
     min-width: 0;
-    overflow: hidden;
+  }
+
+  .sim-controls-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sim-play-btn,
+  .sim-reset-btn {
+    height: 32px;
+    justify-content: center;
   }
 
   .sim-play-btn {
-    width: 82px;
-    flex: 0 0 82px;
-    height: 26px;
-    padding: 0 8px;
-    line-height: 1;
-    font-weight: 600;
-    overflow: hidden;
+    min-width: 96px;
   }
 
-  .sim-reset-btn {
-    width: 54px;
-    flex: 0 0 54px;
-    height: 26px;
-    padding: 0 6px;
-    line-height: 1;
-    overflow: hidden;
+  .sim-speed {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
   }
 
   .sim-speed-sel {
-    width: 60px;
-    flex: 0 0 60px;
-    height: 26px;
-    padding: 0 6px;
-    line-height: 1;
-    font-size: 11.5px;
+    height: 32px;
+    padding: 0 8px;
     font-family: var(--font-mono);
+    font-size: 12.5px;
     font-weight: 600;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -1632,20 +1682,25 @@
     cursor: pointer;
   }
 
+  .sim-speed-sel:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
+  }
+
   .sim-phase-pill {
-    flex: 0 1 auto;
-    max-width: 280px;
     min-width: 0;
-    height: 22px;
-    line-height: 20px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 0 9px;
+    max-width: 320px;
+    height: 26px;
+    line-height: 24px;
+    padding: 0 11px;
     border-radius: 999px;
     background: var(--accent-soft);
     color: var(--accent);
-    border: 1px solid rgba(9, 105, 218, 0.28);
+    border: 1px solid rgba(9, 105, 218, 0.25);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1653,43 +1708,36 @@
 
   .sim-time-readout {
     margin-left: auto;
-    width: 134px;
-    flex: 0 0 134px;
-    height: 22px;
-    line-height: 22px;
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: 14px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     color: var(--text);
-    text-align: right;
     white-space: nowrap;
-    overflow: hidden;
   }
 
+  /* The bar above is the visible scrubber; the range input stays for keyboard / screen readers */
   .sim-scrubber-row {
-    display: block;
-    width: 100%;
-    height: 18px;
-    min-height: 18px;
-    max-height: 18px;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .sim-scrubber {
-    display: block;
-    width: 100%;
-    height: 18px;
-    margin: 0;
-    padding: 0;
-    accent-color: var(--accent);
-    cursor: pointer;
+    width: 200px;
   }
 
   .sim-stage-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
-    background: #0d1321;
-    color: #e2e8f0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    padding: 20px var(--card-pad-x);
+    background: var(--surface-subtle);
+    border-top: 1px solid var(--border-muted);
   }
 
   @media (max-width: 720px) {
@@ -1699,22 +1747,10 @@
   }
 
   .sim-pane {
-    padding: 16px var(--card-pad-x);
     display: flex;
     flex-direction: column;
     gap: 10px;
     min-width: 0;
-  }
-
-  .sim-pane-left {
-    border-right: 1px solid #1e293b;
-  }
-
-  @media (max-width: 720px) {
-    .sim-pane-left {
-      border-right: none;
-      border-bottom: 1px solid #1e293b;
-    }
   }
 
   .sim-pane-head {
@@ -1722,244 +1758,255 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    flex-wrap: nowrap;
-    height: 22px;
-    min-height: 22px;
-    max-height: 22px;
-    overflow: hidden;
+    min-height: 24px;
+    min-width: 0;
   }
 
   .sim-pane-title {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    color: #94a3b8;
+    color: var(--text);
     white-space: nowrap;
     flex-shrink: 0;
+  }
+
+  .sim-ir-badge,
+  .sim-mix-badge {
+    min-width: 0;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .sim-ir-badge {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 600;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 6px;
-    border-radius: 4px;
-    background: rgba(239, 68, 68, 0.14);
-    color: #fca5a5;
-    border: 1px solid rgba(239, 68, 68, 0.35);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex-shrink: 0;
+    background: #ffebe9;
+    color: #cf222e;
+    border: 1px solid rgba(207, 34, 46, 0.25);
   }
 
   .sim-mix-badge {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 600;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 6px;
-    border-radius: 4px;
-    background: #1e293b;
-    color: #cbd5e1;
-    border: 1px solid #334155;
-    max-width: 225px;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    background: var(--surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
   }
 
-  /* Left 2D Flat Chamber Schematic */
+  /* Side view of the chamber */
   .sim-chamber-2d {
-    border: 1px solid #26334d;
-    border-radius: 6px;
-    background: #090e17;
-    overflow: hidden;
+    flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 264px;
+    border: 1px solid #30363d;
+    border-radius: var(--radius);
+    background: #0d1117;
+    overflow: hidden;
   }
 
   .sim-led-bar {
     display: grid;
-    grid-template-columns: 36px repeat(5, minmax(0, 1fr));
-    gap: 4px;
-    align-items: center;
-    height: 32px;
-    padding: 0 8px;
-    background: #111827;
-    overflow: hidden;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    padding: 10px 12px;
+    background: #161b22;
   }
 
   .sim-led-bar-top {
-    border-bottom: 1px solid #1e293b;
+    border-bottom: 1px solid #30363d;
   }
 
   .sim-led-bar-bot {
-    border-top: 1px solid #1e293b;
+    border-top: 1px solid #30363d;
   }
 
   .sim-bar-tag {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    font-weight: 700;
-    color: #94a3b8;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
+    grid-column: 1 / -1;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #8b949e;
+  }
+
+  .sim-led-bar-bot .sim-bar-tag {
+    order: 1;
   }
 
   .sim-led-pill {
+    --led: #8b949e;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 2px;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 5px;
-    border-radius: 4px;
-    border: 1px solid #293548;
-    background: #162032;
-    color: #64748b;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #8b949e;
     font-family: var(--font-mono);
-    font-size: 9.5px;
-    font-weight: 600;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     overflow: hidden;
   }
 
-  .sim-led-pill.on {
-    color: #0f172a;
+  .sim-led-pill[id$="_UV"]    { --led: #a855f7; }
+  .sim-led-pill[id$="_BLUE"]  { --led: #3b82f6; }
+  .sim-led-pill[id$="_GREEN"] { --led: #22c55e; }
+  .sim-led-pill[id$="_WHITE"] { --led: #facc15; }
+  .sim-led-pill[id$="_RED"]   { --led: #ef4444; }
+
+  .sim-led-pill > span:first-child {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+
+  .sim-led-pill > span:first-child::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--led);
+    opacity: 0.45;
+    flex-shrink: 0;
+  }
+
+  .sim-led-pill > span:last-child {
+    font-size: 12px;
     font-weight: 700;
+    color: #6e7681;
+  }
+
+  .sim-led-pill.on > span:first-child::before {
+    opacity: 1;
+    box-shadow: 0 0 0 1px rgba(13, 17, 23, 0.35);
+  }
+
+  .sim-led-pill.on > span:last-child {
+    color: inherit;
   }
 
   .sim-chamber-cavity {
     position: relative;
-    height: 112px;
+    flex: 1;
+    min-height: 110px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 0 12px;
-    background: #090d16;
+    padding: 0 16px;
+    background: #0d1117;
+  }
+
+  .sim-wash-top,
+  .sim-wash-bot {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 50%;
+    pointer-events: none;
   }
 
   .sim-wash-top {
-    position: absolute;
     top: 0;
-    left: 0;
-    right: 0;
-    height: 55px;
-    pointer-events: none;
   }
 
   .sim-wash-bot {
-    position: absolute;
     bottom: 0;
-    left: 0;
-    right: 0;
-    height: 55px;
-    pointer-events: none;
   }
 
   .sim-plate-cross {
     position: relative;
     z-index: 2;
-    height: 30px;
-    border: 1.5px solid #475569;
-    border-radius: 4px;
-    background: rgba(15, 23, 42, 0.88);
+    min-height: 36px;
+    padding: 0 10px;
+    border: 1px solid #484f58;
+    border-radius: var(--radius-sm);
+    background: rgba(22, 27, 34, 0.92);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: nowrap;
-    padding: 0 8px;
-    gap: 6px;
+    gap: 8px;
     overflow: hidden;
   }
 
   .sim-plate-cross.is-vibrating {
-    border-color: #38bdf8;
-    background: rgba(14, 116, 144, 0.36);
+    border-color: #58a6ff;
+    background: rgba(31, 111, 235, 0.32);
   }
 
   .sim-plate-cross-left {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     min-width: 0;
-    overflow: hidden;
   }
 
   .sim-plate-cross-name {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: 600;
-    color: #e2e8f0;
+    color: #e6edf3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .sim-temp-badge {
+  .sim-temp-badge,
+  .sim-vib-badge {
+    height: 22px;
+    line-height: 20px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid #30363d;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 6px;
-    border-radius: 4px;
-    background: #1e293b;
-    color: #cbd5e1;
-    border: 1px solid #334155;
     white-space: nowrap;
     flex-shrink: 0;
+  }
+
+  .sim-temp-badge {
+    background: #161b22;
+    color: #c9d1d9;
   }
 
   .sim-vib-badge {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 700;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 6px;
-    border-radius: 4px;
-    border: 1px solid #334155;
-    background: #131c2e;
-    color: #64748b;
-    white-space: nowrap;
-    flex-shrink: 0;
+    background: #161b22;
+    color: #8b949e;
   }
 
   .sim-vib-badge.active {
-    background: #0284c7;
-    border-color: #7dd3fc;
+    background: #1f6feb;
+    border-color: #58a6ff;
     color: #ffffff;
   }
 
-  /* Right 2D Flat Top-Down Plate View */
+  /* Top view of the plate */
   .sim-topdown-box {
     flex: 1;
-    border: 1px solid #26334d;
-    border-radius: 6px;
-    background: #090e17;
-    padding: 8px 10px;
+    min-height: 264px;
+    min-width: 0;
+    padding: 18px 16px 14px;
+    border: 1px solid #30363d;
+    border-radius: var(--radius);
+    background: #0d1117;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    min-width: 0;
+    gap: 12px;
     overflow: hidden;
   }
 
   #simPlateSvg {
     display: block;
     width: 100%;
-    max-width: 214px;
+    max-width: 300px;
     height: auto;
     --sim-tray-fill: #161f30;
     --sim-tray-stroke: #475569;
@@ -1986,46 +2033,34 @@
   }
 
   .sim-topdown-legend {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
     width: 100%;
-    height: 18px;
-    min-height: 18px;
-    max-height: 18px;
-    font-size: 10px;
+    text-align: center;
     font-family: var(--font-mono);
-    color: #94a3b8;
-    flex-wrap: nowrap;
-    overflow: hidden;
+    font-size: 11px;
+    color: #8b949e;
   }
 
   #simTopDownCaption {
-    min-width: 0;
-    max-width: 100%;
+    display: block;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
+  /* Live hardware readout */
   .sim-hw-bar {
-    padding: 0 var(--card-pad-x);
-    background: #0b1120;
-    border-top: 1px solid #1e293b;
+    padding: 11px var(--card-pad-x);
+    background: var(--surface);
+    border-top: 1px solid var(--border-muted);
     font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1;
-    color: #cbd5e1;
+    font-size: 11.5px;
+    color: var(--text-muted);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    height: 34px;
-    min-height: 34px;
-    max-height: 34px;
-    overflow: hidden;
+    gap: 12px;
     white-space: nowrap;
+    overflow: hidden;
   }
 
   .sim-hw-left {
@@ -2033,16 +2068,14 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .sim-hw-right {
     flex: 0 0 auto;
-    white-space: nowrap;
   }
 
   .sim-hw-bar code {
-    color: #7dd3fc;
+    color: var(--accent);
     font-weight: 600;
   }
 
@@ -2776,7 +2809,7 @@
     <section class="wizard-page" data-page="stimulus">
       <header class="page-head">
         <h2 class="page-title">Stimulus Protocol</h2>
-        <p class="page-desc">Pick the assay schedule, set its timing, and preview the full sequence below.</p>
+        <p class="page-desc">Pick the assay schedule, set its timing, then play or scrub the preview to check what the chamber does at every moment.</p>
       </header>
 
       <div class="card">
@@ -2797,22 +2830,25 @@
 
       <div class="card sim-card">
         <div class="card-header">
-          <h3 class="card-title">2D Sequence Preview</h3>
+          <h3 class="card-title">Sequence Preview</h3>
           <span class="card-hint" id="timelineTotal">Est. Runtime: 13 min 00 sec</span>
         </div>
 
-        <!-- FLAT 2D LIGHT & ENVIRONMENT SEQUENCE SIMULATOR -->
         <div class="sim-panel" id="simPanel">
           <div class="sim-transport">
             <div class="sim-controls-row">
-              <button type="button" class="btn btn-xs btn-primary sim-play-btn" id="simPlayBtn">&#9654; Play</button>
-              <button type="button" class="btn btn-xs sim-reset-btn" id="simResetBtn" title="Reset playhead to 0s">&#9198; 0s</button>
-              <select id="simSpeedSel" class="sim-speed-sel" aria-label="Playback speed">
-                <option value="1" selected>1x</option>
-                <option value="5">5x</option>
-                <option value="20">20x</option>
-                <option value="60">60x</option>
-              </select>
+              <div class="sim-controls-left">
+                <button type="button" class="btn btn-sm btn-primary sim-play-btn" id="simPlayBtn">&#9654; Play</button>
+                <button type="button" class="btn btn-sm sim-reset-btn" id="simResetBtn" title="Reset playhead to 0s">&#9198; 0s</button>
+                <label class="sim-speed">Speed
+                  <select id="simSpeedSel" class="sim-speed-sel" aria-label="Playback speed">
+                    <option value="1" selected>1x</option>
+                    <option value="5">5x</option>
+                    <option value="20">20x</option>
+                    <option value="60">60x</option>
+                  </select>
+                </label>
+              </div>
               <span class="sim-phase-pill" id="simPhaseBadge">ACCLIMATION</span>
               <span class="sim-time-readout" id="simTimeReadout">00:00 / 13:00</span>
             </div>
@@ -2820,25 +2856,25 @@
               <input type="range" class="sim-scrubber" id="simScrubber" min="0" max="780" step="0.1" value="0" aria-label="Assay time scrubber">
             </div>
             <div class="timeline-bar-wrap" id="timelineBarWrap">
-              <div class="timeline-bar" id="timelineBar" title="Click or drag to scrub full assay timeline"></div>
+              <div class="timeline-bar" id="timelineBar" title="Click or drag to scrub the full assay timeline"></div>
               <div class="timeline-playhead" id="timelinePlayhead"></div>
             </div>
             <div class="timeline-legend">
               <span id="timelineDesc">Acclimation + Recording</span>
-              <span class="timeline-scrub-hint">Click or drag bar to scrub</span>
+              <span class="timeline-scrub-hint">Click or drag the bar to scrub</span>
             </div>
           </div>
 
           <div class="sim-stage-grid">
-            <!-- Left 2D Panel: Flat Chamber Cross-Section Schematic -->
+            <!-- Side view of the chamber -->
             <div class="sim-pane sim-pane-left" id="simChamberBox">
               <div class="sim-pane-head">
-                <span class="sim-pane-title">2D Chamber Cross-Section</span>
+                <span class="sim-pane-title">Chamber &middot; side view</span>
                 <span class="sim-ir-badge" id="simIrBadge">IR 850nm ON (Ch 2/10)</span>
               </div>
               <div class="sim-chamber-2d">
                 <div class="sim-led-bar sim-led-bar-top" id="simTopBar">
-                  <span class="sim-bar-tag">TOP</span>
+                  <span class="sim-bar-tag">Top LEDs</span>
                   <div class="sim-led-pill" id="simLed_TOP_UV"><span>UV</span><span id="simPct_TOP_UV">0%</span></div>
                   <div class="sim-led-pill" id="simLed_TOP_BLUE"><span>470</span><span id="simPct_TOP_BLUE">0%</span></div>
                   <div class="sim-led-pill" id="simLed_TOP_GREEN"><span>530</span><span id="simPct_TOP_GREEN">0%</span></div>
@@ -2857,7 +2893,7 @@
                   <div class="sim-wash-bot" id="simBotWash"></div>
                 </div>
                 <div class="sim-led-bar sim-led-bar-bot" id="simBotBar">
-                  <span class="sim-bar-tag">BOT</span>
+                  <span class="sim-bar-tag">Bottom LEDs</span>
                   <div class="sim-led-pill" id="simLed_BOT_UV"><span>UV</span><span id="simPct_BOT_UV">0%</span></div>
                   <div class="sim-led-pill" id="simLed_BOT_BLUE"><span>470</span><span id="simPct_BOT_BLUE">0%</span></div>
                   <div class="sim-led-pill" id="simLed_BOT_GREEN"><span>530</span><span id="simPct_BOT_GREEN">0%</span></div>
@@ -2867,10 +2903,10 @@
               </div>
             </div>
 
-            <!-- Right 2D Panel: Flat Top-Down Plate View -->
+            <!-- Top view of the plate -->
             <div class="sim-pane" id="simTopDownBox">
               <div class="sim-pane-head">
-                <span class="sim-pane-title">2D Top-Down Plate View</span>
+                <span class="sim-pane-title">Plate &middot; top view</span>
                 <span class="sim-mix-badge" id="simLightMixBadge">IR Dark (0%)</span>
               </div>
               <div class="sim-topdown-box">
@@ -6124,13 +6160,13 @@
       }).join("");
 
       box.innerHTML = `
-        <div class="form-grid-5">
+        <div class="form-grid-3">
           <div class="field">
-            <label>Timeline (sec)</label>
+            <label>Timeline Length (sec)</label>
             <input type="number" min="10" max="7200" step="10" data-sp="mpTimelineSec" value="${sp.mpTimelineSec}">
           </div>
           <div class="field">
-            <label>Cycles</label>
+            <label>Repeat Cycles</label>
             <input type="number" min="1" max="50" step="1" data-sp="mpCycles" value="${sp.mpCycles}">
           </div>
           <div class="field">
@@ -6138,11 +6174,11 @@
             <input type="number" min="1" max="600" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
           </div>
           <div class="field">
-            <label>Acclim (sec)</label>
+            <label>Acclimation (sec)</label>
             <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
           </div>
           <div class="field">
-            <label>Acclim Light</label>
+            <label>Acclimation Light</label>
             <select data-sp="mpAcclimLight">${acclimOpts}</select>
           </div>
         </div>
@@ -6165,7 +6201,7 @@
           <div class="nle-workspace" id="nleWorkspace" tabindex="-1">
             <div class="nle-playhead" id="nlePlayhead"></div>
             <div class="nle-header-row">
-              <div class="nle-corner"><span>TRACKS</span><span>+ ADD</span></div>
+              <div class="nle-corner">Tracks</div>
               <div class="nle-ruler" id="nleRuler" title="Click or drag ruler to scrub simulator playhead"></div>
             </div>
             ${tracksHtml}
@@ -6368,7 +6404,7 @@
         const { bin, totalSec } = getTimelineBounds();
         const sel = state.timelineClips.find(c => c.id === state.selectedClipId);
         if (!sel) {
-          insp.innerHTML = `<span class="nle-insp-hint">Drag empty lane to draw &middot; Drag ends to resize &middot; Backspace to delete</span>`;
+          insp.innerHTML = `<span class="nle-insp-hint"><strong>Tip:</strong> drag on an empty lane or use a track&rsquo;s + button to add a clip &middot; drag a clip to move it, drag its edges to resize &middot; click a clip to edit it here, <span class="nle-kbd">Backspace</span> deletes it.</span>`;
           return;
         }
         const tr = NLE_TRACKS.find(t => t.id === sel.track) || NLE_TRACKS[0];
@@ -6380,23 +6416,36 @@
         const valStep = isTemp ? "0.5" : "1";
         const durSec = Math.max(0, sel.endSec - sel.startSec);
 
+        const mountCls = tr.group === "BOT" ? "nle-mount-bot" : (tr.group === "ENV" ? "nle-mount-env" : "nle-mount-top");
         insp.innerHTML = `
-          <div class="nle-insp-fields">
-            <span class="badge-hw" style="background:${tr.bg}; color:${tr.text}; border-color:${tr.border};">${tr.label} (${tr.sub})</span>
-            <label class="nle-insp-group">Start
-              <input type="number" id="nleInspStart" min="0" max="${totalSec - bin}" step="${bin}" value="${sel.startSec}">
-            </label>
-            <label class="nle-insp-group">End
-              <input type="number" id="nleInspEnd" min="${bin}" max="${totalSec}" step="${bin}" value="${sel.endSec}">
-            </label>
-            <span class="nle-hud" id="nleInspDur">${durSec}s</span>
-            <label class="nle-insp-group">${valLabel}
-              <input type="range" id="nleInspRange" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled}>
-              <input type="number" id="nleInspVal" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled}>
-            </label>
+          <div class="nle-insp-head">
+            <div class="nle-insp-title">
+              <span class="nle-mount-tag ${mountCls}">${tr.group}</span>
+              <span class="nle-swatch" style="background:${tr.swatch};"></span>
+              <span>${tr.label}</span>
+              <span class="nle-insp-sub">${tr.sub}</span>
+            </div>
+            <div class="nle-insp-actions">
+              <span class="nle-hud" id="nleInspDur">${durSec}s</span>
+              <button type="button" class="btn btn-xs" id="nleDelClipBtn" title="Shortcut: Backspace or Delete">Delete Clip</button>
+            </div>
           </div>
-          <div style="display:flex; gap:6px; align-items:center;">
-            <button type="button" class="btn btn-xs" id="nleDelClipBtn" title="Shortcut: Backspace or Delete">Delete</button>
+          <div class="nle-insp-fields">
+            <div class="nle-insp-field">
+              <label for="nleInspStart">Start (sec)</label>
+              <input type="number" id="nleInspStart" min="0" max="${totalSec - bin}" step="${bin}" value="${sel.startSec}">
+            </div>
+            <div class="nle-insp-field">
+              <label for="nleInspEnd">End (sec)</label>
+              <input type="number" id="nleInspEnd" min="${bin}" max="${totalSec}" step="${bin}" value="${sel.endSec}">
+            </div>
+            <div class="nle-insp-field nle-insp-field-wide">
+              <label for="nleInspVal">${valLabel}</label>
+              <div class="nle-insp-slider">
+                <input type="range" id="nleInspRange" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled} aria-label="${valLabel}">
+                <input type="number" id="nleInspVal" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled}>
+              </div>
+            </div>
           </div>`;
 
         const sInp = document.getElementById("nleInspStart");
@@ -7573,11 +7622,11 @@
         ph.style.display = "block";
         if (sampled.nlePlayheadPct === null) {
           ph.classList.add("is-acclim");
-          ph.style.left = "146px";
+          ph.style.left = "var(--nle-hdr-w)";
         } else {
           const ratio = Math.max(0, Math.min(1, sampled.nlePlayheadPct / 100));
           ph.classList.remove("is-acclim");
-          ph.style.left = `calc(146px + (100% - 147px) * ${ratio.toFixed(5)})`;
+          ph.style.left = `calc(var(--nle-hdr-w) + (100% - var(--nle-hdr-w) - 1px) * ${ratio.toFixed(5)})`;
         }
       } else {
         ph.style.display = "none";
