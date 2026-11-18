@@ -14,6 +14,9 @@ function init() {
   document.getElementById("chk_thermostat").checked = daph.thermostat;
   document.getElementById("chk_msd").checked = true;
 
+  // Bring back the last experiment edited in this browser (if any)
+  restoreAutosavedExperiment();
+
   syncGeoInputsToActivePlate();
   syncCheckStyles();
   renderOrganismChips();
@@ -23,6 +26,8 @@ function init() {
   bindEvents();
   refreshAll();
   bindWizard();
+  bindPreflight();
+  bindExperimentIO();
 }
 
 init();

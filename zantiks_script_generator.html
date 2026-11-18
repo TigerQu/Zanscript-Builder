@@ -443,8 +443,16 @@
     <section class="wizard-page" data-page="export">
       <header class="page-head">
         <h2 class="page-title">Review &amp; Export</h2>
-        <p class="page-desc">Four scripts to run in order on the Zantiks Control Console. Download them together as a .zip, or copy each one from its tab.</p>
+        <p class="page-desc">Four scripts to run in order on the Zantiks Control Console. Download them together as a .zip (it also contains <code>experiment.json</code>, so you can reopen this design later), or copy each one from its tab.</p>
       </header>
+
+      <div class="card preflight-card" id="preflightCard">
+        <div class="card-header">
+          <h3 class="card-title">Pre-flight Checks</h3>
+          <span class="card-hint" id="preflightSummary">All clear</span>
+        </div>
+        <ul class="preflight-list" id="preflightList"></ul>
+      </div>
 
       <div class="output-panel">
         <!-- 4 Separate Script Tabs -->
@@ -504,7 +512,17 @@
   <!-- RUN SUMMARY (always visible) -->
   <aside class="run-summary" aria-label="Run summary">
     <div class="summary-card">
-      <div class="summary-head">Run Summary</div>
+      <div class="summary-head">
+        <div class="summary-head-row">
+          <span>Run Summary</span>
+          <div class="summary-actions">
+            <button type="button" class="btn btn-xs" id="openExperimentBtn" title="Open a saved experiment (.json) or a scripts .zip downloaded from this page">Open&hellip;</button>
+            <button type="button" class="btn btn-xs" id="saveExperimentBtn" title="Download this experiment design as a .json file you can open again or share">Save as file</button>
+          </div>
+        </div>
+        <span class="summary-autosave" id="autosaveStatus">Auto-saved in this browser</span>
+        <input type="file" id="experimentFileInput" accept=".json,.zip,application/json,application/zip" hidden>
+      </div>
       <div class="summary-stats">
         <div class="metric-stat">
           <span class="stat-label">Assay Runtime</span>
@@ -553,6 +571,11 @@
           <span class="summary-key">Data</span>
           <span class="summary-val" id="sumData">Distance</span>
           <span class="summary-sub" id="sumDataSub"></span>
+        </button>
+        <button type="button" class="summary-row summary-row-checks" id="sumChecksRow" data-goto="export">
+          <span class="summary-key">Checks</span>
+          <span class="summary-val" id="sumChecks">No warnings</span>
+          <span class="summary-sub" id="sumChecksSub"></span>
         </button>
       </div>
     </div>
@@ -630,6 +653,8 @@
 <script src="js/simulator.js"></script>
 <script src="js/events.js"></script>
 <script src="js/wizard.js"></script>
+<script src="js/experiment-io.js"></script>
+<script src="js/preflight.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

@@ -301,7 +301,8 @@ function bindEvents() {
       { name: `${folder}/${b[2].filename}`, content: b[2].code },
       { name: `${folder}/${b[3].filename}`, content: b[3].code },
       { name: `${folder}/${b[4].filename}`, content: b[4].code },
-      { name: `${folder}/README_STEPS.txt`, content: b.readme }
+      { name: `${folder}/README_STEPS.txt`, content: b.readme },
+      { name: `${folder}/${EXPERIMENT_FILE_IN_ZIP}`, content: JSON.stringify(buildExperimentPayload(), null, 2) + "\n" }
     ]);
     triggerDownload(zipBlob, `${folder}_scripts.zip`);
     showToast(`Downloaded ${folder}_scripts.zip`);

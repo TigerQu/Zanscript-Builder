@@ -497,4 +497,8 @@ function refreshAll() {
   document.getElementById("stepInstructionText").innerHTML = activeObj.instruction;
   document.getElementById("csvSchemaBox").innerHTML = `<code>${activeObj.schemaText}</code>`;
   document.getElementById("codePreview").innerHTML = highlightZanscript(activeObj.code);
+
+  // Export-page checks and browser auto-save (js/preflight.js, js/experiment-io.js)
+  renderPreflightChecks(cfg, bundle);
+  scheduleExperimentAutosave();
 }

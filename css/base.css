@@ -317,6 +317,13 @@ body {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .wizard-progress {
+    display: none;
+  }
 }
 
 /* Run summary sidebar */
@@ -334,10 +341,46 @@ body {
 }
 
 .summary-head {
-  padding: 14px 18px;
+  padding: 14px 18px 12px;
   font-size: 13px;
   font-weight: 600;
   border-bottom: 1px solid var(--border-muted);
+}
+
+.summary-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.summary-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.summary-actions .btn-xs {
+  padding: 3px 9px;
+  font-size: 11.5px;
+}
+
+.summary-autosave {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.summary-autosave::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  vertical-align: 1px;
 }
 
 .summary-stats {
@@ -381,6 +424,10 @@ body {
 .summary-row.current {
   background: #f0f8ff;
   box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.summary-row-checks.has-warn .summary-val {
+  color: var(--warn);
 }
 
 .summary-key {
