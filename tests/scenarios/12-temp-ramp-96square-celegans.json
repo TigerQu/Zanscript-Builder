@@ -1,0 +1,107 @@
+{
+  "format": "zanscript-builder-experiment",
+  "version": 1,
+  "savedAt": "2026-11-17T00:00:00.000Z",
+  "experiment": {
+    "organism": "celegans",
+    "plateId": "96square",
+    "stimId": "temp_ramp",
+    "inputs": {
+      "userName": "",
+      "expPrefix": "",
+      "hwVersion": "Z3",
+      "ledColor": "GREEN",
+      "ledMount": "OVERHEAD",
+      "ledBrightness": "100",
+      "targetSize": "1",
+      "detThreshold": "5",
+      "msdThreshold": "5",
+      "autorefTimeout": "60",
+      "thermostatTemp": "20",
+      "chk_thermostat": true,
+      "chk_dist": true,
+      "chk_msd": true,
+      "chk_zones": false,
+      "chk_xy": false,
+      "videoMode": "1fps",
+      "chk_tracks": true,
+      "chk_heatmap": false
+    },
+    "stimParams": {
+      "baseLight": "LIGHT",
+      "acclimSec": 120,
+      "durationSec": 600,
+      "timeBinSec": 1,
+      "ldStart": "LIGHT",
+      "ldPhaseSec": 300,
+      "ldCycles": 2,
+      "preBaselineSec": 60,
+      "numPulses": 5,
+      "pulseDurSec": 1,
+      "itiSec": 30,
+      "vibIntensity": "U0",
+      "vibAmbient": "DARK",
+      "lightHours": 16,
+      "darkHours": 8,
+      "numDays": 2,
+      "circBinSec": 10,
+      "mpTimelineSec": 180,
+      "mpAcclimLight": "DARK",
+      "mpCycles": 1,
+      "rampStartTemp": 20,
+      "rampEndTemp": "28",
+      "rampStepTemp": "4",
+      "rampHoldSec": "120",
+      "rampLight": "LIGHT"
+    },
+    "timelineClips": [
+      {
+        "track": "WHITE",
+        "startSec": 0,
+        "endSec": 180,
+        "val": 35
+      },
+      {
+        "track": "BLUE",
+        "startSec": 30,
+        "endSec": 50,
+        "val": 100
+      },
+      {
+        "track": "RED",
+        "startSec": 80,
+        "endSec": 100,
+        "val": 100
+      },
+      {
+        "track": "BLUE",
+        "startSec": 130,
+        "endSec": 150,
+        "val": 100
+      },
+      {
+        "track": "TEMP",
+        "startSec": 0,
+        "endSec": 90,
+        "val": 22
+      },
+      {
+        "track": "TEMP",
+        "startSec": 90,
+        "endSec": 180,
+        "val": 26
+      }
+    ],
+    "showUnderTracks": false
+  },
+  "plateGeometry": {
+    "plateId": "96square",
+    "xOffset": 14.15,
+    "yOffset": 9.65,
+    "colStep": 9,
+    "rowStep": 9,
+    "r": 7.5,
+    "rDz": 4.5
+  },
+  "description": "Temperature ramp 20-28 C in 4 C steps, green light, 96-well square, C. elegans"
+}

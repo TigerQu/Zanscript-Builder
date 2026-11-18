@@ -1,0 +1,107 @@
+{
+  "format": "zanscript-builder-experiment",
+  "version": 1,
+  "savedAt": "2026-11-17T00:00:00.000Z",
+  "experiment": {
+    "organism": "daphnia",
+    "plateId": "24well",
+    "stimId": "light_on_pulse",
+    "inputs": {
+      "userName": "",
+      "expPrefix": "",
+      "hwVersion": "Z3",
+      "ledColor": "WHITE",
+      "ledMount": "BOTH",
+      "ledBrightness": "60",
+      "targetSize": "4",
+      "detThreshold": "8",
+      "msdThreshold": "6",
+      "autorefTimeout": "60",
+      "thermostatTemp": "22",
+      "chk_thermostat": true,
+      "chk_dist": true,
+      "chk_msd": true,
+      "chk_zones": false,
+      "chk_xy": false,
+      "videoMode": "1fps",
+      "chk_tracks": true,
+      "chk_heatmap": false
+    },
+    "stimParams": {
+      "baseLight": "LIGHT",
+      "acclimSec": 120,
+      "durationSec": 600,
+      "timeBinSec": 1,
+      "ldStart": "LIGHT",
+      "ldPhaseSec": 300,
+      "ldCycles": 2,
+      "preBaselineSec": "30",
+      "numPulses": 5,
+      "pulseDurSec": "2",
+      "itiSec": 30,
+      "vibIntensity": "U0",
+      "vibAmbient": "DARK",
+      "lightHours": 16,
+      "darkHours": 8,
+      "numDays": 2,
+      "circBinSec": 10,
+      "mpTimelineSec": 180,
+      "mpAcclimLight": "DARK",
+      "mpCycles": 1,
+      "rampStartTemp": 20,
+      "rampEndTemp": 30,
+      "rampStepTemp": 2,
+      "rampHoldSec": 300,
+      "rampLight": "DARK"
+    },
+    "timelineClips": [
+      {
+        "track": "WHITE",
+        "startSec": 0,
+        "endSec": 180,
+        "val": 35
+      },
+      {
+        "track": "BLUE",
+        "startSec": 30,
+        "endSec": 50,
+        "val": 100
+      },
+      {
+        "track": "RED",
+        "startSec": 80,
+        "endSec": 100,
+        "val": 100
+      },
+      {
+        "track": "BLUE",
+        "startSec": 130,
+        "endSec": 150,
+        "val": 100
+      },
+      {
+        "track": "TEMP",
+        "startSec": 0,
+        "endSec": 90,
+        "val": 22
+      },
+      {
+        "track": "TEMP",
+        "startSec": 90,
+        "endSec": 180,
+        "val": 26
+      }
+    ],
+    "showUnderTracks": false
+  },
+  "plateGeometry": {
+    "plateId": "24well",
+    "xOffset": 15.2,
+    "yOffset": 13.5,
+    "colStep": 19.47,
+    "rowStep": 19.16,
+    "r": 8.13,
+    "rDz": 5.6
+  },
+  "description": "Light-on flashes from top + bottom LEDs at 60%"
+}

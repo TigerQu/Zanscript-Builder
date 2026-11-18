@@ -1,0 +1,13 @@
+{
+  "name": "zanscript-builder",
+  "private": true,
+  "description": "Automated tests for the Zantiks MWP Script Builder. The app itself has no dependencies and no build step.",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.mjs",
+    "test:update": "node tests/run.mjs --update"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.1"
+  }
+}
