@@ -749,11 +749,36 @@
   /* Stimulus Selector */
   .stim-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
   }
 
-  @media (max-width: 560px) {
+  .stim-grid .option-tile {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  .stim-grid .option-tile .tile-name {
+    font-size: 12px;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+
+  .stim-grid .option-tile .tile-meta {
+    font-size: 11px;
+    line-height: 1.35;
+    margin-top: 2px;
+  }
+
+  @media (max-width: 759px) {
+    .stim-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 479px) {
     .stim-grid {
       grid-template-columns: 1fr;
     }
@@ -778,9 +803,39 @@
     gap: 14px 16px;
   }
 
+  .form-grid-5 {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .form-grid-5 .field label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .form-grid-5 .field input[type="number"],
+  .form-grid-5 .field input[type="text"],
+  .form-grid-5 .field select {
+    padding: 7px 8px;
+    font-size: 12.5px;
+  }
+
+  @media (max-width: 759px) {
+    .form-grid-3 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .form-grid-5 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
   @media (max-width: 560px) {
     .form-grid,
-    .form-grid-3 {
+    .form-grid-3,
+    .form-grid-5 {
       grid-template-columns: 1fr;
     }
   }
@@ -824,8 +879,11 @@
   }
 
   /* Timeline Preview */
-  .timeline-wrap {
-    margin-top: 22px;
+  .timeline-bar-wrap {
+    position: relative;
+    margin-top: 2px;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .timeline-bar {
@@ -835,6 +893,50 @@
     display: flex;
     border: 1px solid var(--border);
     background: #eaeef2;
+    cursor: pointer;
+  }
+
+  .timeline-playhead {
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    left: 1px;
+    width: 2px;
+    transform: translateX(-50%);
+    background: #38bdf8;
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.85), 0 0 6px rgba(56, 189, 248, 0.65);
+    pointer-events: none;
+    z-index: 6;
+  }
+
+  .timeline-playhead::before {
+    content: "";
+    position: absolute;
+    top: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4.5px solid transparent;
+    border-right: 4.5px solid transparent;
+    border-top: 5.5px solid #0f172a;
+  }
+
+  .timeline-playhead::after {
+    content: "";
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4.5px solid transparent;
+    border-right: 4.5px solid transparent;
+    border-bottom: 5.5px solid #0f172a;
+  }
+
+  .timeline-playhead.is-acclim {
+    opacity: 0.78;
   }
 
   .timeline-bar.has-overlap {
@@ -879,7 +981,7 @@
 
   /* AE / Premiere-Style Multi-Track NLE Timeline */
   .nle-section {
-    margin-top: 16px;
+    margin-top: 14px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
@@ -892,22 +994,59 @@
     justify-content: space-between;
     gap: 8px;
     flex-wrap: wrap;
-    padding: 10px 12px;
+    padding: 8px 12px;
     background: var(--surface-subtle);
     border-bottom: 1px solid var(--border-muted);
   }
 
-  .nle-presets {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
+  .nle-preset-sel {
+    height: 26px;
+    padding: 0 8px;
+    line-height: 1;
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    max-width: 230px;
+  }
+
+  .nle-preset-sel:hover {
+    background: #f3f4f6;
+    border-color: #afb8c1;
+  }
+
+  .nle-preset-sel:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
+  }
+
+  .nle-toolbar .btn-xs {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 11.5px;
   }
 
   .nle-toolbar-right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .btn-toggle-active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .btn-toggle-active:hover {
+    background: #c8ebff;
+    border-color: var(--accent-hover);
   }
 
   .nle-hud {
@@ -927,6 +1066,7 @@
   }
 
   .nle-workspace {
+    position: relative;
     user-select: none;
     -webkit-user-select: none;
     background: #0f172a;
@@ -936,13 +1076,13 @@
 
   .nle-header-row {
     display: grid;
-    grid-template-columns: 122px minmax(0, 1fr);
+    grid-template-columns: 146px minmax(0, 1fr);
     border-bottom: 1px solid #1e293b;
     background: #0b1120;
   }
 
   .nle-corner {
-    padding: 5px 10px;
+    padding: 5px 8px 5px 10px;
     font-size: 10.5px;
     font-weight: 600;
     color: #94a3b8;
@@ -956,6 +1096,58 @@
     position: relative;
     height: 24px;
     overflow: hidden;
+    cursor: pointer;
+  }
+
+  .nle-ruler:hover {
+    background: rgba(56, 189, 248, 0.08);
+  }
+
+  .nle-playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 146px;
+    width: 2px;
+    transform: translateX(-50%);
+    background: #38bdf8;
+    box-shadow: 0 0 0 1px rgba(11, 17, 32, 0.86), 0 0 8px rgba(56, 189, 248, 0.78);
+    pointer-events: none;
+    z-index: 15;
+    display: block;
+  }
+
+  .nle-playhead.is-acclim {
+    opacity: 0.62;
+    box-shadow: 0 0 0 1px rgba(11, 17, 32, 0.72), 0 0 4px rgba(56, 189, 248, 0.4);
+  }
+
+  .nle-playhead::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5.5px solid transparent;
+    border-right: 5.5px solid transparent;
+    border-top: 8px solid #38bdf8;
+    filter: drop-shadow(0 1px 1px rgba(11, 17, 32, 0.9));
+  }
+
+  .nle-playhead::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 6px solid #38bdf8;
+    filter: drop-shadow(0 -1px 1px rgba(11, 17, 32, 0.9));
   }
 
   .nle-tick {
@@ -994,8 +1186,16 @@
 
   .nle-track-row {
     display: grid;
-    grid-template-columns: 122px minmax(0, 1fr);
+    grid-template-columns: 146px minmax(0, 1fr);
     border-bottom: 1px solid #1e293b;
+  }
+
+  .nle-track-row.nle-row-hidden {
+    display: none;
+  }
+
+  .nle-track-row.nle-group-start {
+    border-top: 2px solid #334155;
   }
 
   .nle-track-row:last-child {
@@ -1003,8 +1203,8 @@
   }
 
   .nle-track-hdr {
-    padding: 0 8px 0 10px;
-    height: 42px;
+    padding: 0 7px 0 8px;
+    height: 40px;
     border-right: 1px solid #1e293b;
     background: #111827;
     display: flex;
@@ -1013,41 +1213,130 @@
     gap: 4px;
   }
 
+  .nle-track-row[data-track-group="BOT"] .nle-track-hdr {
+    background: #0d1626;
+  }
+
+  .nle-mount-tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+  }
+
+  .nle-mount-top {
+    background: rgba(56, 189, 248, 0.16);
+    color: #7dd3fc;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+  }
+
+  .nle-mount-bot {
+    background: rgba(250, 204, 21, 0.15);
+    color: #fde047;
+    border: 1px solid rgba(250, 204, 21, 0.35);
+  }
+
+  .nle-mount-env {
+    background: rgba(249, 115, 22, 0.16);
+    color: #fdba74;
+    border: 1px solid rgba(249, 115, 22, 0.35);
+  }
+
+  .nle-mount-sum {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+    border: 1px solid rgba(16, 185, 129, 0.38);
+  }
+
+  .nle-summary-row {
+    display: grid;
+    grid-template-columns: 146px minmax(0, 1fr);
+    border-top: 2px solid #334155;
+    background: #0b1120;
+  }
+
+  .nle-summary-hdr {
+    padding: 0 7px 0 8px;
+    height: 30px;
+    border-right: 1px solid #1e293b;
+    background: #0b1120;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .nle-summary-bar {
+    position: relative;
+    height: 30px;
+    display: flex;
+    overflow: hidden;
+    cursor: pointer;
+    background: #1e293b;
+  }
+
+  .nle-summary-bar.has-overlap {
+    background: repeating-linear-gradient(
+      135deg,
+      #dbeafe 0px,
+      #dbeafe 6px,
+      #fef08a 6px,
+      #fef08a 12px
+    );
+  }
+
+  .nle-summary-bar .tl-seg {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 0 4px;
+    text-overflow: ellipsis;
+    box-shadow: inset -1px 0 0 rgba(15, 23, 42, 0.22);
+  }
+
+  .nle-summary-bar .tl-seg:last-child,
+  .nle-summary-bar .tl-seg.tl-overlap {
+    box-shadow: none;
+  }
+
   .nle-track-title {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
   }
 
   .nle-swatch {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
   }
 
   .nle-track-name {
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 600;
     color: #f1f5f9;
     white-space: nowrap;
   }
 
   .nle-track-add {
-    width: 22px;
-    height: 22px;
+    width: 21px;
+    height: 21px;
     border-radius: 4px;
     border: 1px solid #334155;
     background: #1e293b;
     color: #cbd5e1;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0;
+    flex-shrink: 0;
   }
 
   .nle-track-add:hover {
@@ -1057,11 +1346,15 @@
 
   .nle-lane {
     position: relative;
-    height: 42px;
+    height: 40px;
     background-color: #0f172a;
     background-image: linear-gradient(to right, rgba(148, 163, 184, 0.09) 1px, transparent 1px);
     cursor: crosshair;
     overflow: hidden;
+  }
+
+  .nle-track-row[data-track-group="BOT"] .nle-lane {
+    background-color: #0c1424;
   }
 
   .nle-lane:hover {
@@ -1070,7 +1363,7 @@
 
   .nle-clip {
     position: absolute;
-    top: 5px;
+    top: 4px;
     height: 32px;
     border-radius: 6px;
     border: 1.5px solid transparent;
@@ -1152,7 +1445,7 @@
   }
 
   .nle-inspector {
-    padding: 8px 12px;
+    padding: 7px 12px;
     background: var(--surface-subtle);
     border-top: 1px solid var(--border-muted);
     display: flex;
@@ -1160,7 +1453,7 @@
     justify-content: space-between;
     gap: 10px;
     flex-wrap: wrap;
-    min-height: 52px;
+    min-height: 44px;
   }
 
   .nle-insp-fields {
@@ -1227,11 +1520,530 @@
 
   .timeline-legend {
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
+    height: 17px;
+    min-height: 17px;
+    max-height: 17px;
     font-size: 11.5px;
+    line-height: 17px;
     color: var(--text-muted);
-    margin-top: 8px;
+    margin-top: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  #timelineDesc {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .timeline-scrub-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.82;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 560px) {
+    .timeline-scrub-hint {
+      display: none;
+    }
+  }
+
+  /* Standalone Card 3: Flat 2D Light & Environment Sequence Simulator (Strictly Planar 2D) */
+  .card.sim-card {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .card.sim-card .card-header {
+    padding: 16px var(--card-pad-x) 14px;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--border-muted);
+    background: var(--surface);
+  }
+
+  .sim-panel {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .sim-transport {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px var(--card-pad-x);
+    background: var(--surface-subtle);
+    border-bottom: 1px solid var(--border-muted);
+  }
+
+  .sim-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    width: 100%;
+    height: 26px;
+    min-height: 26px;
+    max-height: 26px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .sim-play-btn {
+    width: 82px;
+    flex: 0 0 82px;
+    height: 26px;
+    padding: 0 8px;
+    line-height: 1;
+    font-weight: 600;
+    overflow: hidden;
+  }
+
+  .sim-reset-btn {
+    width: 54px;
+    flex: 0 0 54px;
+    height: 26px;
+    padding: 0 6px;
+    line-height: 1;
+    overflow: hidden;
+  }
+
+  .sim-speed-sel {
+    width: 60px;
+    flex: 0 0 60px;
+    height: 26px;
+    padding: 0 6px;
+    line-height: 1;
+    font-size: 11.5px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .sim-phase-pill {
+    flex: 0 1 auto;
+    max-width: 280px;
+    min-width: 0;
+    height: 22px;
+    line-height: 20px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid rgba(9, 105, 218, 0.28);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sim-time-readout {
+    margin-left: auto;
+    width: 134px;
+    flex: 0 0 134px;
+    height: 22px;
+    line-height: 22px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .sim-scrubber-row {
+    display: block;
+    width: 100%;
+    height: 18px;
+    min-height: 18px;
+    max-height: 18px;
+  }
+
+  .sim-scrubber {
+    display: block;
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .sim-stage-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+    background: #0d1321;
+    color: #e2e8f0;
+  }
+
+  @media (max-width: 720px) {
+    .sim-stage-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .sim-pane {
+    padding: 16px var(--card-pad-x);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .sim-pane-left {
+    border-right: 1px solid #1e293b;
+  }
+
+  @media (max-width: 720px) {
+    .sim-pane-left {
+      border-right: none;
+      border-bottom: 1px solid #1e293b;
+    }
+  }
+
+  .sim-pane-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: nowrap;
+    height: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    overflow: hidden;
+  }
+
+  .sim-pane-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .sim-ir-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.14);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+
+  .sim-mix-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    max-width: 225px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Left 2D Flat Chamber Schematic */
+  .sim-chamber-2d {
+    border: 1px solid #26334d;
+    border-radius: 6px;
+    background: #090e17;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sim-led-bar {
+    display: grid;
+    grid-template-columns: 36px repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    align-items: center;
+    height: 32px;
+    padding: 0 8px;
+    background: #111827;
+    overflow: hidden;
+  }
+
+  .sim-led-bar-top {
+    border-bottom: 1px solid #1e293b;
+  }
+
+  .sim-led-bar-bot {
+    border-top: 1px solid #1e293b;
+  }
+
+  .sim-bar-tag {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #94a3b8;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .sim-led-pill {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 5px;
+    border-radius: 4px;
+    border: 1px solid #293548;
+    background: #162032;
+    color: #64748b;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .sim-led-pill.on {
+    color: #0f172a;
+    font-weight: 700;
+  }
+
+  .sim-chamber-cavity {
+    position: relative;
+    height: 112px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 12px;
+    background: #090d16;
+  }
+
+  .sim-wash-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 55px;
+    pointer-events: none;
+  }
+
+  .sim-wash-bot {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 55px;
+    pointer-events: none;
+  }
+
+  .sim-plate-cross {
+    position: relative;
+    z-index: 2;
+    height: 30px;
+    border: 1.5px solid #475569;
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.88);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    padding: 0 8px;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .sim-plate-cross.is-vibrating {
+    border-color: #38bdf8;
+    background: rgba(14, 116, 144, 0.36);
+  }
+
+  .sim-plate-cross-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .sim-plate-cross-name {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sim-temp-badge {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .sim-vib-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 6px;
+    border-radius: 4px;
+    border: 1px solid #334155;
+    background: #131c2e;
+    color: #64748b;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .sim-vib-badge.active {
+    background: #0284c7;
+    border-color: #7dd3fc;
+    color: #ffffff;
+  }
+
+  /* Right 2D Flat Top-Down Plate View */
+  .sim-topdown-box {
+    flex: 1;
+    border: 1px solid #26334d;
+    border-radius: 6px;
+    background: #090e17;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #simPlateSvg {
+    display: block;
+    width: 100%;
+    max-width: 214px;
+    height: auto;
+    --sim-tray-fill: #161f30;
+    --sim-tray-stroke: #475569;
+    --sim-well-fill: #0b111e;
+    --sim-well-stroke: #334155;
+    --sim-core-fill: transparent;
+  }
+
+  #simPlateSvg .sim-svg-tray {
+    fill: var(--sim-tray-fill);
+    stroke: var(--sim-tray-stroke);
+    stroke-width: 1.2;
+  }
+
+  #simPlateSvg .sim-svg-well {
+    fill: var(--sim-well-fill);
+    stroke: var(--sim-well-stroke);
+    stroke-width: 0.85;
+  }
+
+  #simPlateSvg .sim-svg-core {
+    fill: var(--sim-core-fill);
+    pointer-events: none;
+  }
+
+  .sim-topdown-legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    height: 18px;
+    min-height: 18px;
+    max-height: 18px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: #94a3b8;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
+  #simTopDownCaption {
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sim-hw-bar {
+    padding: 0 var(--card-pad-x);
+    background: #0b1120;
+    border-top: 1px solid #1e293b;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    color: #cbd5e1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    height: 34px;
+    min-height: 34px;
+    max-height: 34px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .sim-hw-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sim-hw-right {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .sim-hw-bar code {
+    color: #7dd3fc;
+    font-weight: 600;
   }
 
   /* Checkboxes for Measurements */
@@ -1818,11 +2630,11 @@
           <div class="field">
             <label for="ledColor">Stimulus Light Wavelength</label>
             <select id="ledColor">
-              <option value="WHITE" selected>White (~6000K - Z3 Ch 4)</option>
-              <option value="BLUE">Blue (470 nm - Z3 Ch 1)</option>
-              <option value="GREEN">Green (530 nm - Z3 Ch 3)</option>
-              <option value="RED">Red (625 nm - Z3 Ch 5)</option>
-              <option value="UV">UV (365 nm - Z3 Ch 0, if fitted)</option>
+              <option value="WHITE" selected>White (~6000K - Z3 Ch 4 / 12)</option>
+              <option value="BLUE">Blue (470 nm - Z3 Ch 1 / 9)</option>
+              <option value="GREEN">Green (530 nm - Z3 Ch 3 / 11)</option>
+              <option value="RED">Red (625 nm - Z3 Ch 5 / 13)</option>
+              <option value="UV">UV (365 nm - Z3 Ch 0 / 8, if fitted)</option>
             </select>
           </div>
           <div class="field">
@@ -1830,10 +2642,12 @@
             <input type="number" id="ledBrightness" min="5" max="100" step="5" value="100">
           </div>
           <div class="field">
-            <label>Z3 Underneath Light</label>
-            <div class="inline-check-row">
-              <label class="inline-check"><input type="checkbox" id="chk_underlight"> <span id="underlightText">Drive Underneath LED (Ch 12)</span></label>
-            </div>
+            <label for="ledMount">Z3 LED Position / Mount</label>
+            <select id="ledMount">
+              <option value="OVERHEAD" selected>Overhead Only (Top Ch 0-5)</option>
+              <option value="UNDERNEATH">Underneath Only (Bottom Ch 8-13)</option>
+              <option value="BOTH">Both Overhead + Underneath</option>
+            </select>
           </div>
         </div>
       </div>
@@ -1962,7 +2776,7 @@
     <section class="wizard-page" data-page="stimulus">
       <header class="page-head">
         <h2 class="page-title">Stimulus Protocol</h2>
-        <p class="page-desc">Pick the assay schedule, then set its timing. The bar at the bottom previews the whole run.</p>
+        <p class="page-desc">Pick the assay schedule, set its timing, and preview the full sequence below.</p>
       </header>
 
       <div class="card">
@@ -1979,12 +2793,96 @@
           <span class="card-hint">All durations in seconds unless noted</span>
         </div>
         <div id="stimParamsBox"></div>
-        <div class="timeline-wrap">
-          <div class="timeline-bar" id="timelineBar"></div>
-          <div class="timeline-legend">
-            <span id="timelineDesc">Acclimation + Recording</span>
-            <span id="timelineTotal">Total: 11 min 00 sec</span>
+      </div>
+
+      <div class="card sim-card">
+        <div class="card-header">
+          <h3 class="card-title">2D Sequence Preview</h3>
+          <span class="card-hint" id="timelineTotal">Est. Runtime: 13 min 00 sec</span>
+        </div>
+
+        <!-- FLAT 2D LIGHT & ENVIRONMENT SEQUENCE SIMULATOR -->
+        <div class="sim-panel" id="simPanel">
+          <div class="sim-transport">
+            <div class="sim-controls-row">
+              <button type="button" class="btn btn-xs btn-primary sim-play-btn" id="simPlayBtn">&#9654; Play</button>
+              <button type="button" class="btn btn-xs sim-reset-btn" id="simResetBtn" title="Reset playhead to 0s">&#9198; 0s</button>
+              <select id="simSpeedSel" class="sim-speed-sel" aria-label="Playback speed">
+                <option value="1" selected>1x</option>
+                <option value="5">5x</option>
+                <option value="20">20x</option>
+                <option value="60">60x</option>
+              </select>
+              <span class="sim-phase-pill" id="simPhaseBadge">ACCLIMATION</span>
+              <span class="sim-time-readout" id="simTimeReadout">00:00 / 13:00</span>
+            </div>
+            <div class="sim-scrubber-row">
+              <input type="range" class="sim-scrubber" id="simScrubber" min="0" max="780" step="0.1" value="0" aria-label="Assay time scrubber">
+            </div>
+            <div class="timeline-bar-wrap" id="timelineBarWrap">
+              <div class="timeline-bar" id="timelineBar" title="Click or drag to scrub full assay timeline"></div>
+              <div class="timeline-playhead" id="timelinePlayhead"></div>
+            </div>
+            <div class="timeline-legend">
+              <span id="timelineDesc">Acclimation + Recording</span>
+              <span class="timeline-scrub-hint">Click or drag bar to scrub</span>
+            </div>
           </div>
+
+          <div class="sim-stage-grid">
+            <!-- Left 2D Panel: Flat Chamber Cross-Section Schematic -->
+            <div class="sim-pane sim-pane-left" id="simChamberBox">
+              <div class="sim-pane-head">
+                <span class="sim-pane-title">2D Chamber Cross-Section</span>
+                <span class="sim-ir-badge" id="simIrBadge">IR 850nm ON (Ch 2/10)</span>
+              </div>
+              <div class="sim-chamber-2d">
+                <div class="sim-led-bar sim-led-bar-top" id="simTopBar">
+                  <span class="sim-bar-tag">TOP</span>
+                  <div class="sim-led-pill" id="simLed_TOP_UV"><span>UV</span><span id="simPct_TOP_UV">0%</span></div>
+                  <div class="sim-led-pill" id="simLed_TOP_BLUE"><span>470</span><span id="simPct_TOP_BLUE">0%</span></div>
+                  <div class="sim-led-pill" id="simLed_TOP_GREEN"><span>530</span><span id="simPct_TOP_GREEN">0%</span></div>
+                  <div class="sim-led-pill" id="simLed_TOP_WHITE"><span>W</span><span id="simPct_TOP_WHITE">0%</span></div>
+                  <div class="sim-led-pill" id="simLed_TOP_RED"><span>625</span><span id="simPct_TOP_RED">0%</span></div>
+                </div>
+                <div class="sim-chamber-cavity">
+                  <div class="sim-wash-top" id="simTopWash"></div>
+                  <div class="sim-plate-cross" id="simPlateCrossBar">
+                    <div class="sim-plate-cross-left">
+                      <span class="sim-plate-cross-name" id="simPlateCrossLabel">24-Well Tray</span>
+                      <span class="sim-temp-badge" id="simTempBadge">22.0 &deg;C</span>
+                    </div>
+                    <span class="sim-vib-badge" id="simVibBadge">Motor Idle</span>
+                  </div>
+                  <div class="sim-wash-bot" id="simBotWash"></div>
+                </div>
+                <div class="sim-led-bar sim-led-bar-bot" id="simBotBar">
+                  <span class="sim-bar-tag">BOT</span>
+                  <div class="sim-led-pill" id="simLed_BOT_UV"><span>UV</span><span id="simPct_BOT_UV">0%</span></div>
+                  <div class="sim-led-pill" id="simLed_BOT_BLUE"><span>470</span><span id="simPct_BOT_BLUE">0%</span></div>
+                  <div class="sim-led-pill" id="simLed_BOT_GREEN"><span>530</span><span id="simPct_BOT_GREEN">0%</span></div>
+                  <div class="sim-led-pill" id="simLed_BOT_WHITE"><span>W</span><span id="simPct_BOT_WHITE">0%</span></div>
+                  <div class="sim-led-pill" id="simLed_BOT_RED"><span>625</span><span id="simPct_BOT_RED">0%</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right 2D Panel: Flat Top-Down Plate View -->
+            <div class="sim-pane" id="simTopDownBox">
+              <div class="sim-pane-head">
+                <span class="sim-pane-title">2D Top-Down Plate View</span>
+                <span class="sim-mix-badge" id="simLightMixBadge">IR Dark (0%)</span>
+              </div>
+              <div class="sim-topdown-box">
+                <svg id="simPlateSvg" width="214" height="145" viewBox="-2 -3 136 92"></svg>
+                <div class="sim-topdown-legend">
+                  <span id="simTopDownCaption">24-Well (A1-D6) &middot; Overhead + Underneath 2D Field</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sim-hw-bar" id="simHwReadout"></div>
         </div>
       </div>
     </section>
@@ -2384,17 +3282,22 @@
     { id: "light_on_pulse", name: "Light-On Flash", meta: "Bright flashes in dark" },
     { id: "vibration_startle", name: "Vibration Startle", meta: "Stepper motor tap + ITI" },
     { id: "circadian", name: "Long-Term Cycle", meta: "Multi-hour / multi-day L:D" },
-    { id: "multi_phase", name: "Multi-Track Timeline", meta: "AE/PR overlapping lights & temp" },
-    { id: "temp_ramp", name: "Temperature Step / Ramp", meta: "Stepped thermal curve (e.g. 20->30°C)" }
+    { id: "multi_phase", name: "Multi-Track Timeline", meta: "Top/Bot LEDs & temp tracks" },
+    { id: "temp_ramp", name: "Temperature Step / Ramp", meta: "Stepped thermal curve (°C)" }
   ];
 
   const NLE_TRACKS = [
-    { id: "WHITE", label: "White",     sub: "Ch 4",  kind: "light", swatch: "#eab308", bg: "#fef08a", border: "#ca8a04", text: "#713f12" },
-    { id: "BLUE",  label: "Blue 470",  sub: "Ch 1",  kind: "light", swatch: "#3b82f6", bg: "#bfdbfe", border: "#2563eb", text: "#1e3a8a" },
-    { id: "GREEN", label: "Green 530", sub: "Ch 3",  kind: "light", swatch: "#22c55e", bg: "#bbf7d0", border: "#16a34a", text: "#14532d" },
-    { id: "RED",   label: "Red 625",   sub: "Ch 5",  kind: "light", swatch: "#ef4444", bg: "#fecaca", border: "#dc2626", text: "#7f1d1d" },
-    { id: "UV",    label: "UV 365",    sub: "Ch 0",  kind: "light", swatch: "#a855f7", bg: "#e9d5ff", border: "#9333ea", text: "#581c87" },
-    { id: "TEMP",  label: "Temp °C",   sub: "Therm", kind: "temp",  swatch: "#f97316", bg: "#fed7aa", border: "#ea580c", text: "#7c2d12" }
+    { id: "WHITE",   group: "TOP", colorId: "WHITE", label: "White",     sub: "Top Ch 4",  kind: "light", swatch: "#eab308", bg: "#fef08a", border: "#ca8a04", text: "#713f12" },
+    { id: "BLUE",    group: "TOP", colorId: "BLUE",  label: "Blue 470",  sub: "Top Ch 1",  kind: "light", swatch: "#3b82f6", bg: "#bfdbfe", border: "#2563eb", text: "#1e3a8a" },
+    { id: "GREEN",   group: "TOP", colorId: "GREEN", label: "Green 530", sub: "Top Ch 3",  kind: "light", swatch: "#22c55e", bg: "#bbf7d0", border: "#16a34a", text: "#14532d" },
+    { id: "RED",     group: "TOP", colorId: "RED",   label: "Red 625",   sub: "Top Ch 5",  kind: "light", swatch: "#ef4444", bg: "#fecaca", border: "#dc2626", text: "#7f1d1d" },
+    { id: "UV",      group: "TOP", colorId: "UV",    label: "UV 365",    sub: "Top Ch 0",  kind: "light", swatch: "#a855f7", bg: "#e9d5ff", border: "#9333ea", text: "#581c87" },
+    { id: "U_WHITE", group: "BOT", colorId: "WHITE", label: "White",     sub: "Bot Ch 12", kind: "light", swatch: "#eab308", bg: "#fef9c3", border: "#a16207", text: "#713f12" },
+    { id: "U_BLUE",  group: "BOT", colorId: "BLUE",  label: "Blue 470",  sub: "Bot Ch 9",  kind: "light", swatch: "#38bdf8", bg: "#dbeafe", border: "#0284c7", text: "#0c4a6e" },
+    { id: "U_GREEN", group: "BOT", colorId: "GREEN", label: "Green 530", sub: "Bot Ch 11", kind: "light", swatch: "#34d399", bg: "#d1fae5", border: "#059669", text: "#064e3b" },
+    { id: "U_RED",   group: "BOT", colorId: "RED",   label: "Red 625",   sub: "Bot Ch 13", kind: "light", swatch: "#fb7185", bg: "#ffe4e6", border: "#e11d48", text: "#881337" },
+    { id: "U_UV",    group: "BOT", colorId: "UV",    label: "UV 365",    sub: "Bot Ch 8",  kind: "light", swatch: "#c084fc", bg: "#f3e8ff", border: "#7e22ce", text: "#4c1d95" },
+    { id: "TEMP",    group: "ENV", colorId: null,    label: "Temp °C",   sub: "Therm",     kind: "temp",  swatch: "#f97316", bg: "#fed7aa", border: "#ea580c", text: "#7c2d12" }
   ];
 
   // ---------------------------------------------------------------------------
@@ -2439,11 +3342,12 @@
       const sBin = Math.max(0, Math.min(totalBins, Math.round((parseFloat(c.startSec) || 0) / bin)));
       const eBin = Math.max(0, Math.min(totalBins, Math.round((parseFloat(c.endSec) || 0) / bin)));
       if (eBin > sBin) {
-        norm.push({ track: c.track, sBin, eBin, val: parseFloat(c.val) });
+        norm.push({ track: String(c.track || ""), sBin, eBin, val: parseFloat(c.val) });
       }
     }
 
     const hasAnyTempClip = norm.some(c => c.track === "TEMP");
+    const hasAnyBottomClip = norm.some(c => c.track.startsWith("U_"));
     const ptSet = new Set([0, totalBins]);
     for (const c of norm) {
       ptSet.add(c.sBin);
@@ -2458,13 +3362,21 @@
       const b0 = pts[i], b1 = pts[i + 1];
       if (b1 <= b0) continue;
 
-      const activeLights = [];
+      const topLights = [];
+      const bottomLights = [];
       for (const lid of lightOrder) {
-        const hit = norm.find(c => c.track === lid && c.sBin <= b0 && c.eBin >= b1);
-        if (hit) {
-          const pct = Math.min(100, Math.max(5, Math.round(hit.val || 100)));
+        const hitTop = norm.find(c => c.track === lid && c.sBin <= b0 && c.eBin >= b1);
+        if (hitTop) {
+          const pct = Math.min(100, Math.max(5, Math.round(hitTop.val || 100)));
           const pwm = Math.round((pct / 100) * 4095);
-          activeLights.push({ id: lid, pct, pwm, colObj: LED_COLORS[lid] });
+          topLights.push({ id: lid, trackId: lid, mount: "TOP", pct, pwm, colObj: LED_COLORS[lid] });
+        }
+        const botTrack = "U_" + lid;
+        const hitBot = norm.find(c => c.track === botTrack && c.sBin <= b0 && c.eBin >= b1);
+        if (hitBot) {
+          const pct = Math.min(100, Math.max(5, Math.round(hitBot.val || 100)));
+          const pwm = Math.round((pct / 100) * 4095);
+          bottomLights.push({ id: lid, trackId: botTrack, mount: "BOT", pct, pwm, colObj: LED_COLORS[lid] });
         }
       }
 
@@ -2473,35 +3385,65 @@
         ? (tempHit ? Math.min(40, Math.max(10, Number((tempHit.val || baseT).toFixed(1)))) : baseT)
         : null;
 
-      const sig = activeLights.map(l => `${l.id}:${l.pct}`).join("+") + "|" + (effectiveTemp !== null ? effectiveTemp : "none");
+      const sig = "T:" + topLights.map(l => `${l.id}:${l.pct}`).join("+") +
+        "|B:" + bottomLights.map(l => `${l.id}:${l.pct}`).join("+") +
+        "|C:" + (effectiveTemp !== null ? effectiveTemp : "none");
       const prev = rawSlices[rawSlices.length - 1];
       if (prev && prev.sig === sig) {
         prev.b1 = b1;
         prev.bins = prev.b1 - prev.b0;
       } else {
-        rawSlices.push({ b0, b1, bins: b1 - b0, lights: activeLights, effectiveTemp, sig });
+        rawSlices.push({ b0, b1, bins: b1 - b0, topLights, bottomLights, effectiveTemp, sig });
       }
     }
 
     const shortMap = { WHITE: "W", BLUE: "B", GREEN: "G", RED: "R", UV: "UV" };
     const slices = rawSlices.map((s, idx) => {
       const sNum = idx + 1;
+      const tLen = s.topLights.length;
+      const bLen = s.bottomLights.length;
+      const tempSuffix = s.effectiveTemp !== null ? `_${s.effectiveTemp}C` : "";
       let lightTag;
       let ovLight;
-      if (s.lights.length === 0) {
+
+      if (tLen === 0 && bLen === 0) {
         lightTag = "DARK";
         ovLight = "DARK";
-      } else if (s.lights.length === 1) {
-        lightTag = s.lights[0].id;
-        ovLight = s.lights[0].id;
-      } else if (s.lights.length === 2) {
-        lightTag = `${s.lights[0].id}_${s.lights[1].id}`;
-        ovLight = `${s.lights[0].id}+${s.lights[1].id}`;
+      } else if (bLen === 0) {
+        if (tLen === 1) {
+          lightTag = s.topLights[0].id;
+          ovLight = s.topLights[0].id;
+        } else if (tLen === 2) {
+          lightTag = `${s.topLights[0].id}_${s.topLights[1].id}`;
+          ovLight = `${s.topLights[0].id}+${s.topLights[1].id}`;
+        } else {
+          lightTag = "MIX_" + s.topLights.map(l => shortMap[l.id]).join("");
+          ovLight = s.topLights.map(l => shortMap[l.id]).join("+");
+        }
+      } else if (tLen === 0) {
+        if (bLen === 1) {
+          lightTag = `U_${s.bottomLights[0].id}`;
+          ovLight = `BOT ${s.bottomLights[0].id}`;
+        } else if (bLen === 2) {
+          lightTag = `U_${shortMap[s.bottomLights[0].id]}_${shortMap[s.bottomLights[1].id]}`;
+          ovLight = `BOT ${shortMap[s.bottomLights[0].id]}+${shortMap[s.bottomLights[1].id]}`;
+        } else {
+          lightTag = "U_MIX_" + s.bottomLights.map(l => shortMap[l.id]).join("");
+          ovLight = "BOT " + s.bottomLights.map(l => shortMap[l.id]).join("+");
+        }
       } else {
-        lightTag = "MIX_" + s.lights.map(l => shortMap[l.id]).join("");
-        ovLight = s.lights.map(l => shortMap[l.id]).join("+");
+        if (tLen === 1 && bLen === 1) {
+          const fullCombo = `${s.topLights[0].id}_U_${s.bottomLights[0].id}`;
+          lightTag = (`S${sNum}_${fullCombo}${tempSuffix}`).length <= 24
+            ? fullCombo
+            : `T${shortMap[s.topLights[0].id]}_U${shortMap[s.bottomLights[0].id]}`;
+          ovLight = `T:${shortMap[s.topLights[0].id]} B:${shortMap[s.bottomLights[0].id]}`;
+        } else {
+          lightTag = "T" + s.topLights.map(l => shortMap[l.id]).join("") + "_U" + s.bottomLights.map(l => shortMap[l.id]).join("");
+          ovLight = "T:" + s.topLights.map(l => shortMap[l.id]).join("+") + " B:" + s.bottomLights.map(l => shortMap[l.id]).join("+");
+        }
       }
-      const tempSuffix = s.effectiveTemp !== null ? `_${s.effectiveTemp}C` : "";
+
       const csvTag = `S${sNum}_${lightTag}${tempSuffix}`.slice(0, 24);
       const overlayText = `S${sNum} ${ovLight}${s.effectiveTemp !== null ? " " + s.effectiveTemp + "C" : ""}`;
       return {
@@ -2509,7 +3451,9 @@
         startSec: s.b0 * bin,
         endSec: s.b1 * bin,
         bins: s.bins,
-        lights: s.lights,
+        topLights: s.topLights,
+        bottomLights: s.bottomLights,
+        lights: [...s.topLights, ...s.bottomLights],
         effectiveTemp: s.effectiveTemp,
         csvTag,
         overlayText
@@ -2519,7 +3463,7 @@
     const initialTemp = hasAnyTempClip && slices.length > 0 ? slices[0].effectiveTemp : null;
     const anyTempChange = hasAnyTempClip && slices.some(sl => Math.abs(sl.effectiveTemp - initialTemp) > 0.01);
 
-    return { totalBins, totalSec, bin, hasAnyTempClip, initialTemp, anyTempChange, slices };
+    return { totalBins, totalSec, bin, hasAnyTempClip, hasAnyBottomClip, initialTemp, anyTempChange, slices };
   }
 
   function computeTempRampSteps(startRaw, endRaw, stepRaw) {
@@ -2552,6 +3496,7 @@
     plateGeometries: cloneDefaultGeometries(),
     timelineClips: cloneDefaultTimelineClips(),
     selectedClipId: 2,
+    showUnderTracks: false,
     stimParams: {
       baseLight: "LIGHT",
       acclimSec: 120,
@@ -2864,7 +3809,11 @@
     const ledColorObj = LED_COLORS[ledColorRaw] || LED_COLORS.WHITE;
     const ledPct = Math.min(100, Math.max(5, parseFloat(document.getElementById("ledBrightness").value) || 100));
     const ledDriveVal = Math.round((ledPct / 100) * 4095);
-    const useUnderLight = document.getElementById("chk_underlight").checked;
+    const ledMountEl = document.getElementById("ledMount");
+    const ledMountRaw = ledMountEl ? ledMountEl.value : "OVERHEAD";
+    const ledMount = ["OVERHEAD", "UNDERNEATH", "BOTH"].includes(ledMountRaw) ? ledMountRaw : "OVERHEAD";
+    const useTopLight = ledMount === "OVERHEAD" || ledMount === "BOTH";
+    const useUnderLight = ledMount === "UNDERNEATH" || ledMount === "BOTH";
 
     const useDist = document.getElementById("chk_dist").checked;
     const useMsd = document.getElementById("chk_msd").checked;
@@ -2894,6 +3843,8 @@
       ledColorObj,
       ledPct,
       ledDriveVal,
+      ledMount,
+      useTopLight,
       useUnderLight,
       useDist,
       useMsd,
@@ -2922,16 +3873,49 @@
     return null;
   }
 
+  function buildLightOnLines(cfg, col) {
+    const c = col || cfg.ledColorObj || LED_COLORS.WHITE;
+    const topLine = cfg.useTopLight
+      ? `    SET(X_LED_DRIVE,${c.z3Over},LED_BRIGHTNESS)`
+      : `    SET(X_LED_DRIVE,${c.z3Over},0)`;
+    const underLine = cfg.useUnderLight
+      ? `    SET(X_LED_DRIVE,${c.z3Under},LED_BRIGHTNESS)`
+      : `    # SET(X_LED_DRIVE,${c.z3Under},LED_BRIGHTNESS)  # Uncomment for underneath LED`;
+    return [topLine, underLine];
+  }
+
+  function buildLightOffLines(cfg, col) {
+    const c = col || cfg.ledColorObj || LED_COLORS.WHITE;
+    const topLine = `    SET(X_LED_DRIVE,${c.z3Over},0)`;
+    const underLine = cfg.useUnderLight
+      ? `    SET(X_LED_DRIVE,${c.z3Under},0)`
+      : `    # SET(X_LED_DRIVE,${c.z3Under},0)`;
+    return [topLine, underLine];
+  }
+
   function buildLightActions(cfg) {
     const col = cfg.ledColorObj || LED_COLORS.WHITE;
     const isMultiColor = cfg.stimId === "multi_phase";
 
     if (cfg.hw === "Z3") {
-      const underOn = cfg.useUnderLight
-        ? `    SET(X_LED_DRIVE,${col.z3Under},LED_BRIGHTNESS)`
-        : `    # SET(X_LED_DRIVE,${col.z3Under},LED_BRIGHTNESS)  # Uncomment for underneath LED`;
-
       if (isMultiColor) {
+        const hasBottomClips = (cfg.timelineClips || []).some(c => String(c.track || "").startsWith("U_"));
+        const manageBottom = hasBottomClips || cfg.ledMount !== "OVERHEAD";
+        const mpCol = (cfg.sp && cfg.sp.mpAcclimLight && LED_COLORS[cfg.sp.mpAcclimLight])
+          ? LED_COLORS[cfg.sp.mpAcclimLight]
+          : col;
+        const onLines = [
+          "ACTION LIGHTS_ON",
+          cfg.useTopLight
+            ? `    SET(X_LED_DRIVE,${mpCol.z3Over},LED_BRIGHTNESS)`
+            : `    SET(X_LED_DRIVE,${mpCol.z3Over},0)`,
+          cfg.useUnderLight
+            ? `    SET(X_LED_DRIVE,${mpCol.z3Under},LED_BRIGHTNESS)`
+            : (manageBottom
+                ? `    SET(X_LED_DRIVE,${mpCol.z3Under},0)`
+                : `    # SET(X_LED_DRIVE,${mpCol.z3Under},LED_BRIGHTNESS)  # Uncomment for underneath LED`),
+          "COMPLETE"
+        ];
         const offLines = [
           "ACTION LIGHTS_OFF",
           "    SET(X_LED_DRIVE,0,0)",
@@ -2940,7 +3924,7 @@
           "    SET(X_LED_DRIVE,4,0)",
           "    SET(X_LED_DRIVE,5,0)"
         ];
-        if (cfg.useUnderLight) {
+        if (manageBottom) {
           offLines.push(
             "    SET(X_LED_DRIVE,8,0)",
             "    SET(X_LED_DRIVE,9,0)",
@@ -2950,28 +3934,16 @@
           );
         }
         offLines.push("COMPLETE");
-        return [
-          "ACTION LIGHTS_ON",
-          `    SET(X_LED_DRIVE,${col.z3Over},LED_BRIGHTNESS)`,
-          underOn,
-          "COMPLETE",
-          "",
-          ...offLines
-        ].join("\n");
+        return [...onLines, "", ...offLines].join("\n");
       }
 
-      const underOff = cfg.useUnderLight
-        ? `    SET(X_LED_DRIVE,${col.z3Under},0)`
-        : `    # SET(X_LED_DRIVE,${col.z3Under},0)`;
       return [
         "ACTION LIGHTS_ON",
-        `    SET(X_LED_DRIVE,${col.z3Over},LED_BRIGHTNESS)`,
-        underOn,
+        ...buildLightOnLines(cfg, col),
         "COMPLETE",
         "",
         "ACTION LIGHTS_OFF",
-        `    SET(X_LED_DRIVE,${col.z3Over},0)`,
-        underOff,
+        ...buildLightOffLines(cfg, col),
         "COMPLETE"
       ].join("\n");
     }
@@ -2999,22 +3971,24 @@
     return z2Lines.join("\n");
   }
 
-  function buildSliceLightLines(cfg, activeLights) {
-    const byId = {};
-    for (const l of (activeLights || [])) byId[l.id] = l;
+  function buildSliceLightLines(cfg, topLights, bottomLights, forceManageBottom) {
+    const topById = {};
+    for (const l of (topLights || [])) topById[l.id] = l;
+    const botById = {};
+    for (const l of (bottomLights || [])) botById[l.id] = l;
 
     if (cfg.hw === "Z3") {
       const order = ["UV", "BLUE", "GREEN", "WHITE", "RED"];
       const lines = [];
       for (const id of order) {
         const col = LED_COLORS[id];
-        const pwm = byId[id] ? byId[id].pwm : 0;
+        const pwm = topById[id] ? topById[id].pwm : 0;
         lines.push(`    SET(X_LED_DRIVE,${col.z3Over},${pwm})`);
       }
-      if (cfg.useUnderLight) {
+      if (forceManageBottom || (bottomLights && bottomLights.length > 0) || cfg.ledMount !== "OVERHEAD") {
         for (const id of order) {
           const col = LED_COLORS[id];
-          const pwm = byId[id] ? byId[id].pwm : 0;
+          const pwm = botById[id] ? botById[id].pwm : 0;
           lines.push(`    SET(X_LED_DRIVE,${col.z3Under},${pwm})`);
         }
       }
@@ -3023,11 +3997,15 @@
 
     const activeGpo = new Set();
     let hasUv = false;
-    for (const l of (activeLights || [])) {
+    const combined = [...(topLights || []), ...(bottomLights || [])];
+    for (const l of combined) {
       if (l.id === "UV") hasUv = true;
       for (const g of l.colObj.z2Gpo) activeGpo.add(g);
     }
     const z2 = [];
+    if (bottomLights && bottomLights.length > 0) {
+      z2.push("    # Legacy Z2 drives shared GPO6-8 channels (no independent underneath bank)");
+    }
     if (hasUv) z2.push("    # UV fallback to GPO8 (Blue) on legacy Z2");
     if (activeGpo.size === 0) z2.push("    LIGHTS(ALL,OFF)");
     z2.push(
@@ -3894,12 +4872,17 @@
         }
       }
 
-      const acclimLightObjs = acclimLight === "DARK"
-        ? []
-        : [{ id: acclimLight, pct: cfg.ledPct, pwm: cfg.ledDriveVal, colObj: LED_COLORS[acclimLight] || LED_COLORS.WHITE }];
+      const manageBottom = comp.hasAnyBottomClip || cfg.ledMount !== "OVERHEAD";
+      const acclimCol = LED_COLORS[acclimLight] || LED_COLORS.WHITE;
+      const acclimTopObjs = (acclimLight !== "DARK" && cfg.useTopLight)
+        ? [{ id: acclimCol.id, pct: cfg.ledPct, pwm: cfg.ledDriveVal, colObj: acclimCol }]
+        : [];
+      const acclimBotObjs = (acclimLight !== "DARK" && cfg.useUnderLight)
+        ? [{ id: acclimCol.id, pct: cfg.ledPct, pwm: cfg.ledDriveVal, colObj: acclimCol }]
+        : [];
 
       mainSchedule.push(
-        ...buildSliceLightLines(cfg, acclimLightObjs),
+        ...buildSliceLightLines(cfg, acclimTopObjs, acclimBotObjs, manageBottom),
         `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
         "    WAIT(ACCLIMATION_SEC)",
         `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
@@ -3923,7 +4906,7 @@
         const runLines = [
           `ACTION RUN_S${sl.idx}`,
           "",
-          ...buildSliceLightLines(cfg, sl.lights)
+          ...buildSliceLightLines(cfg, sl.topLights, sl.bottomLights, manageBottom)
         ];
         if (sl.effectiveTemp !== null) {
           runLines.push(`    SET(THERMOSTAT,${sl.effectiveTemp})`);
@@ -4269,6 +5252,308 @@
     ].join("\n");
 
     return { 1: s1, 2: s2, 3: s3, 4: s4, readme };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 6b. Pure Assay State Sampler for Flat 2D Sequence Simulator (All 8 Protocols)
+  // ---------------------------------------------------------------------------
+  function sampleAssayStateAtTime(cfg, tSecRaw) {
+    const topChannels = { WHITE: 0, BLUE: 0, GREEN: 0, RED: 0, UV: 0 };
+    const bottomChannels = { WHITE: 0, BLUE: 0, GREEN: 0, RED: 0, UV: 0 };
+    if (!cfg) {
+      return {
+        tSec: 0,
+        totalRuntimeSec: 0,
+        phaseName: "IDLE",
+        topChannels,
+        bottomChannels,
+        tempC: null,
+        vibration: null,
+        nlePlayheadPct: null
+      };
+    }
+
+    const sp = cfg.sp || {};
+    const hw = cfg.hw || "Z3";
+    const mount = cfg.ledMount || "OVERHEAD";
+    const useTop = hw === "Z2" ? true : (mount === "OVERHEAD" || mount === "BOTH");
+    const useBot = hw === "Z2" ? false : (mount === "UNDERNEATH" || mount === "BOTH");
+    const colId = (cfg.ledColor && LED_COLORS[cfg.ledColor]) ? cfg.ledColor : "WHITE";
+    const activeLightTag = (LED_COLORS[colId] && LED_COLORS[colId].tag) ? LED_COLORS[colId].tag : "LIGHT";
+    const globalPct = hw === "Z3" ? Math.min(100, Math.max(5, Math.round(cfg.ledPct || 100))) : 100;
+    const autorefBase = Math.max(0, parseInt(cfg.autorefTimeout, 10) || 0);
+
+    const setSingleChannelOn = (cid) => {
+      const targetId = (cid && LED_COLORS[cid]) ? cid : colId;
+      if (useTop) topChannels[targetId] = globalPct;
+      if (useBot) bottomChannels[targetId] = globalPct;
+    };
+
+    let totalRuntimeSec = 0;
+    let phaseName = "READY";
+    let tempC = cfg.useThermostat ? Number((parseFloat(cfg.thermostatTemp) || 22).toFixed(1)) : null;
+    let vibration = null;
+    let nlePlayheadPct = null;
+
+    if (cfg.stimId === "baseline") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const dur = Math.max(bin, parseInt(sp.durationSec, 10) || 600);
+      const numBins = Math.max(1, Math.round(dur / bin));
+      const recDur = numBins * bin;
+      totalRuntimeSec = acclim + autorefBase + recDur;
+      const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+      const isDark = sp.baseLight === "DARK";
+      if (!isDark) setSingleChannelOn(colId);
+
+      if (t < acclim) {
+        phaseName = "ACCLIMATION";
+      } else if (t < acclim + autorefBase) {
+        phaseName = "AUTOREFERENCING";
+      } else {
+        phaseName = "TRACKING " + (isDark ? "DARK" : activeLightTag);
+      }
+      return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    }
+
+    if (cfg.stimId === "ld_transitions") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const phaseSec = Math.max(bin, parseInt(sp.ldPhaseSec, 10) || 300);
+      const phaseBins = Math.max(1, Math.round(phaseSec / bin));
+      const phaseDur = phaseBins * bin;
+      const cycles = Math.max(1, parseInt(sp.ldCycles, 10) || 2);
+      const startLight = sp.ldStart !== "DARK";
+      const assayDur = cycles * 2 * phaseDur;
+      totalRuntimeSec = acclim + autorefBase + assayDur;
+      const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+
+      if (t < acclim) {
+        if (startLight) setSingleChannelOn(colId);
+        phaseName = "ACCLIMATION";
+      } else if (t < acclim + autorefBase) {
+        if (startLight) setSingleChannelOn(colId);
+        phaseName = "AUTOREFERENCING";
+      } else {
+        const rel = Math.min(Math.max(0, assayDur - 0.0001), t - acclim - autorefBase);
+        const cycIdx = Math.min(cycles - 1, Math.floor(rel / (2 * phaseDur)));
+        const inCyc = rel - cycIdx * 2 * phaseDur;
+        const firstHalf = inCyc < phaseDur;
+        const lightOn = firstHalf ? startLight : !startLight;
+        if (lightOn) setSingleChannelOn(colId);
+        phaseName = `PHASE: ${lightOn ? activeLightTag : "DARK"} (Cycle ${cycIdx + 1}/${cycles})`;
+      }
+      return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    }
+
+    if (cfg.stimId === "light_off_startle" || cfg.stimId === "light_on_pulse") {
+      const isOffStartle = cfg.stimId === "light_off_startle";
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+      const preBins = Math.round(preSec / bin);
+      const preDur = preBins * bin;
+      const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+      const pulseDur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
+      const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+      const itiBins = Math.max(1, Math.round(itiSec / bin));
+      const itiDur = itiBins * bin;
+
+      const subBinPulse = pulseDur < bin;
+      const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
+      const pulseBinDur = pulseBins * bin;
+      const activeStimDur = subBinPulse ? pulseDur : pulseBinDur;
+      const trialDur = pulseBinDur + itiDur;
+
+      totalRuntimeSec = acclim + autorefBase + preDur + pulses * trialDur;
+      const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+
+      if (t < acclim) {
+        if (isOffStartle) setSingleChannelOn(colId);
+        phaseName = isOffStartle ? "ACCLIMATION" : "DARK ACCLIMATION";
+      } else if (t < acclim + autorefBase) {
+        if (isOffStartle) setSingleChannelOn(colId);
+        phaseName = "AUTOREFERENCING";
+      } else if (t < acclim + autorefBase + preDur) {
+        if (isOffStartle) setSingleChannelOn(colId);
+        phaseName = isOffStartle ? "BASELINE" : "DARK BASELINE";
+      } else {
+        const rel = Math.min(Math.max(0, pulses * trialDur - 0.0001), t - acclim - autorefBase - preDur);
+        const trIdx = Math.min(pulses - 1, Math.floor(rel / trialDur));
+        const inTrial = rel - trIdx * trialDur;
+        const inPulse = inTrial < activeStimDur;
+        if (isOffStartle) {
+          if (!inPulse) setSingleChannelOn(colId);
+          phaseName = inPulse
+            ? `LIGHT-OFF PULSE (Trial ${trIdx + 1}/${pulses})`
+            : `ITI RECOVERY (Trial ${trIdx + 1}/${pulses})`;
+        } else {
+          if (inPulse) setSingleChannelOn(colId);
+          phaseName = inPulse
+            ? `${activeLightTag} FLASH (Trial ${trIdx + 1}/${pulses})`
+            : `DARK ITI (Trial ${trIdx + 1}/${pulses})`;
+        }
+      }
+      return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    }
+
+    if (cfg.stimId === "vibration_startle") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+      const preBins = Math.round(preSec / bin);
+      const preDur = preBins * bin;
+      const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+      const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+      const itiBins = Math.max(1, Math.round(itiSec / bin));
+      const itiDur = itiBins * bin;
+      const trialDur = bin + itiDur;
+      const stepMode = sp.vibIntensity || "U0";
+      if (sp.vibAmbient === "LIGHT") setSingleChannelOn(colId);
+
+      totalRuntimeSec = acclim + autorefBase + preDur + pulses * trialDur;
+      const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+
+      if (t < acclim) {
+        phaseName = "ACCLIMATION";
+      } else if (t < acclim + autorefBase) {
+        phaseName = "AUTOREFERENCING";
+      } else if (t < acclim + autorefBase + preDur) {
+        phaseName = "BASELINE";
+      } else {
+        const rel = Math.min(Math.max(0, pulses * trialDur - 0.0001), t - acclim - autorefBase - preDur);
+        const trIdx = Math.min(pulses - 1, Math.floor(rel / trialDur));
+        const inTrial = rel - trIdx * trialDur;
+        const tapWindow = Math.min(0.8, bin);
+        if (inTrial < tapWindow) {
+          vibration = stepMode;
+          phaseName = `VIBRATION TAP ${stepMode} (Trial ${trIdx + 1}/${pulses})`;
+        } else if (inTrial < bin) {
+          phaseName = `VIBRATION BIN (Trial ${trIdx + 1}/${pulses})`;
+        } else {
+          phaseName = `POST-VIB ITI (Trial ${trIdx + 1}/${pulses})`;
+        }
+      }
+      return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    }
+
+    if (cfg.stimId === "circadian") {
+      const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
+      const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
+      const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
+      const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
+      const autoref = Math.min(300, Math.max(10, autorefBase || 60));
+      const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
+      const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
+      const hourDur = 2 * halfBins * bin + autoref;
+      const hrsPerDay = lightHrs + darkHrs;
+      const hrsTotal = days * hrsPerDay;
+      totalRuntimeSec = autorefBase + hrsTotal * hourDur;
+      const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+
+      if (t < autorefBase || hrsPerDay === 0) {
+        setSingleChannelOn(colId);
+        phaseName = "AUTOREFERENCING";
+      } else {
+        const dayDur = hrsPerDay * hourDur;
+        const rel = Math.min(Math.max(0, days * dayDur - 0.0001), t - autorefBase);
+        const dayIdx = Math.min(days - 1, Math.floor(rel / dayDur));
+        const inDay = rel - dayIdx * dayDur;
+        const hrIdx = Math.min(hrsPerDay - 1, Math.floor(inDay / hourDur));
+        const isLight = hrIdx < lightHrs;
+        const phaseHr = isLight ? (hrIdx + 1) : (hrIdx - lightHrs + 1);
+        if (isLight) setSingleChannelOn(colId);
+        phaseName = `DAY ${dayIdx + 1} ${isLight ? activeLightTag : "DARK"} HR ${phaseHr}`;
+      }
+      return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    }
+
+    if (cfg.stimId === "multi_phase") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const cycles = Math.max(1, parseInt(sp.mpCycles, 10) || 1);
+      const acclimLight = sp.mpAcclimLight || "DARK";
+      const comp = compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp);
+      const cycleDur = comp.totalBins * comp.bin;
+      totalRuntimeSec = acclim + autorefBase + cycles * cycleDur;
+      const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+
+      if (comp.hasAnyTempClip) {
+        tempC = comp.initialTemp;
+      }
+
+      if (t < acclim + autorefBase) {
+        if (acclimLight !== "DARK") {
+          setSingleChannelOn(acclimLight);
+        }
+        phaseName = t < acclim ? "ACCLIMATION" : "AUTOREFERENCING";
+        nlePlayheadPct = null;
+      } else {
+        const relRaw = t - acclim - autorefBase;
+        const totalSeqDur = cycles * cycleDur;
+        let cycIdx;
+        let inCyc;
+        if (relRaw >= totalSeqDur) {
+          cycIdx = cycles - 1;
+          inCyc = cycleDur;
+          nlePlayheadPct = 100;
+        } else {
+          cycIdx = Math.min(cycles - 1, Math.floor(relRaw / cycleDur));
+          inCyc = relRaw - cycIdx * cycleDur;
+          nlePlayheadPct = Number(((inCyc / Math.max(1, cycleDur)) * 100).toFixed(3));
+        }
+
+        const lookupSec = Math.min(Math.max(0, cycleDur - 0.0001), inCyc);
+        const sl = comp.slices.find(s => lookupSec >= s.startSec && lookupSec < s.endSec) || comp.slices[comp.slices.length - 1];
+        if (sl) {
+          if (hw === "Z3") {
+            for (const l of sl.topLights) topChannels[l.id] = l.pct;
+            for (const l of sl.bottomLights) bottomChannels[l.id] = l.pct;
+          } else {
+            for (const l of sl.lights) topChannels[l.id] = 100;
+          }
+          if (sl.effectiveTemp !== null) {
+            tempC = sl.effectiveTemp;
+          }
+          phaseName = cycles > 1 ? `${sl.overlayText} (Cycle ${cycIdx + 1}/${cycles})` : sl.overlayText;
+        }
+      }
+      return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    }
+
+    if (cfg.stimId === "temp_ramp") {
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const holdSec = Math.max(bin, parseInt(sp.rampHoldSec, 10) || 300);
+      const stepBins = Math.max(1, Math.round(holdSec / bin));
+      const stepDur = stepBins * bin;
+      const steps = computeTempRampSteps(sp.rampStartTemp, sp.rampEndTemp, sp.rampStepTemp);
+      if (sp.rampLight === "LIGHT") setSingleChannelOn(colId);
+
+      totalRuntimeSec = acclim + autorefBase + steps.length * stepDur;
+      const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+
+      if (t < acclim) {
+        tempC = steps[0];
+        phaseName = `ACCLIM ${steps[0]}C`;
+      } else if (t < acclim + autorefBase) {
+        tempC = steps[0];
+        phaseName = "AUTOREFERENCING";
+      } else {
+        const rel = Math.min(Math.max(0, steps.length * stepDur - 0.0001), t - acclim - autorefBase);
+        const stIdx = Math.min(steps.length - 1, Math.floor(rel / stepDur));
+        tempC = steps[stIdx];
+        phaseName = `TEMP TARGET ${steps[stIdx]}C (Step ${stIdx + 1}/${steps.length})`;
+      }
+      return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    }
+
+    const tFallback = Math.max(0, parseFloat(tSecRaw) || 0);
+    return { tSec: tFallback, totalRuntimeSec: tFallback, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+  }
+
+  if (typeof window !== "undefined") {
+    window.sampleAssayStateAtTime = sampleAssayStateAtTime;
+    window.ZANTIKS_SIMULATOR = { readConfig, sampleAssayStateAtTime, compileMultiTrackSlices };
   }
 
   // ---------------------------------------------------------------------------
@@ -4648,7 +5933,12 @@
       tile.className = "option-tile" + (state.stimId === s.id ? " active" : "");
       tile.innerHTML = `<span class="tile-name">${s.name}</span><span class="tile-meta">${s.meta}</span>`;
       tile.addEventListener("click", () => {
+        const changed = state.stimId !== s.id;
         state.stimId = s.id;
+        if (changed) {
+          pauseSimulator();
+          simState.tSec = 0;
+        }
         renderStimGrid();
         renderStimParams();
         refreshAll();
@@ -4668,7 +5958,7 @@
           <div class="field">
             <label>Chamber Lighting</label>
             <select data-sp="baseLight">
-              <option value="LIGHT" ${sp.baseLight === "LIGHT" ? "selected" : ""}>Overhead Light ON</option>
+              <option value="LIGHT" ${sp.baseLight === "LIGHT" ? "selected" : ""}>Stimulus Light ON</option>
               <option value="DARK" ${sp.baseLight === "DARK" ? "selected" : ""}>Dark (IR Tracking Only)</option>
             </select>
           </div>
@@ -4687,7 +5977,7 @@
         </div>`;
     } else if (id === "ld_transitions") {
       box.innerHTML = `
-        <div class="form-grid">
+        <div class="form-grid-3">
           <div class="field">
             <label>Starting Phase</label>
             <select data-sp="ldStart">
@@ -4715,7 +6005,7 @@
     } else if (id === "light_off_startle" || id === "light_on_pulse") {
       const pulseLabel = id === "light_off_startle" ? "Dark Pulse Duration (sec)" : "Light Flash Duration (sec)";
       box.innerHTML = `
-        <div class="form-grid">
+        <div class="form-grid-3">
           <div class="field">
             <label>Number of Pulses</label>
             <input type="number" min="1" max="100" step="1" data-sp="numPulses" value="${sp.numPulses}">
@@ -4725,7 +6015,7 @@
             <input type="number" min="0.2" max="60" step="0.2" data-sp="pulseDurSec" value="${sp.pulseDurSec}">
           </div>
           <div class="field">
-            <label>Inter-Trial Interval / ITI (sec)</label>
+            <label>Inter-Trial Interval (sec)</label>
             <input type="number" min="1" max="1800" step="5" data-sp="itiSec" value="${sp.itiSec}">
           </div>
           <div class="field">
@@ -4743,7 +6033,7 @@
         </div>`;
     } else if (id === "vibration_startle") {
       box.innerHTML = `
-        <div class="form-grid">
+        <div class="form-grid-3">
           <div class="field">
             <label>Tap Intensity (Stepper Mode)</label>
             <select data-sp="vibIntensity">
@@ -4757,7 +6047,7 @@
             <label>Ambient Chamber Light</label>
             <select data-sp="vibAmbient">
               <option value="DARK" ${sp.vibAmbient === "DARK" ? "selected" : ""}>Dark (IR Only)</option>
-              <option value="LIGHT" ${sp.vibAmbient === "LIGHT" ? "selected" : ""}>Overhead Light ON</option>
+              <option value="LIGHT" ${sp.vibAmbient === "LIGHT" ? "selected" : ""}>Stimulus Light ON</option>
             </select>
           </div>
           <div class="field">
@@ -4765,7 +6055,7 @@
             <input type="number" min="1" max="100" step="1" data-sp="numPulses" value="${sp.numPulses}">
           </div>
           <div class="field">
-            <label>Inter-Trial Interval / ITI (sec)</label>
+            <label>Inter-Trial Interval (sec)</label>
             <input type="number" min="1" max="1800" step="5" data-sp="itiSec" value="${sp.itiSec}">
           </div>
           <div class="field">
@@ -4799,6 +6089,9 @@
         </div>`;
     } else if (id === "multi_phase") {
       const hwIsZ3 = document.getElementById("hwVersion").value === "Z3";
+      if (state.timelineClips.some(c => String(c.track || "").startsWith("U_"))) {
+        state.showUnderTracks = true;
+      }
       const lightOpts = [
         ["DARK", "Dark (IR Only)"],
         ["WHITE", "White (~6000K)"],
@@ -4811,66 +6104,83 @@
         `<option value="${val}" ${sp.mpAcclimLight === val ? "selected" : ""}>${lbl}</option>`
       ).join("");
 
-      const tracksHtml = NLE_TRACKS.map(tr => `
-        <div class="nle-track-row" data-track-row="${tr.id}">
+      const tracksHtml = NLE_TRACKS.map(tr => {
+        const mountCls = tr.group === "BOT" ? "nle-mount-bot" : (tr.group === "ENV" ? "nle-mount-env" : "nle-mount-top");
+        const isGroupStart = tr.id === "U_WHITE" || tr.id === "TEMP";
+        const isHidden = tr.group === "BOT" && !state.showUnderTracks;
+        const rowCls = "nle-track-row" + (isGroupStart ? " nle-group-start" : "") + (isHidden ? " nle-row-hidden" : "");
+        return `
+        <div class="${rowCls}" id="nleRow_${tr.id}" data-track-row="${tr.id}" data-track-group="${tr.group}">
           <div class="nle-track-hdr">
             <div class="nle-track-title">
+              <span class="nle-mount-tag ${mountCls}">${tr.group}</span>
               <span class="nle-swatch" style="background:${tr.swatch};"></span>
               <span class="nle-track-name">${tr.label}</span>
             </div>
-            <button type="button" class="nle-track-add" data-nle-add="${tr.id}" title="Add clip to ${tr.label} track">+</button>
+            <button type="button" class="nle-track-add" data-nle-add="${tr.id}" title="Add clip to ${tr.group} ${tr.label} (${tr.sub})">+</button>
           </div>
           <div class="nle-lane" data-nle-lane="${tr.id}"></div>
-        </div>
-      `).join("");
+        </div>`;
+      }).join("");
 
       box.innerHTML = `
-        <div class="form-grid">
+        <div class="form-grid-5">
           <div class="field">
-            <label>Timeline Length (sec)</label>
+            <label>Timeline (sec)</label>
             <input type="number" min="10" max="7200" step="10" data-sp="mpTimelineSec" value="${sp.mpTimelineSec}">
           </div>
           <div class="field">
-            <label>Sequence Cycles (Loops)</label>
+            <label>Cycles</label>
             <input type="number" min="1" max="50" step="1" data-sp="mpCycles" value="${sp.mpCycles}">
           </div>
           <div class="field">
-            <label>Acclimation Light</label>
-            <select data-sp="mpAcclimLight">${acclimOpts}</select>
+            <label>Time Bin (sec)</label>
+            <input type="number" min="1" max="600" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
           </div>
           <div class="field">
-            <label>Acclimation (sec)</label>
+            <label>Acclim (sec)</label>
             <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
           </div>
           <div class="field">
-            <label>Time Bin / Grid Snap (sec)</label>
-            <input type="number" min="1" max="600" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
+            <label>Acclim Light</label>
+            <select data-sp="mpAcclimLight">${acclimOpts}</select>
           </div>
         </div>
 
         <div class="nle-section" id="nleRoot">
           <div class="nle-toolbar">
-            <div class="nle-presets">
-              <button type="button" class="btn btn-xs" data-mp-preset="bg_opto">Preset: White BG + Opto Overlap</button>
-              <button type="button" class="btn btn-xs" data-mp-preset="rgb_overlap">Preset: RGB Cross-Overlap</button>
-              <button type="button" class="btn btn-xs" data-mp-preset="sequential">Preset: Sequential Sweep</button>
+            <select id="nlePresetSel" class="nle-preset-sel" aria-label="Load timeline preset">
+              <option value="" selected disabled>Load Preset...</option>
+              <option value="bg_opto">Preset: White BG + Opto</option>
+              <option value="bot_bg_top_opto">Preset: Bot White + Top Opto</option>
+              <option value="rgb_overlap">Preset: RGB Overlap</option>
+              <option value="sequential">Preset: Seq Sweep</option>
+            </select>
+            <div class="nle-toolbar-right">
+              <button type="button" class="btn btn-xs${state.showUnderTracks ? " btn-toggle-active" : ""}" id="nleToggleUnderBtn">Bottom LEDs (Ch 8-13)</button>
+              <button type="button" class="btn btn-xs" id="nleClearBtn">Clear</button>
             </div>
-            <button type="button" class="btn btn-xs" id="nleClearBtn">Clear Clips</button>
           </div>
 
-          <div class="nle-workspace" tabindex="-1">
+          <div class="nle-workspace" id="nleWorkspace" tabindex="-1">
+            <div class="nle-playhead" id="nlePlayhead"></div>
             <div class="nle-header-row">
               <div class="nle-corner"><span>TRACKS</span><span>+ ADD</span></div>
-              <div class="nle-ruler" id="nleRuler"></div>
+              <div class="nle-ruler" id="nleRuler" title="Click or drag ruler to scrub simulator playhead"></div>
             </div>
             ${tracksHtml}
+            <div class="nle-summary-row" id="nleSummaryRow">
+              <div class="nle-summary-hdr">
+                <div class="nle-track-title">
+                  <span class="nle-mount-tag nle-mount-sum">SUM</span>
+                  <span class="nle-track-name">Composite</span>
+                </div>
+              </div>
+              <div class="nle-summary-bar" id="nleSummaryBar" title="Click or drag composite bar to scrub simulator playhead"></div>
+            </div>
           </div>
 
           <div class="nle-inspector" id="nleInspector"></div>
-        </div>
-
-        <div class="proto-note">
-          <strong>Multi-Track Compiler:</strong> Drag across any empty track lane to draw a bar, drag a bar to move, drag its left/right grips to stretch, or press <span class="nle-kbd">Backspace</span> / <span class="nle-kbd">Delete</span> to remove. Overlapping bars across tracks run simultaneously on hardware without blinking unchanged LED channels.
         </div>`;
 
       let rafId = null;
@@ -4899,6 +6209,16 @@
         if (ae && ae.tagName && ["INPUT", "SELECT", "TEXTAREA"].includes(ae.tagName.toUpperCase()) && typeof ae.blur === "function") {
           ae.blur();
         }
+      }
+
+      function syncUnderRowsVisibility() {
+        for (const tr of NLE_TRACKS) {
+          if (tr.group !== "BOT") continue;
+          const rowEl = document.getElementById("nleRow_" + tr.id);
+          if (rowEl) rowEl.classList.toggle("nle-row-hidden", !state.showUnderTracks);
+        }
+        const togBtn = document.getElementById("nleToggleUnderBtn");
+        if (togBtn) togBtn.classList.toggle("btn-toggle-active", Boolean(state.showUnderTracks));
       }
 
       function getTimelineBounds() {
@@ -4976,6 +6296,10 @@
       }
 
       function addClipToTrack(trackId, preferredSec) {
+        if (String(trackId || "").startsWith("U_") && !state.showUnderTracks) {
+          state.showUnderTracks = true;
+          syncUnderRowsVisibility();
+        }
         const slot = findFreeSlotOnTrack(trackId, preferredSec);
         if (!slot) {
           showToast(`No free space left on ${trackId} track`);
@@ -5044,7 +6368,7 @@
         const { bin, totalSec } = getTimelineBounds();
         const sel = state.timelineClips.find(c => c.id === state.selectedClipId);
         if (!sel) {
-          insp.innerHTML = `<span class="nle-insp-hint"><strong>Drag on any empty track</strong> to draw a bar (or double-click / click <strong>+</strong>) &middot; Drag bar to move &middot; Drag ends to stretch &middot; <span class="nle-kbd">Backspace</span> to delete.</span>`;
+          insp.innerHTML = `<span class="nle-insp-hint">Drag empty lane to draw &middot; Drag ends to resize &middot; Backspace to delete</span>`;
           return;
         }
         const tr = NLE_TRACKS.find(t => t.id === sel.track) || NLE_TRACKS[0];
@@ -5148,6 +6472,8 @@
           cachedGridPct = ((tickStep / totalSec) * 100).toFixed(4);
         }
 
+        syncUnderRowsVisibility();
+
         for (const tr of NLE_TRACKS) {
           const lane = box.querySelector(`[data-nle-lane="${tr.id}"]`);
           if (!lane) continue;
@@ -5192,6 +6518,8 @@
           });
         }
 
+        renderNleSummaryBar();
+
         if (rebuildInspector) {
           syncNleInspector();
         } else {
@@ -5205,6 +6533,61 @@
           updateLiveHud();
         }
       }
+
+      // Bind Underneath Tracks toggle button
+      const togUnderBtn = document.getElementById("nleToggleUnderBtn");
+      if (togUnderBtn) {
+        togUnderBtn.addEventListener("click", () => {
+          state.showUnderTracks = !state.showUnderTracks;
+          syncUnderRowsVisibility();
+        });
+      }
+
+      // Bind Ruler & Bottom Composite Summary Bar click / drag to scrub simulator directly to timeline second
+      function bindNleScrubSurface(surfaceEl) {
+        if (!surfaceEl) return;
+        const scrubFromSurfaceX = (clientX, lockedCycle) => {
+          const sRect = surfaceEl.getBoundingClientRect();
+          const ratio = Math.max(0, Math.min(1, (clientX - sRect.left) / Math.max(1, sRect.width)));
+          const cfgNow = refreshAll._latestCfg || readConfig();
+          const acclim = Math.max(0, parseInt(cfgNow.sp.acclimSec, 10) || 0);
+          const autoref = Math.max(0, parseInt(cfgNow.autorefTimeout, 10) || 0);
+          const cycles = Math.max(1, parseInt(cfgNow.sp.mpCycles, 10) || 1);
+          const { totalSec } = getTimelineBounds();
+          let curCycle = lockedCycle;
+          if (typeof curCycle !== "number") {
+            const relCur = simState.tSec - (acclim + autoref);
+            curCycle = relCur > 0 ? Math.min(cycles - 1, Math.floor(relCur / Math.max(1, totalSec))) : 0;
+          }
+          const rawInCycle = Number((ratio * totalSec).toFixed(2));
+          const inCycleSec = curCycle < cycles - 1 ? Math.min(Math.max(0, totalSec - 0.01), rawInCycle) : rawInCycle;
+          setSimulatorTime(acclim + autoref + curCycle * totalSec + inCycleSec);
+        };
+
+        surfaceEl.addEventListener("mousedown", (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          blurTextFocusForTimeline();
+          const cfgNow = refreshAll._latestCfg || readConfig();
+          const acclim = Math.max(0, parseInt(cfgNow.sp.acclimSec, 10) || 0);
+          const autoref = Math.max(0, parseInt(cfgNow.autorefTimeout, 10) || 0);
+          const cycles = Math.max(1, parseInt(cfgNow.sp.mpCycles, 10) || 1);
+          const { totalSec } = getTimelineBounds();
+          const relCur = simState.tSec - (acclim + autoref);
+          const lockedCycle = relCur > 0 ? Math.min(cycles - 1, Math.floor(relCur / Math.max(1, totalSec))) : 0;
+          scrubFromSurfaceX(e.clientX, lockedCycle);
+          const onSurfaceMove = (me) => scrubFromSurfaceX(me.clientX, lockedCycle);
+          const onSurfaceUp = () => {
+            window.removeEventListener("mousemove", onSurfaceMove);
+            window.removeEventListener("mouseup", onSurfaceUp);
+          };
+          window.addEventListener("mousemove", onSurfaceMove);
+          window.addEventListener("mouseup", onSurfaceUp);
+        });
+      }
+
+      bindNleScrubSurface(document.getElementById("nleRuler"));
+      bindNleScrubSurface(document.getElementById("nleSummaryBar"));
 
       // Bind track '+' add buttons
       box.querySelectorAll("[data-nle-add]").forEach(btn => {
@@ -5225,43 +6608,67 @@
         });
       }
 
-      // Bind Presets
-      box.querySelectorAll("[data-mp-preset]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const pType = btn.getAttribute("data-mp-preset");
-          const baseT = parseFloat(document.getElementById("thermostatTemp").value) || 22;
-          state.stimParams.mpTimelineSec = 180;
-          const tlInp = box.querySelector('[data-sp="mpTimelineSec"]');
-          if (tlInp) tlInp.value = 180;
+      // Bind Presets via compact #nlePresetSel selector
+      function applyTimelinePreset(pType) {
+        if (!pType) return;
+        const baseT = parseFloat(document.getElementById("thermostatTemp").value) || 22;
+        state.stimParams.mpTimelineSec = 180;
+        const tlInp = box.querySelector('[data-sp="mpTimelineSec"]');
+        if (tlInp) tlInp.value = 180;
 
-          if (pType === "bg_opto") {
-            state.timelineClips = [
-              { id: ++_nextClipId, track: "WHITE", startSec: 0,   endSec: 180, val: 35 },
-              { id: ++_nextClipId, track: "BLUE",  startSec: 30,  endSec: 50,  val: 100 },
-              { id: ++_nextClipId, track: "RED",   startSec: 80,  endSec: 100, val: 100 },
-              { id: ++_nextClipId, track: "BLUE",  startSec: 130, endSec: 150, val: 100 },
-              { id: ++_nextClipId, track: "TEMP",  startSec: 0,   endSec: 90,  val: baseT },
-              { id: ++_nextClipId, track: "TEMP",  startSec: 90,  endSec: 180, val: Math.min(40, baseT + 4) }
-            ];
-          } else if (pType === "rgb_overlap") {
-            state.timelineClips = [
-              { id: ++_nextClipId, track: "BLUE",  startSec: 0,   endSec: 80,  val: 100 },
-              { id: ++_nextClipId, track: "GREEN", startSec: 50,  endSec: 130, val: 100 },
-              { id: ++_nextClipId, track: "RED",   startSec: 100, endSec: 180, val: 100 },
-              { id: ++_nextClipId, track: "TEMP",  startSec: 0,   endSec: 180, val: baseT }
-            ];
-          } else if (pType === "sequential") {
-            state.timelineClips = [
-              { id: ++_nextClipId, track: "BLUE",  startSec: 20,  endSec: 50,  val: 100 },
-              { id: ++_nextClipId, track: "GREEN", startSec: 75,  endSec: 105, val: 100 },
-              { id: ++_nextClipId, track: "RED",   startSec: 130, endSec: 160, val: 100 }
-            ];
-          }
-          state.selectedClipId = state.timelineClips.length ? state.timelineClips[0].id : null;
-          syncNleDom(true, true);
-          flushRefresh();
+        if (pType === "bg_opto") {
+          state.showUnderTracks = false;
+          state.timelineClips = [
+            { id: ++_nextClipId, track: "WHITE", startSec: 0,   endSec: 180, val: 35 },
+            { id: ++_nextClipId, track: "BLUE",  startSec: 30,  endSec: 50,  val: 100 },
+            { id: ++_nextClipId, track: "RED",   startSec: 80,  endSec: 100, val: 100 },
+            { id: ++_nextClipId, track: "BLUE",  startSec: 130, endSec: 150, val: 100 },
+            { id: ++_nextClipId, track: "TEMP",  startSec: 0,   endSec: 90,  val: baseT },
+            { id: ++_nextClipId, track: "TEMP",  startSec: 90,  endSec: 180, val: Math.min(40, baseT + 4) }
+          ];
+        } else if (pType === "bot_bg_top_opto") {
+          state.showUnderTracks = true;
+          state.timelineClips = [
+            { id: ++_nextClipId, track: "U_WHITE", startSec: 0,   endSec: 180, val: 30 },
+            { id: ++_nextClipId, track: "BLUE",    startSec: 30,  endSec: 50,  val: 100 },
+            { id: ++_nextClipId, track: "RED",     startSec: 80,  endSec: 100, val: 100 },
+            { id: ++_nextClipId, track: "BLUE",    startSec: 130, endSec: 150, val: 100 },
+            { id: ++_nextClipId, track: "TEMP",    startSec: 0,   endSec: 90,  val: baseT },
+            { id: ++_nextClipId, track: "TEMP",    startSec: 90,  endSec: 180, val: Math.min(40, baseT + 4) }
+          ];
+        } else if (pType === "rgb_overlap") {
+          state.showUnderTracks = false;
+          state.timelineClips = [
+            { id: ++_nextClipId, track: "BLUE",  startSec: 0,   endSec: 80,  val: 100 },
+            { id: ++_nextClipId, track: "GREEN", startSec: 50,  endSec: 130, val: 100 },
+            { id: ++_nextClipId, track: "RED",   startSec: 100, endSec: 180, val: 100 },
+            { id: ++_nextClipId, track: "TEMP",  startSec: 0,   endSec: 180, val: baseT }
+          ];
+        } else if (pType === "sequential") {
+          state.showUnderTracks = false;
+          state.timelineClips = [
+            { id: ++_nextClipId, track: "BLUE",  startSec: 20,  endSec: 50,  val: 100 },
+            { id: ++_nextClipId, track: "GREEN", startSec: 75,  endSec: 105, val: 100 },
+            { id: ++_nextClipId, track: "RED",   startSec: 130, endSec: 160, val: 100 }
+          ];
+        } else {
+          return;
+        }
+        state.selectedClipId = state.timelineClips.length ? state.timelineClips[0].id : null;
+        syncNleDom(true, true);
+        flushRefresh();
+      }
+
+      const presetSel = document.getElementById("nlePresetSel");
+      if (presetSel) {
+        presetSel.addEventListener("change", () => {
+          const pType = presetSel.value;
+          if (!pType) return;
+          applyTimelinePreset(pType);
+          presetSel.value = "";
+          blurTextFocusForTimeline();
         });
-      });
+      }
 
       // Bind Interactive Lane Drag-to-Draw, Double-Click Insert, & Bar Move / Stretch
       box.querySelectorAll("[data-nle-lane]").forEach(lane => {
@@ -5413,13 +6820,14 @@
 
       syncNleDom(true, true);
       box._syncNleDom = (rebuildInsp) => syncNleDom(rebuildInsp, true);
+      box._applyPreset = applyTimelinePreset;
       box._deleteSelectedClip = deleteSelectedClip;
       box._deselectClip = deselectClip;
       box._nudgeSelectedClip = nudgeSelectedClip;
     } else if (id === "temp_ramp") {
       const stepsPreview = computeTempRampSteps(sp.rampStartTemp, sp.rampEndTemp, sp.rampStepTemp);
       box.innerHTML = `
-        <div class="form-grid">
+        <div class="form-grid-3">
           <div class="field">
             <label>Start Temperature (°C)</label>
             <input type="number" min="10" max="40" step="0.5" data-sp="rampStartTemp" value="${sp.rampStartTemp}">
@@ -5440,7 +6848,7 @@
             <label>Chamber Lighting</label>
             <select data-sp="rampLight">
               <option value="DARK" ${sp.rampLight === "DARK" ? "selected" : ""}>Dark (IR Tracking Only)</option>
-              <option value="LIGHT" ${sp.rampLight === "LIGHT" ? "selected" : ""}>Stimulus Light ON (Page 1 wavelength)</option>
+              <option value="LIGHT" ${sp.rampLight === "LIGHT" ? "selected" : ""}>Stimulus Light ON</option>
             </select>
           </div>
           <div class="field">
@@ -5484,6 +6892,105 @@
     });
   }
 
+  let timelineModel = { totalRuntimeSec: 0, preSetupSec: 0, segs: [] };
+
+  function renderNleSummaryBar(cfgIn) {
+    const sumBar = document.getElementById("nleSummaryBar");
+    if (!sumBar) return;
+    const baseTemp = cfgIn ? cfgIn.thermostatTemp : (parseFloat(document.getElementById("thermostatTemp").value) || 22);
+    const comp = compileMultiTrackSlices(
+      state.timelineClips,
+      state.stimParams.mpTimelineSec,
+      state.stimParams.timeBinSec,
+      baseTemp
+    );
+    const totalSec = Math.max(1, comp.totalSec);
+    const segs = [];
+    for (const sl of comp.slices) {
+      const nLights = sl.lights.length;
+      const cls = nLights === 0 ? "tl-dark" : (nLights === 1 ? sl.lights[0].colObj.tlCls : "tl-overlap");
+      const lightTokens = sl.lights.map(l => {
+        const code = l.id === "UV" ? "UV" : l.id[0];
+        return l.mount === "BOT" ? "b" + code : code;
+      });
+      const lbl = nLights === 0
+        ? "Dark"
+        : (nLights === 1
+            ? (sl.lights[0].mount === "BOT" ? "Bot " : "") + sl.lights[0].colObj.short
+            : lightTokens.join("+"));
+      const tSuffix = sl.effectiveTemp !== null ? ` ${sl.effectiveTemp}°C` : "";
+      const dur = Math.max(0.001, sl.endSec - sl.startSec);
+      const tip = `S${sl.idx} (${sl.startSec}-${sl.endSec}s): ${lbl}${tSuffix}`;
+      const prev = segs[segs.length - 1];
+      if (cls === "tl-overlap" && prev && prev.cls === "tl-overlap") {
+        prev.w += dur;
+        lightTokens.forEach(tok => {
+          if (!prev._toks.includes(tok)) prev._toks.push(tok);
+        });
+        prev.txt = `Overlap (${prev._toks.join("+")})`;
+        prev.medTxt = prev._toks.join("+");
+        prev.shortTxt = prev._toks.join("+");
+        prev.tip += ` | ${tip}`;
+      } else {
+        segs.push({
+          cls,
+          w: dur,
+          txt: `S${sl.idx}: ${lbl}${tSuffix}`,
+          medTxt: nLights === 0 ? `S${sl.idx}: Dark` : `S${sl.idx}: ${lightTokens.join("+")}${tSuffix}`,
+          shortTxt: `S${sl.idx}`,
+          tip,
+          _toks: lightTokens.slice()
+        });
+      }
+    }
+
+    sumBar.classList.toggle("has-overlap", segs.some(s => s.cls === "tl-overlap"));
+    sumBar.innerHTML = segs.map(s => {
+      const pct = (s.w / totalSec) * 100;
+      const text = pct >= 22 ? s.txt : (pct >= 14 ? (s.medTxt || s.shortTxt || "") : (pct >= 5 ? (s.shortTxt || "") : ""));
+      const safeTip = s.tip.replace(/"/g, "&quot;");
+      return `<div class="tl-seg ${s.cls}" style="flex:${s.w} 0 0" title="${safeTip}">${text}</div>`;
+    }).join("");
+  }
+
+  function timelineSecToPct(tSecRaw) {
+    const totalT = timelineModel.totalRuntimeSec;
+    const segs = timelineModel.segs;
+    if (!segs || !segs.length || totalT <= 0) return 0;
+    const t = Math.max(0, Math.min(totalT, parseFloat(tSecRaw) || 0));
+    if (t <= 0) return 0;
+    if (t >= totalT) return 100;
+    let seg = segs[segs.length - 1];
+    for (let i = 0; i < segs.length; i++) {
+      if (t < segs[i].t1 || i === segs.length - 1) {
+        seg = segs[i];
+        break;
+      }
+    }
+    const dt = seg.t1 - seg.t0;
+    const frac = dt > 0 ? Math.max(0, Math.min(1, (t - seg.t0) / dt)) : 0;
+    return (seg.x0 + frac * (seg.x1 - seg.x0)) * 100;
+  }
+
+  function timelineRatioToSec(xRatioRaw) {
+    const totalT = timelineModel.totalRuntimeSec;
+    const segs = timelineModel.segs;
+    const x = Math.max(0, Math.min(1, parseFloat(xRatioRaw) || 0));
+    if (!segs || !segs.length || totalT <= 0) return 0;
+    if (x <= 0) return 0;
+    if (x >= 1) return totalT;
+    let seg = segs[segs.length - 1];
+    for (let i = 0; i < segs.length; i++) {
+      if (x < segs[i].x1 || i === segs.length - 1) {
+        seg = segs[i];
+        break;
+      }
+    }
+    const dx = seg.x1 - seg.x0;
+    const frac = dx > 0 ? Math.max(0, Math.min(1, (x - seg.x0) / dx)) : 0;
+    return seg.t0 + frac * (seg.t1 - seg.t0);
+  }
+
   function renderTimeline(cfg, s4) {
     const bar = document.getElementById("timelineBar");
     const desc = document.getElementById("timelineDesc");
@@ -5492,93 +6999,244 @@
     const segs = [];
     const activeCls = (cfg.ledColorObj && cfg.ledColorObj.tlCls) ? cfg.ledColorObj.tlCls : "tl-light";
     const activeShort = (cfg.ledColorObj && cfg.ledColorObj.id !== "WHITE") ? cfg.ledColorObj.short : "Light";
+    const autorefBase = Math.max(0, parseInt(cfg.autorefTimeout, 10) || 0);
+    let preSetupSec = 0;
 
     if (cfg.stimId === "baseline") {
-      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const dur = Math.max(bin, parseInt(sp.durationSec, 10) || 600);
+      const recDur = Math.max(1, Math.round(dur / bin)) * bin;
+      preSetupSec = acclim + autorefBase;
+      if (preSetupSec > 0) {
+        segs.push({ cls: "tl-acclim", w: acclim > 0 ? acclim : autorefBase, txt: acclim > 0 ? "Acclim" : "Autoref", t0: 0, t1: preSetupSec });
+      }
       segs.push({
         cls: sp.baseLight === "DARK" ? "tl-dark" : activeCls,
-        w: Math.max(10, +sp.durationSec),
-        txt: sp.baseLight === "DARK" ? "Dark Recording" : `${activeShort} Recording`
+        w: Math.max(10, recDur),
+        txt: sp.baseLight === "DARK" ? "Dark Recording" : `${activeShort} Recording`,
+        t0: preSetupSec,
+        t1: preSetupSec + recDur
       });
       desc.textContent = sp.baseLight === "DARK" ? "Constant dark recording" : `Constant ${activeShort.toLowerCase()} recording`;
     } else if (cfg.stimId === "ld_transitions") {
-      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
-      const n = Math.min(6, Math.max(1, parseInt(sp.ldCycles, 10) || 1));
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const phaseSec = Math.max(bin, parseInt(sp.ldPhaseSec, 10) || 300);
+      const phaseDur = Math.max(1, Math.round(phaseSec / bin)) * bin;
+      const cycles = Math.max(1, parseInt(sp.ldCycles, 10) || 2);
+      const n = Math.min(6, cycles);
       const startL = sp.ldStart !== "DARK";
       const lTag = cfg.ledColor === "WHITE" ? "L" : cfg.ledColor.slice(0, 2);
+      preSetupSec = acclim + autorefBase;
+      let cursor = 0;
+      if (preSetupSec > 0) {
+        segs.push({ cls: "tl-acclim", w: acclim > 0 ? acclim : autorefBase, txt: acclim > 0 ? "Acclim" : "Autoref", t0: 0, t1: preSetupSec });
+        cursor = preSetupSec;
+      }
       for (let i = 0; i < n; i++) {
-        segs.push({ cls: startL ? activeCls : "tl-dark", w: +sp.ldPhaseSec, txt: startL ? lTag : "D" });
-        segs.push({ cls: startL ? "tl-dark" : activeCls, w: +sp.ldPhaseSec, txt: startL ? "D" : lTag });
+        segs.push({ cls: startL ? activeCls : "tl-dark", w: phaseDur, txt: startL ? lTag : "D", t0: cursor, t1: cursor + phaseDur });
+        cursor += phaseDur;
+        segs.push({ cls: startL ? "tl-dark" : activeCls, w: phaseDur, txt: startL ? "D" : lTag, t0: cursor, t1: cursor + phaseDur });
+        cursor += phaseDur;
+      }
+      if (cycles > n) {
+        segs.push({ cls: "tl-acclim", w: phaseDur * 2, txt: `+${cycles - n}x`, t0: cursor, t1: s4.totalRuntimeSec });
       }
       desc.textContent = `${sp.ldCycles} x (${sp.ldPhaseSec}s ${activeShort} / ${sp.ldPhaseSec}s Dark)`;
     } else if (cfg.stimId === "light_off_startle" || cfg.stimId === "light_on_pulse") {
       const isOff = cfg.stimId === "light_off_startle";
-      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
-      if (+sp.preBaselineSec > 0) segs.push({ cls: isOff ? activeCls : "tl-dark", w: +sp.preBaselineSec, txt: "Base" });
-      const n = Math.min(8, Math.max(1, parseInt(sp.numPulses, 10) || 1));
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+      const preDur = Math.round(preSec / bin) * bin;
+      const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+      const pulseDur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
+      const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+      const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
+      const subBinPulse = pulseDur < bin;
+      const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
+      const pulseBinDur = pulseBins * bin;
+      const activeStimDur = subBinPulse ? pulseDur : pulseBinDur;
+      const trialDur = pulseBinDur + itiDur;
+      preSetupSec = acclim + autorefBase;
+      let cursor = 0;
+      if (preSetupSec > 0) {
+        segs.push({ cls: "tl-acclim", w: acclim > 0 ? acclim : autorefBase, txt: acclim > 0 ? "Acclim" : "Autoref", t0: 0, t1: preSetupSec });
+        cursor = preSetupSec;
+      }
+      if (preDur > 0) {
+        segs.push({ cls: isOff ? activeCls : "tl-dark", w: preDur, txt: "Base", t0: cursor, t1: cursor + preDur });
+        cursor += preDur;
+      }
+      const n = Math.min(8, pulses);
+      const pulseVisW = Math.max(4, itiDur * 0.18);
       for (let i = 0; i < n; i++) {
-        segs.push({ cls: isOff ? "tl-pulse" : activeCls, w: Math.max(4, +sp.itiSec * 0.18), txt: "" });
-        segs.push({ cls: isOff ? activeCls : "tl-dark", w: +sp.itiSec, txt: "" });
+        segs.push({ cls: isOff ? "tl-pulse" : activeCls, w: pulseVisW, txt: "", t0: cursor, t1: cursor + activeStimDur });
+        segs.push({ cls: isOff ? activeCls : "tl-dark", w: itiDur, txt: "", t0: cursor + activeStimDur, t1: cursor + trialDur });
+        cursor += trialDur;
+      }
+      if (pulses > n) {
+        segs.push({ cls: "tl-acclim", w: itiDur, txt: `+${pulses - n}`, t0: cursor, t1: s4.totalRuntimeSec });
       }
       desc.textContent = `${sp.numPulses} ${isOff ? "dark" : activeShort.toLowerCase()} pulses (${sp.pulseDurSec}s pulse, ${sp.itiSec}s ITI)`;
     } else if (cfg.stimId === "vibration_startle") {
-      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+      const preDur = Math.round(preSec / bin) * bin;
+      const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+      const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+      const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
+      const trialDur = bin + itiDur;
+      const tapWindow = Math.min(0.8, bin);
       const baseCls = sp.vibAmbient === "LIGHT" ? activeCls : "tl-dark";
-      if (+sp.preBaselineSec > 0) segs.push({ cls: baseCls, w: +sp.preBaselineSec, txt: "Base" });
-      const n = Math.min(8, Math.max(1, parseInt(sp.numPulses, 10) || 1));
+      preSetupSec = acclim + autorefBase;
+      let cursor = 0;
+      if (preSetupSec > 0) {
+        segs.push({ cls: "tl-acclim", w: acclim > 0 ? acclim : autorefBase, txt: acclim > 0 ? "Acclim" : "Autoref", t0: 0, t1: preSetupSec });
+        cursor = preSetupSec;
+      }
+      if (preDur > 0) {
+        segs.push({ cls: baseCls, w: preDur, txt: "Base", t0: cursor, t1: cursor + preDur });
+        cursor += preDur;
+      }
+      const n = Math.min(8, pulses);
+      const vibVisW = Math.max(4, itiDur * 0.18);
       for (let i = 0; i < n; i++) {
-        segs.push({ cls: "tl-vib", w: Math.max(4, +sp.itiSec * 0.18), txt: "" });
-        segs.push({ cls: baseCls, w: +sp.itiSec, txt: "" });
+        segs.push({ cls: "tl-vib", w: vibVisW, txt: "", t0: cursor, t1: cursor + tapWindow });
+        segs.push({ cls: baseCls, w: itiDur, txt: "", t0: cursor + tapWindow, t1: cursor + trialDur });
+        cursor += trialDur;
+      }
+      if (pulses > n) {
+        segs.push({ cls: "tl-acclim", w: itiDur, txt: `+${pulses - n}`, t0: cursor, t1: s4.totalRuntimeSec });
       }
       desc.textContent = `${sp.numPulses} taps (${sp.vibIntensity}, ${sp.itiSec}s ITI)`;
     } else if (cfg.stimId === "circadian") {
-      const n = Math.min(5, Math.max(1, parseInt(sp.numDays, 10) || 1));
+      const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
+      const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
+      const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
+      const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
+      const autoref = Math.min(300, Math.max(10, autorefBase || 60));
+      const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
+      const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
+      const hourDur = 2 * halfBins * bin + autoref;
+      const n = Math.min(5, days);
+      preSetupSec = autorefBase;
+      let cursor = autorefBase;
       for (let i = 0; i < n; i++) {
-        if (+sp.lightHours > 0) segs.push({ cls: activeCls, w: +sp.lightHours, txt: `${sp.lightHours}h L` });
-        if (+sp.darkHours > 0) segs.push({ cls: "tl-dark", w: +sp.darkHours, txt: `${sp.darkHours}h D` });
+        if (lightHrs > 0) {
+          const segT0 = segs.length === 0 ? 0 : cursor;
+          const segT1 = cursor + lightHrs * hourDur;
+          segs.push({ cls: activeCls, w: lightHrs, txt: `${lightHrs}h L`, t0: segT0, t1: segT1 });
+          cursor = segT1;
+        }
+        if (darkHrs > 0) {
+          const segT0 = segs.length === 0 ? 0 : cursor;
+          const segT1 = cursor + darkHrs * hourDur;
+          segs.push({ cls: "tl-dark", w: darkHrs, txt: `${darkHrs}h D`, t0: segT0, t1: segT1 });
+          cursor = segT1;
+        }
+      }
+      if (days > n) {
+        segs.push({ cls: "tl-acclim", w: Math.max(1, lightHrs + darkHrs), txt: `+${days - n}d`, t0: cursor, t1: s4.totalRuntimeSec });
+      }
+      if (segs.length === 0) {
+        segs.push({ cls: activeCls, w: 1, txt: "Autoref", t0: 0, t1: Math.max(1, s4.totalRuntimeSec) });
       }
       desc.textContent = `${sp.numDays} cycle(s) of ${sp.lightHours}h ${activeShort} : ${sp.darkHours}h Dark`;
     } else if (cfg.stimId === "multi_phase") {
-      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
-      const cyc = Math.min(4, Math.max(1, parseInt(sp.mpCycles, 10) || 1));
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const cycles = Math.max(1, parseInt(sp.mpCycles, 10) || 1);
+      const cyc = Math.min(4, cycles);
       const comp = compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp);
+      preSetupSec = acclim + autorefBase;
+      let cursor = 0;
+      if (preSetupSec > 0) {
+        segs.push({ cls: "tl-acclim", w: acclim > 0 ? acclim : autorefBase, txt: acclim > 0 ? "Acclim" : "Autoref", t0: 0, t1: preSetupSec });
+        cursor = preSetupSec;
+      }
       for (let c = 0; c < cyc; c++) {
         comp.slices.forEach(sl => {
           const nLights = sl.lights.length;
           const cls = nLights === 0 ? "tl-dark" : (nLights === 1 ? sl.lights[0].colObj.tlCls : "tl-overlap");
-          const lightTokens = sl.lights.map(l => l.id === "UV" ? "UV" : l.id[0]);
+          const lightTokens = sl.lights.map(l => {
+            const code = l.id === "UV" ? "UV" : l.id[0];
+            return l.mount === "BOT" ? "b" + code : code;
+          });
           const lbl = nLights === 0
             ? "Dark"
-            : (nLights === 1 ? sl.lights[0].colObj.short : lightTokens.join("+"));
+            : (nLights === 1
+                ? (sl.lights[0].mount === "BOT" ? "Bot " : "") + sl.lights[0].colObj.short
+                : lightTokens.join("+"));
           const tSuffix = sl.effectiveTemp !== null ? ` ${sl.effectiveTemp}°C` : "";
-          const w = Math.max(2, sl.endSec - sl.startSec);
+          const slDur = sl.endSec - sl.startSec;
+          const segT0 = cursor;
+          const segT1 = cursor + slDur;
+          cursor = segT1;
+          const w = Math.max(2, slDur);
           const prev = segs[segs.length - 1];
           if (cls === "tl-overlap" && prev && prev.cls === "tl-overlap") {
             prev.w += w;
+            prev.t1 = segT1;
             lightTokens.forEach(tok => {
               if (!prev._toks.includes(tok)) prev._toks.push(tok);
             });
             prev.txt = `Overlap (${prev._toks.join("+")})`;
           } else {
-            segs.push({ cls, w, txt: `S${sl.idx}: ${lbl}${tSuffix}`, _toks: lightTokens.slice() });
+            segs.push({ cls, w, txt: `S${sl.idx}: ${lbl}${tSuffix}`, _toks: lightTokens.slice(), t0: segT0, t1: segT1 });
           }
         });
       }
-      desc.textContent = `${sp.mpCycles}x timeline (${comp.totalSec}s · ${comp.slices.length} slice${comp.slices.length === 1 ? "" : "s"}${comp.hasAnyTempClip ? " + temp track" : ""})`;
+      if (cycles > cyc) {
+        segs.push({ cls: "tl-acclim", w: Math.max(10, comp.totalSec), txt: `+${cycles - cyc}x`, t0: cursor, t1: s4.totalRuntimeSec });
+      }
+      renderNleSummaryBar(cfg);
+      const extraTags = [];
+      if (comp.hasAnyBottomClip) extraTags.push("top+bot");
+      if (comp.hasAnyTempClip) extraTags.push("temp");
+      desc.textContent = `${sp.mpCycles}x timeline (${comp.totalSec}s · ${comp.slices.length} slice${comp.slices.length === 1 ? "" : "s"}${extraTags.length ? " · " + extraTags.join(" + ") : ""})`;
     } else if (cfg.stimId === "temp_ramp") {
-      if (+sp.acclimSec > 0) segs.push({ cls: "tl-acclim", w: +sp.acclimSec, txt: "Acclim" });
+      const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+      const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+      const holdSec = Math.max(bin, parseInt(sp.rampHoldSec, 10) || 300);
+      const stepDur = Math.max(1, Math.round(holdSec / bin)) * bin;
       const steps = computeTempRampSteps(sp.rampStartTemp, sp.rampEndTemp, sp.rampStepTemp);
       const minT = Math.min(...steps), maxT = Math.max(...steps);
       const span = Math.max(1, maxT - minT);
+      preSetupSec = acclim + autorefBase;
+      let cursor = 0;
+      if (preSetupSec > 0) {
+        segs.push({ cls: "tl-acclim", w: acclim > 0 ? acclim : autorefBase, txt: acclim > 0 ? "Acclim" : "Autoref", t0: 0, t1: preSetupSec });
+        cursor = preSetupSec;
+      }
       steps.forEach(t => {
         const ratio = (t - minT) / span;
         const bucket = ratio < 0.25 ? "tl-temp-1" : (ratio < 0.55 ? "tl-temp-2" : (ratio < 0.8 ? "tl-temp-3" : "tl-temp-4"));
-        segs.push({ cls: bucket, w: Math.max(10, parseFloat(sp.rampHoldSec) || 300), txt: `${t}°C` });
+        segs.push({ cls: bucket, w: Math.max(10, stepDur), txt: `${t}°C`, t0: cursor, t1: cursor + stepDur });
+        cursor += stepDur;
       });
       desc.textContent = `${steps.length} thermal step(s): ${steps[0]}°C -> ${steps[steps.length - 1]}°C (${sp.rampHoldSec}s/step)`;
     }
 
     const sumW = segs.reduce((a, b) => a + b.w, 0) || 1;
+    if (segs.length > 0) {
+      segs[0].t0 = 0;
+      segs[segs.length - 1].t1 = s4.totalRuntimeSec;
+    }
+    let cumW = 0;
+    const mappedSegs = segs.map(s => {
+      const x0 = cumW / sumW;
+      cumW += s.w;
+      const x1 = cumW / sumW;
+      return { x0, x1, t0: s.t0, t1: s.t1, cls: s.cls };
+    });
+    timelineModel = {
+      totalRuntimeSec: s4.totalRuntimeSec,
+      preSetupSec,
+      segs: mappedSegs
+    };
+
     bar.classList.toggle("has-overlap", segs.some(s => s.cls === "tl-overlap"));
     bar.innerHTML = segs.map(s => {
       const pct = (s.w / sumW) * 100;
@@ -5596,31 +7254,484 @@
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // 9b. Flat 2D Light & Environment Sequence Simulator Engine
+  // ---------------------------------------------------------------------------
+  const SIM_LED_PALETTE = {
+    UV:    { rgb: [168, 85, 247],  pillBg: "#d8b4fe", pillBorder: "#a855f7", pillText: "#3b0764" },
+    BLUE:  { rgb: [59, 130, 246],  pillBg: "#93c5fd", pillBorder: "#3b82f6", pillText: "#172554" },
+    GREEN: { rgb: [34, 197, 94],   pillBg: "#86efac", pillBorder: "#22c55e", pillText: "#052e16" },
+    WHITE: { rgb: [255, 244, 206], pillBg: "#fef08a", pillBorder: "#eab308", pillText: "#422006" },
+    RED:   { rgb: [239, 68, 68],   pillBg: "#fca5a5", pillBorder: "#ef4444", pillText: "#450a0a" }
+  };
+
+  const simState = {
+    playing: false,
+    tSec: 0,
+    speed: 1,
+    rafId: null,
+    usingTimeout: false,
+    lastTs: null,
+    plateGeoSig: ""
+  };
+
+  function nowMs() {
+    return (typeof performance !== "undefined" && typeof performance.now === "function")
+      ? performance.now()
+      : Date.now();
+  }
+
+  function setCssVar(el, prop, val) {
+    if (!el || !el.style) return;
+    if (typeof el.style.setProperty === "function") {
+      el.style.setProperty(prop, val);
+    } else {
+      el.style[prop] = val;
+    }
+  }
+
+  function formatSimClockPart(secRaw, forceHours) {
+    const s = Math.max(0, Math.floor(Math.round(secRaw * 20) / 20 + 0.0001));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const rem = s % 60;
+    if (forceHours || h > 0) {
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
+    }
+    return `${String(m).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
+  }
+
+  function formatSimClock(curSec, totalSec) {
+    const useHours = totalSec >= 3600;
+    return `${formatSimClockPart(curSec, useHours)} / ${formatSimClockPart(totalSec, useHours)}`;
+  }
+
+  function computeChannelMix(chMap) {
+    const order = ["WHITE", "BLUE", "GREEN", "RED", "UV"];
+    let rSum = 0, gSum = 0, bSum = 0, maxPct = 0;
+    const activeLabels = [];
+    for (const cid of order) {
+      const pct = Math.max(0, Math.min(100, Number(chMap && chMap[cid]) || 0));
+      if (pct > 0) {
+        const w = pct / 100;
+        const rgb = SIM_LED_PALETTE[cid].rgb;
+        rSum += rgb[0] * w;
+        gSum += rgb[1] * w;
+        bSum += rgb[2] * w;
+        if (pct > maxPct) maxPct = pct;
+        const shortCode = cid === "WHITE" ? "W" : (cid === "UV" ? "UV" : cid[0]);
+        activeLabels.push(`${shortCode}:${pct}%`);
+      }
+    }
+    if (maxPct <= 0) {
+      return { active: false, r: 0, g: 0, b: 0, intensity: 0, alpha: 0, activeLabels };
+    }
+    const peak = Math.max(1, rSum, gSum, bSum);
+    const normScale = peak > 255 ? (255 / peak) : (255 / Math.max(180, peak));
+    const r = Math.min(255, Math.round(rSum * normScale));
+    const g = Math.min(255, Math.round(gSum * normScale));
+    const b = Math.min(255, Math.round(bSum * normScale));
+    const intensity = Math.min(1, maxPct / 100);
+    const alpha = Math.min(0.88, 0.2 + 0.68 * intensity);
+    return { active: true, r, g, b, intensity, alpha, activeLabels };
+  }
+
+  function lerpRgbCss(baseRgb, targetRgb, t) {
+    const k = Math.max(0, Math.min(1, t));
+    const r = Math.round(baseRgb[0] + (targetRgb[0] - baseRgb[0]) * k);
+    const g = Math.round(baseRgb[1] + (targetRgb[1] - baseRgb[1]) * k);
+    const b = Math.round(baseRgb[2] + (targetRgb[2] - baseRgb[2]) * k);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  function ensureSimPlateSvgGeometry(cfg) {
+    const svg = document.getElementById("simPlateSvg");
+    if (!svg || !cfg || !cfg.plate || !cfg.geo) return;
+    const p = cfg.plate;
+    const g = cfg.geo;
+    const sig = `${p.id}|${g.xOffset}|${g.yOffset}|${g.colStep}|${g.rowStep}|${g.r}`;
+    if (simState.plateGeoSig === sig && svg.innerHTML) return;
+    simState.plateGeoSig = sig;
+
+    const isPetri = p.id === "petri";
+    const trayW = isPetri ? 132 : 127.8;
+    const trayH = 85.5;
+    let markup = `<rect class="sim-svg-tray" x="0" y="0" width="${trayW}" height="${trayH}" rx="${isPetri ? 8 : 5}"/>`;
+    for (let r = 0; r < p.rows; r++) {
+      for (let c = 0; c < p.cols; c++) {
+        const cx = g.xOffset + c * g.colStep;
+        const cy = g.yOffset + r * g.rowStep;
+        if (p.shape === "SQUARE") {
+          const s = g.r;
+          const sc = s * 0.58;
+          markup += `<rect class="sim-svg-well" x="${(cx - s / 2).toFixed(2)}" y="${(cy - s / 2).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}"/>`;
+          markup += `<rect class="sim-svg-core" x="${(cx - sc / 2).toFixed(2)}" y="${(cy - sc / 2).toFixed(2)}" width="${sc.toFixed(2)}" height="${sc.toFixed(2)}"/>`;
+        } else {
+          const rc = g.r * 0.58;
+          markup += `<circle class="sim-svg-well" cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${g.r.toFixed(2)}"/>`;
+          markup += `<circle class="sim-svg-core" cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${rc.toFixed(2)}"/>`;
+        }
+      }
+    }
+    svg.innerHTML = markup;
+  }
+
+  function renderSimulatorFrame(cfgIn) {
+    const cfg = cfgIn || refreshAll._latestCfg || readConfig();
+    const sampled = sampleAssayStateAtTime(cfg, simState.tSec);
+    simState.tSec = sampled.tSec;
+
+    const scrubEl = document.getElementById("simScrubber");
+    if (scrubEl) {
+      scrubEl.max = String(Math.max(1, sampled.totalRuntimeSec));
+      scrubEl.value = String(sampled.tSec);
+    }
+    setText("simTimeReadout", formatSimClock(sampled.tSec, sampled.totalRuntimeSec));
+    setText("simPhaseBadge", sampled.phaseName);
+    setText("simIrBadge", cfg.hw === "Z3" ? "IR 850nm ON (Ch 2/10)" : "IR 850nm ON (Z2)");
+
+    const ledIds = ["UV", "BLUE", "GREEN", "WHITE", "RED"];
+    for (const cid of ledIds) {
+      const pal = SIM_LED_PALETTE[cid];
+      const topPct = sampled.topChannels[cid] || 0;
+      const topPill = document.getElementById("simLed_TOP_" + cid);
+      if (topPill) {
+        topPill.classList.toggle("on", topPct > 0);
+        topPill.style.background = topPct > 0 ? pal.pillBg : "";
+        topPill.style.borderColor = topPct > 0 ? pal.pillBorder : "";
+        topPill.style.color = topPct > 0 ? pal.pillText : "";
+      }
+      setText("simPct_TOP_" + cid, `${topPct}%`);
+
+      const botPct = sampled.bottomChannels[cid] || 0;
+      const botPill = document.getElementById("simLed_BOT_" + cid);
+      if (botPill) {
+        botPill.classList.toggle("on", botPct > 0);
+        botPill.style.background = botPct > 0 ? pal.pillBg : "";
+        botPill.style.borderColor = botPct > 0 ? pal.pillBorder : "";
+        botPill.style.color = botPct > 0 ? pal.pillText : "";
+      }
+      setText("simPct_BOT_" + cid, `${botPct}%`);
+    }
+
+    const topMix = computeChannelMix(sampled.topChannels);
+    const botMix = computeChannelMix(sampled.bottomChannels);
+
+    const topWash = document.getElementById("simTopWash");
+    if (topWash) {
+      topWash.style.background = topMix.active
+        ? `linear-gradient(to bottom, rgba(${topMix.r}, ${topMix.g}, ${topMix.b}, ${topMix.alpha.toFixed(3)}), rgba(${topMix.r}, ${topMix.g}, ${topMix.b}, 0))`
+        : "none";
+    }
+    const botWash = document.getElementById("simBotWash");
+    if (botWash) {
+      botWash.style.background = botMix.active
+        ? `linear-gradient(to top, rgba(${botMix.r}, ${botMix.g}, ${botMix.b}, ${botMix.alpha.toFixed(3)}), rgba(${botMix.r}, ${botMix.g}, ${botMix.b}, 0))`
+        : "none";
+    }
+
+    setText("simPlateCrossLabel", `${cfg.plate.name} Tray`);
+    const tempBadge = document.getElementById("simTempBadge");
+    if (tempBadge) {
+      if (sampled.tempC !== null) {
+        tempBadge.textContent = `${sampled.tempC.toFixed(1)} \u00B0C`;
+        if (sampled.tempC <= 21) {
+          tempBadge.style.background = "#0c4a6e";
+          tempBadge.style.borderColor = "#38bdf8";
+          tempBadge.style.color = "#e0f2fe";
+        } else if (sampled.tempC >= 26) {
+          tempBadge.style.background = "#7c2d12";
+          tempBadge.style.borderColor = "#fb923c";
+          tempBadge.style.color = "#ffedd5";
+        } else {
+          tempBadge.style.background = "#1e293b";
+          tempBadge.style.borderColor = "#64748b";
+          tempBadge.style.color = "#f8fafc";
+        }
+      } else {
+        tempBadge.textContent = "Ambient (Off)";
+        tempBadge.style.background = "#111827";
+        tempBadge.style.borderColor = "#334155";
+        tempBadge.style.color = "#94a3b8";
+      }
+    }
+
+    const plateCross = document.getElementById("simPlateCrossBar");
+    const vibBadge = document.getElementById("simVibBadge");
+    if (plateCross) plateCross.classList.toggle("is-vibrating", Boolean(sampled.vibration));
+    if (vibBadge) {
+      vibBadge.classList.toggle("active", Boolean(sampled.vibration));
+      vibBadge.textContent = sampled.vibration
+        ? `TAP ${sampled.vibration}`
+        : (cfg.stimId === "vibration_startle" ? "Stepper Armed" : "Motor Idle");
+    }
+
+    // 2D Top-Down Plate Illumination
+    ensureSimPlateSvgGeometry(cfg);
+    const simSvg = document.getElementById("simPlateSvg");
+    if (simSvg) {
+      if (!topMix.active && !botMix.active) {
+        setCssVar(simSvg, "--sim-tray-fill", "#161f30");
+        setCssVar(simSvg, "--sim-tray-stroke", "#475569");
+        setCssVar(simSvg, "--sim-well-fill", "#0b111e");
+        setCssVar(simSvg, "--sim-well-stroke", "rgba(239, 68, 68, 0.45)");
+        setCssVar(simSvg, "--sim-core-fill", "rgba(239, 68, 68, 0.08)");
+      } else if (topMix.active && !botMix.active) {
+        setCssVar(simSvg, "--sim-tray-fill", lerpRgbCss([26, 36, 54], [topMix.r, topMix.g, topMix.b], 0.25 + 0.50 * topMix.intensity));
+        setCssVar(simSvg, "--sim-tray-stroke", lerpRgbCss([71, 85, 105], [topMix.r, topMix.g, topMix.b], 0.55));
+        setCssVar(simSvg, "--sim-well-fill", lerpRgbCss([15, 23, 42], [topMix.r, topMix.g, topMix.b], 0.38 + 0.58 * topMix.intensity));
+        setCssVar(simSvg, "--sim-well-stroke", lerpRgbCss([51, 65, 85], [topMix.r, topMix.g, topMix.b], 0.75));
+        setCssVar(simSvg, "--sim-core-fill", "transparent");
+      } else if (!topMix.active && botMix.active) {
+        setCssVar(simSvg, "--sim-tray-fill", "#161f30");
+        setCssVar(simSvg, "--sim-tray-stroke", "#475569");
+        setCssVar(simSvg, "--sim-well-fill", lerpRgbCss([15, 23, 42], [botMix.r, botMix.g, botMix.b], 0.42 + 0.56 * botMix.intensity));
+        setCssVar(simSvg, "--sim-well-stroke", lerpRgbCss([71, 85, 105], [botMix.r, botMix.g, botMix.b], 0.8));
+        setCssVar(simSvg, "--sim-core-fill", `rgba(255, 255, 255, ${(0.22 * botMix.intensity).toFixed(2)})`);
+      } else {
+        const combMap = {};
+        for (const cid of ledIds) {
+          combMap[cid] = Math.min(100, (sampled.topChannels[cid] || 0) + (sampled.bottomChannels[cid] || 0));
+        }
+        const combMix = computeChannelMix(combMap);
+        setCssVar(simSvg, "--sim-tray-fill", lerpRgbCss([26, 36, 54], [topMix.r, topMix.g, topMix.b], 0.28 + 0.48 * topMix.intensity));
+        setCssVar(simSvg, "--sim-tray-stroke", lerpRgbCss([71, 85, 105], [topMix.r, topMix.g, topMix.b], 0.6));
+        setCssVar(simSvg, "--sim-well-fill", lerpRgbCss([15, 23, 42], [combMix.r, combMix.g, combMix.b], 0.45 + 0.52 * combMix.intensity));
+        setCssVar(simSvg, "--sim-well-stroke", lerpRgbCss([71, 85, 105], [combMix.r, combMix.g, combMix.b], 0.85));
+        setCssVar(simSvg, "--sim-core-fill", `rgba(${botMix.r}, ${botMix.g}, ${botMix.b}, ${(0.55 + 0.40 * botMix.intensity).toFixed(2)})`);
+      }
+    }
+
+    let mixText = "IR Dark (Visible 0%)";
+    if (topMix.active && botMix.active) {
+      const totalCh = topMix.activeLabels.length + botMix.activeLabels.length;
+      const tJoin = (totalCh > 3 ? topMix.activeLabels.map(s => s.split(":")[0]) : topMix.activeLabels).join("+");
+      const bJoin = (totalCh > 3 ? botMix.activeLabels.map(s => s.split(":")[0]) : botMix.activeLabels).join("+");
+      mixText = `T[${tJoin}] B[${bJoin}]`;
+    } else if (topMix.active) {
+      const tJoin = (topMix.activeLabels.length > 3 ? topMix.activeLabels.map(s => s.split(":")[0]) : topMix.activeLabels).join("+");
+      mixText = `Top ${tJoin}`;
+    } else if (botMix.active) {
+      const bJoin = (botMix.activeLabels.length > 3 ? botMix.activeLabels.map(s => s.split(":")[0]) : botMix.activeLabels).join("+");
+      mixText = `Bot ${bJoin}`;
+    }
+    setText("simLightMixBadge", mixText);
+
+    const firstWell = cfg.wells[0];
+    const lastWell = cfg.wells[cfg.wells.length - 1];
+    const rangeStr = cfg.numWells === 1 ? "A1" : `${firstWell}-${lastWell}`;
+    setText("simTopDownCaption",
+      `${cfg.plate.name} (${rangeStr}) \u00B7 ${topMix.active && botMix.active ? "Top Deck + Bottom Core" : (botMix.active ? "Bottom Trans-Illum" : (topMix.active ? "Overhead Epi-Illum" : "850nm IR Tracking"))}`
+    );
+
+    // Live Hardware Channel Readout
+    const hwBar = document.getElementById("simHwReadout");
+    if (hwBar) {
+      const thermStr = sampled.tempC !== null ? `THERMOSTAT=${sampled.tempC.toFixed(1)}\u00B0C` : "THERMOSTAT=OFF";
+      const vibStr = sampled.vibration ? ` \u00B7 <code>ZCOMMAND("${sampled.vibration} ...")</code>` : "";
+      if (cfg.hw === "Z3") {
+        const topOrder = [["UV", 0], ["BLUE", 1], ["GREEN", 3], ["WHITE", 4], ["RED", 5]];
+        const botOrder = [["UV", 8], ["BLUE", 9], ["GREEN", 11], ["WHITE", 12], ["RED", 13]];
+        const topPairs = topOrder
+          .filter(([cid]) => (sampled.topChannels[cid] || 0) > 0)
+          .map(([cid, ch]) => `Ch${ch}:${Math.round(((sampled.topChannels[cid] || 0) / 100) * 4095)}`);
+        const botPairs = botOrder
+          .filter(([cid]) => (sampled.bottomChannels[cid] || 0) > 0)
+          .map(([cid, ch]) => `Ch${ch}:${Math.round(((sampled.bottomChannels[cid] || 0) / 100) * 4095)}`);
+        const topTxt = topPairs.length ? topPairs.join(" ") : "0";
+        const botTxt = botPairs.length ? botPairs.join(" ") : "0";
+        hwBar.innerHTML =
+          `<span class="sim-hw-left"><code>X_LED_DRIVE</code> Top[${topTxt}] \u00B7 Bot[${botTxt}] \u00B7 IR[Ch2,Ch10:ON]${vibStr}</span>` +
+          `<span class="sim-hw-right"><code>${thermStr}</code></span>`;
+      } else {
+        const gpoSet = new Set();
+        for (const cid of ledIds) {
+          if ((sampled.topChannels[cid] || 0) > 0 || (sampled.bottomChannels[cid] || 0) > 0) {
+            for (const g of LED_COLORS[cid].z2Gpo) gpoSet.add(g);
+          }
+        }
+        hwBar.innerHTML =
+          `<span class="sim-hw-left"><code>Z2 GPO</code> GPO6=${gpoSet.has(6) ? 1 : 0} GPO7=${gpoSet.has(7) ? 1 : 0} GPO8=${gpoSet.has(8) ? 1 : 0} \u00B7 IR:ON${vibStr}</span>` +
+          `<span class="sim-hw-right"><code>${thermStr}</code></span>`;
+      }
+    }
+
+    // Sync Full-Assay Timeline Bar Playhead across all 8 protocols
+    const tlPh = document.getElementById("timelinePlayhead");
+    if (tlPh) {
+      const tlPct = timelineSecToPct(sampled.tSec);
+      const tlRatio = Math.max(0, Math.min(1, tlPct / 100));
+      tlPh.style.display = "block";
+      tlPh.style.left = `calc(1px + (100% - 2px) * ${tlRatio.toFixed(5)})`;
+      tlPh.classList.toggle("is-acclim", sampled.tSec < timelineModel.preSetupSec);
+    }
+
+    // Sync NLE Playhead when Multi-Track Timeline is active (parked at 0s during Acclim/Autoref, 100% at end)
+    const ph = document.getElementById("nlePlayhead");
+    if (ph) {
+      if (cfg.stimId === "multi_phase") {
+        ph.style.display = "block";
+        if (sampled.nlePlayheadPct === null) {
+          ph.classList.add("is-acclim");
+          ph.style.left = "146px";
+        } else {
+          const ratio = Math.max(0, Math.min(1, sampled.nlePlayheadPct / 100));
+          ph.classList.remove("is-acclim");
+          ph.style.left = `calc(146px + (100% - 147px) * ${ratio.toFixed(5)})`;
+        }
+      } else {
+        ph.style.display = "none";
+      }
+    }
+  }
+
+  function pauseSimulator() {
+    if (simState.rafId !== null) {
+      if (simState.usingTimeout) {
+        clearTimeout(simState.rafId);
+      } else if (typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function") {
+        window.cancelAnimationFrame(simState.rafId);
+      }
+      simState.rafId = null;
+    }
+    simState.playing = false;
+    simState.lastTs = null;
+    const playBtn = document.getElementById("simPlayBtn");
+    if (playBtn) playBtn.textContent = "\u25B6 Play";
+  }
+
+  function scheduleSimTick(cb) {
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+      simState.usingTimeout = false;
+      simState.rafId = window.requestAnimationFrame(cb);
+    } else {
+      simState.usingTimeout = true;
+      simState.rafId = setTimeout(() => cb(nowMs()), 16);
+    }
+  }
+
+  function startSimulator() {
+    if (simState.playing) return;
+    const cfg = refreshAll._latestCfg || readConfig();
+    const maxT = refreshAll._latestBundle ? refreshAll._latestBundle[4].totalRuntimeSec : generateStep4(cfg).totalRuntimeSec;
+    if (simState.tSec >= maxT - 0.01) {
+      simState.tSec = 0;
+    }
+    simState.playing = true;
+    simState.lastTs = nowMs();
+    const playBtn = document.getElementById("simPlayBtn");
+    if (playBtn) playBtn.textContent = "\u23F8 Pause";
+
+    const tick = (ts) => {
+      if (!simState.playing) return;
+      const curTs = typeof ts === "number" ? ts : nowMs();
+      const dt = Math.max(0, Math.min(0.25, (curTs - (simState.lastTs || curTs)) / 1000));
+      simState.lastTs = curTs;
+
+      const cfgNow = refreshAll._latestCfg || readConfig();
+      const endT = refreshAll._latestBundle ? refreshAll._latestBundle[4].totalRuntimeSec : generateStep4(cfgNow).totalRuntimeSec;
+      simState.tSec = Math.min(endT, simState.tSec + dt * simState.speed);
+      renderSimulatorFrame(cfgNow);
+
+      if (simState.tSec >= endT) {
+        pauseSimulator();
+      } else {
+        scheduleSimTick(tick);
+      }
+    };
+    scheduleSimTick(tick);
+  }
+
+  function setSimulatorTime(nextSec) {
+    const cfg = refreshAll._latestCfg || readConfig();
+    const maxT = refreshAll._latestBundle ? refreshAll._latestBundle[4].totalRuntimeSec : generateStep4(cfg).totalRuntimeSec;
+    simState.tSec = Math.max(0, Math.min(maxT, parseFloat(nextSec) || 0));
+    if (simState.playing) simState.lastTs = nowMs();
+    renderSimulatorFrame(cfg);
+  }
+
+  function bindSimulatorEvents() {
+    const playBtn = document.getElementById("simPlayBtn");
+    const resetSimBtn = document.getElementById("simResetBtn");
+    const speedSel = document.getElementById("simSpeedSel");
+    const scrubber = document.getElementById("simScrubber");
+    const timelineBar = document.getElementById("timelineBar");
+
+    if (playBtn) {
+      playBtn.addEventListener("click", () => {
+        if (simState.playing) pauseSimulator();
+        else startSimulator();
+      });
+    }
+    if (resetSimBtn) {
+      resetSimBtn.addEventListener("click", () => {
+        pauseSimulator();
+        setSimulatorTime(0);
+      });
+    }
+    if (speedSel) {
+      speedSel.addEventListener("change", () => {
+        simState.speed = Math.max(1, parseFloat(speedSel.value) || 1);
+      });
+    }
+    if (scrubber) {
+      const onScrub = () => setSimulatorTime(scrubber.value);
+      scrubber.addEventListener("input", onScrub);
+      scrubber.addEventListener("change", onScrub);
+    }
+    if (timelineBar) {
+      const scrubFromTimelineX = (clientX) => {
+        const rect = timelineBar.getBoundingClientRect();
+        const innerLeft = rect.left + 1;
+        const innerW = Math.max(1, rect.width - 2);
+        const ratio = Math.max(0, Math.min(1, (clientX - innerLeft) / innerW));
+        setSimulatorTime(timelineRatioToSec(ratio));
+      };
+
+      timelineBar.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        scrubFromTimelineX(e.clientX);
+        const onMove = (me) => scrubFromTimelineX(me.clientX);
+        const onUp = () => {
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      });
+    }
+    if (typeof window !== "undefined" && window.ZANTIKS_SIMULATOR) {
+      window.ZANTIKS_SIMULATOR.timelineSecToPct = timelineSecToPct;
+      window.ZANTIKS_SIMULATOR.timelineRatioToSec = timelineRatioToSec;
+      window.ZANTIKS_SIMULATOR.getTimelineModel = () => timelineModel;
+    }
+  }
+
   function refreshAll() {
     const cfg = readConfig();
     const bundle = generateAllSteps(cfg);
     const activeObj = bundle[state.activeStep];
     const s4 = bundle[4];
 
+    refreshAll._latestBundle = bundle;
+    refreshAll._latestCfg = cfg;
+
     // Researcher filename preview & non-ASCII warning
     document.getElementById("previewFolderName").textContent = `${s4.bundleFolder}/`;
     document.getElementById("previewMainScript").textContent = s4.filename;
     document.getElementById("nameAsciiWarn").classList.toggle("show", cfg.hasNonAsciiWarning);
 
-    // Header badge & underneath channel label
+    // Header badge
     document.getElementById("hwBadge").textContent = "MWP " + cfg.hw;
-    const underLbl = document.getElementById("underlightText");
-    if (underLbl) {
-      underLbl.textContent = cfg.ledColor === "WHITE"
-        ? "Drive Underneath LED (Ch 12)"
-        : `Drive Underneath LED (Ch ${cfg.ledColorObj.z3Under} · ${cfg.ledColorObj.short})`;
-    }
     const orgObj = ORGANISM_PRESETS.find(o => o.id === state.organism);
 
-    // Visual previews & geometry status
+    // Visual previews, 2D simulator & geometry status
     updateConfigStatusBadges();
     renderPlateSvg(cfg);
     renderTimeline(cfg, s4);
+    simState.tSec = Math.max(0, Math.min(s4.totalRuntimeSec, simState.tSec));
+    renderSimulatorFrame(cfg);
 
     // Summary strip stats
     const first = cfg.wells[0];
@@ -5638,9 +7749,6 @@
     document.getElementById("stepInstructionText").innerHTML = activeObj.instruction;
     document.getElementById("csvSchemaBox").innerHTML = `<code>${activeObj.schemaText}</code>`;
     document.getElementById("codePreview").innerHTML = highlightZanscript(activeObj.code);
-
-    refreshAll._latestBundle = bundle;
-    refreshAll._latestCfg = cfg;
   }
 
   // ---------------------------------------------------------------------------
@@ -5697,6 +7805,8 @@
   }
 
   function bindEvents() {
+    bindSimulatorEvents();
+
     // Researcher Full Name -> Auto-extract Last Name
     const userNameEl = document.getElementById("userName");
     userNameEl.addEventListener("input", refreshAll);
@@ -5783,9 +7893,10 @@
     [
       "videoMode", "chk_tracks", "chk_heatmap", "expPrefix", "hwVersion", "ledColor",
       "targetSize", "detThreshold", "msdThreshold", "autorefTimeout",
-      "thermostatTemp", "chk_thermostat", "ledBrightness", "chk_underlight"
+      "thermostatTemp", "chk_thermostat", "ledBrightness", "ledMount"
     ].forEach(id => {
       const el = document.getElementById(id);
+      if (!el) return;
       el.addEventListener("input", () => {
         if (["targetSize", "detThreshold", "msdThreshold", "thermostatTemp", "chk_thermostat"].includes(id)) {
           state.organism = "custom";
@@ -5947,10 +8058,17 @@
 
     // Reset Assay button (preserves calibrated plate offsets!)
     document.getElementById("resetBtn").addEventListener("click", () => {
+      pauseSimulator();
+      simState.tSec = 0;
+      simState.speed = 1;
+      const spSel = document.getElementById("simSpeedSel");
+      if (spSel) spSel.value = "1";
+
       state.organism = "daphnia";
       state.plateId = "24well";
       state.stimId = "ld_transitions";
       state.activeStep = 4;
+      state.showUnderTracks = false;
       state.timelineClips = cloneDefaultTimelineClips();
       state.selectedClipId = state.timelineClips.length > 1 ? state.timelineClips[1].id : (state.timelineClips[0] ? state.timelineClips[0].id : null);
       state.stimParams.mpTimelineSec = 180;
@@ -5973,7 +8091,8 @@
       document.getElementById("chk_tracks").checked = true;
       document.getElementById("chk_heatmap").checked = false;
       document.getElementById("ledBrightness").value = 100;
-      document.getElementById("chk_underlight").checked = false;
+      const mountEl = document.getElementById("ledMount");
+      if (mountEl) mountEl.value = "OVERHEAD";
 
       const daph = ORGANISM_PRESETS[0];
       document.getElementById("targetSize").value = daph.targetSize;
@@ -6027,12 +8146,24 @@
     setText("sumFolder", `${s4.bundleFolder}/`);
 
     setText("sumHw", "MWP " + cfg.hw);
-    const colLabel = cfg.stimId === "multi_phase"
-      ? "Multi-wavelength LEDs"
-      : (cfg.ledColor === "WHITE" ? "Overhead LED" : `Overhead ${cfg.ledColorObj.short}`);
-    setText("sumHwSub", cfg.hw === "Z3"
-      ? `${colLabel}${cfg.stimId === "multi_phase" ? "" : " " + cfg.ledPct + "%"}${cfg.useUnderLight ? " + underneath" : ""}`
-      : `GPO6-8 (${cfg.stimId === "multi_phase" ? "multi-color" : cfg.ledColorObj.short})`);
+    if (cfg.hw === "Z3") {
+      if (cfg.stimId === "multi_phase") {
+        const hasBotClips = (cfg.timelineClips || []).some(c => String(c.track || "").startsWith("U_"));
+        setText("sumHwSub", hasBotClips
+          ? "Top + Underneath LED tracks"
+          : (cfg.ledMount === "BOTH" ? "Multi-wavelength (Top+Bot)" : (cfg.ledMount === "UNDERNEATH" ? "Multi-wavelength (Bot acclim)" : "Multi-wavelength LEDs")));
+      } else {
+        const mountLbl = cfg.ledMount === "UNDERNEATH"
+          ? "Underneath"
+          : (cfg.ledMount === "BOTH" ? "Top+Bottom" : "Overhead");
+        const colLbl = (cfg.ledColor === "WHITE" && cfg.ledMount === "OVERHEAD")
+          ? "Overhead LED"
+          : `${mountLbl} ${cfg.ledColorObj.short}`;
+        setText("sumHwSub", `${colLbl} ${cfg.ledPct}%`);
+      }
+    } else {
+      setText("sumHwSub", `GPO6-8 (${cfg.stimId === "multi_phase" ? "multi-color" : cfg.ledColorObj.short})`);
+    }
 
     let tempSummary;
     if (cfg.stimId === "temp_ramp") {
