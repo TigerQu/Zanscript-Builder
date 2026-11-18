@@ -835,18 +835,6 @@
     line-height: 1.5;
   }
 
-  .stim-adv-badge {
-    flex-shrink: 0;
-    padding: 1px 8px;
-    border-radius: 999px;
-    background: #fbefff;
-    color: #8250df;
-    border: 1px solid rgba(130, 80, 223, 0.3);
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-  }
-
   @media (max-width: 479px) {
     .stim-grid {
       grid-template-columns: 1fr;
@@ -6054,9 +6042,7 @@
       tile.type = "button";
       tile.className = "option-tile" + (isAdv ? " stim-adv-tile" : "") + (state.stimId === s.id ? " active" : "");
       tile.setAttribute("data-stim", s.id);
-      tile.innerHTML = isAdv
-        ? `<span class="tile-name"><span>${s.name}</span><span class="stim-adv-badge">Advanced</span></span><span class="tile-meta">${s.desc || s.meta}</span>`
-        : `<span class="tile-name">${s.name}</span><span class="tile-meta">${s.meta}</span>`;
+      tile.innerHTML = `<span class="tile-name">${s.name}</span><span class="tile-meta">${isAdv ? (s.desc || s.meta) : s.meta}</span>`;
       tile.addEventListener("click", () => {
         const changed = state.stimId !== s.id;
         state.stimId = s.id;
