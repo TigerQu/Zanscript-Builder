@@ -482,6 +482,56 @@ try {
         ok ? "" : JSON.stringify(circAndTherm));
       await page.close();
     }
+
+    // 6f. MWP Z3 RGB & UV emit LIGHTS(LIGHT16/15/14/13, ON/OFF) port gates while White remains direct-drive only
+    {
+      const { page } = await openFreshPage("#study");
+      const gateCheck = await page.evaluate(() => {
+        // Default White Overhead -> no LIGHT13..16
+        const whiteCode = refreshAll._latestBundle[4].code;
+        const whiteDirectOnly = !/LIGHTS\(LIGHT1[3456],/.test(whiteCode);
+
+        // Blue Both -> LIGHT16 & LIGHT15
+        document.getElementById("ledColor").value = "BLUE";
+        document.getElementById("ledMount").value = "BOTH";
+        refreshAll();
+        const blueBothCode = refreshAll._latestBundle[4].code;
+
+        // UV Both -> LIGHT14 & LIGHT13
+        document.getElementById("ledColor").value = "UV";
+        refreshAll();
+        const uvBothCode = refreshAll._latestBundle[4].code;
+
+        // Multi-track with Top Blue + Bottom Green + Top UV + Bottom UV
+        document.getElementById("ledColor").value = "WHITE";
+        document.getElementById("ledMount").value = "OVERHEAD";
+        state.stimId = "multi_phase";
+        state.timelineClips = [
+          { id: 1, track: "BLUE", startSec: 0, endSec: 60, val: 100 },
+          { id: 2, track: "UV", startSec: 60, endSec: 120, val: 80 },
+          { id: 3, track: "U_GREEN", startSec: 0, endSec: 60, val: 50 },
+          { id: 4, track: "U_UV", startSec: 60, endSec: 120, val: 50 }
+        ];
+        refreshAll();
+        const mpCode = refreshAll._latestBundle[4].code;
+
+        return {
+          whiteDirectOnly,
+          blueGates: blueBothCode.includes("LIGHTS(LIGHT16,ON)") && blueBothCode.includes("LIGHTS(LIGHT15,ON)") &&
+            blueBothCode.includes("LIGHTS(LIGHT16,OFF)") && blueBothCode.includes("LIGHTS(LIGHT15,OFF)"),
+          uvGates: uvBothCode.includes("LIGHTS(LIGHT14,ON)") && uvBothCode.includes("LIGHTS(LIGHT13,ON)") &&
+            uvBothCode.includes("LIGHTS(LIGHT14,OFF)") && uvBothCode.includes("LIGHTS(LIGHT13,OFF)"),
+          mpGates: mpCode.includes("LIGHTS(LIGHT16,ON)") && mpCode.includes("LIGHTS(LIGHT14,ON)") &&
+            mpCode.includes("LIGHTS(LIGHT15,ON)") && mpCode.includes("LIGHTS(LIGHT13,ON)") &&
+            mpCode.includes("LIGHTS(ALL,OFF)"),
+          noIrTouched: !/SET\(X_LED_DRIVE,\s*(2|10)\s*,/.test(mpCode)
+        };
+      });
+      const ok = Object.values(gateCheck).every(Boolean);
+      report(ok, "MWP Z3 RGB & UV emit official LIGHTS(LIGHT16/15/14/13, ON/OFF) port gates while White & IR stay untouched",
+        ok ? "" : JSON.stringify(gateCheck));
+      await page.close();
+    }
   }
 } finally {
   await browser.close();

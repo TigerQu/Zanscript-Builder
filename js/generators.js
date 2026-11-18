@@ -15,6 +15,19 @@ function buildResearcherComment(cfg) {
   return null;
 }
 
+function buildZ3PortGateLines(colId, useTop, useUnder, turnOn) {
+  const stateStr = turnOn ? "ON" : "OFF";
+  const out = [];
+  if (colId === "BLUE" || colId === "GREEN" || colId === "RED") {
+    if (useTop) out.push(`    LIGHTS(LIGHT16,${stateStr})`);
+    if (useUnder) out.push(`    LIGHTS(LIGHT15,${stateStr})`);
+  } else if (colId === "UV") {
+    if (useTop) out.push(`    LIGHTS(LIGHT14,${stateStr})`);
+    if (useUnder) out.push(`    LIGHTS(LIGHT13,${stateStr})`);
+  }
+  return out;
+}
+
 function buildLightOnLines(cfg, col) {
   const c = col || cfg.ledColorObj || LED_COLORS.WHITE;
   const topLine = cfg.useTopLight
@@ -23,7 +36,7 @@ function buildLightOnLines(cfg, col) {
   const underLine = cfg.useUnderLight
     ? `    SET(X_LED_DRIVE,${c.z3Under},LED_BRIGHTNESS)`
     : `    # SET(X_LED_DRIVE,${c.z3Under},LED_BRIGHTNESS)  # Uncomment for underneath LED`;
-  return [topLine, underLine];
+  return [topLine, underLine, ...buildZ3PortGateLines(c.id, cfg.useTopLight, cfg.useUnderLight, true)];
 }
 
 function buildLightOffLines(cfg, col) {
@@ -32,7 +45,7 @@ function buildLightOffLines(cfg, col) {
   const underLine = cfg.useUnderLight
     ? `    SET(X_LED_DRIVE,${c.z3Under},0)`
     : `    # SET(X_LED_DRIVE,${c.z3Under},0)`;
-  return [topLine, underLine];
+  return [topLine, underLine, ...buildZ3PortGateLines(c.id, cfg.useTopLight, cfg.useUnderLight, false)];
 }
 
 function buildLightActions(cfg) {
@@ -56,10 +69,12 @@ function buildLightActions(cfg) {
           : (manageBottom
               ? `    SET(X_LED_DRIVE,${mpCol.z3Under},0)`
               : `    # SET(X_LED_DRIVE,${mpCol.z3Under},LED_BRIGHTNESS)  # Uncomment for underneath LED`),
+        ...buildZ3PortGateLines(mpCol.id, cfg.useTopLight, cfg.useUnderLight, true),
         "COMPLETE"
       ];
       const offLines = [
         "ACTION LIGHTS_OFF",
+        "    LIGHTS(ALL,OFF)",
         "    SET(X_LED_DRIVE,0,0)",
         "    SET(X_LED_DRIVE,1,0)",
         "    SET(X_LED_DRIVE,3,0)",
@@ -121,18 +136,43 @@ function buildSliceLightLines(cfg, topLights, bottomLights, forceManageBottom) {
 
   if (cfg.hw === "Z3") {
     const order = ["UV", "BLUE", "GREEN", "WHITE", "RED"];
+    const allClips = cfg.timelineClips || [];
+    const acclimId = (cfg.sp && cfg.sp.mpAcclimLight) || "DARK";
+    const hasTopRgbNow = Boolean(topById.BLUE || topById.GREEN || topById.RED);
+    const hasTopUvNow = Boolean(topById.UV);
+    const hasBotRgbNow = Boolean(botById.BLUE || botById.GREEN || botById.RED);
+    const hasBotUvNow = Boolean(botById.UV);
+
+    const everTopRgb = hasTopRgbNow ||
+      allClips.some(c => c.track === "BLUE" || c.track === "GREEN" || c.track === "RED") ||
+      (cfg.useTopLight && (acclimId === "BLUE" || acclimId === "GREEN" || acclimId === "RED"));
+    const everTopUv = hasTopUvNow ||
+      allClips.some(c => c.track === "UV") ||
+      (cfg.useTopLight && acclimId === "UV");
+    const everBotRgb = hasBotRgbNow ||
+      allClips.some(c => c.track === "U_BLUE" || c.track === "U_GREEN" || c.track === "U_RED") ||
+      (cfg.useUnderLight && (acclimId === "BLUE" || acclimId === "GREEN" || acclimId === "RED"));
+    const everBotUv = hasBotUvNow ||
+      allClips.some(c => c.track === "U_UV") ||
+      (cfg.useUnderLight && acclimId === "UV");
+
     const lines = [];
     for (const id of order) {
       const col = LED_COLORS[id];
       const pwm = topById[id] ? topById[id].pwm : 0;
       lines.push(`    SET(X_LED_DRIVE,${col.z3Over},${pwm})`);
     }
+    if (everTopRgb) lines.push(`    LIGHTS(LIGHT16,${hasTopRgbNow ? "ON" : "OFF"})`);
+    if (everTopUv) lines.push(`    LIGHTS(LIGHT14,${hasTopUvNow ? "ON" : "OFF"})`);
+
     if (forceManageBottom || (bottomLights && bottomLights.length > 0) || cfg.ledMount !== "OVERHEAD") {
       for (const id of order) {
         const col = LED_COLORS[id];
         const pwm = botById[id] ? botById[id].pwm : 0;
         lines.push(`    SET(X_LED_DRIVE,${col.z3Under},${pwm})`);
       }
+      if (everBotRgb) lines.push(`    LIGHTS(LIGHT15,${hasBotRgbNow ? "ON" : "OFF"})`);
+      if (everBotUv) lines.push(`    LIGHTS(LIGHT13,${hasBotUvNow ? "ON" : "OFF"})`);
     }
     return lines;
   }
