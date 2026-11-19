@@ -623,7 +623,7 @@
   display: grid;
   grid-template-columns: 120px 120px minmax(0, 1fr);
   gap: 14px 16px;
-  align-items: end;
+  align-items: start;
 }
 
 @media (max-width: 560px) {
@@ -649,24 +649,39 @@
   color: var(--text-muted);
 }
 
-.nle-insp-field input[type="number"] {
+.nle-insp-field input[type="number"],
+.nle-insp-field input[type="text"],
+.nle-insp-field select {
   width: 100%;
-  padding: 7px 10px;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 10px;
   font-size: 13px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text);
 }
 
-.nle-insp-field input[type="number"]:focus {
+.nle-insp-field input[type="number"] {
+  font-family: var(--font-mono);
+}
+
+.nle-insp-field select {
+  cursor: pointer;
+}
+
+.nle-insp-field input[type="number"]:focus,
+.nle-insp-field input[type="text"]:focus,
+.nle-insp-field select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
 }
 
-.nle-insp-field input:disabled {
+.nle-insp-field input:disabled,
+.nle-insp-field select:disabled {
   background: #eaeef2;
   color: var(--text-muted);
 }

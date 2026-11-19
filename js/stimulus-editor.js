@@ -571,6 +571,9 @@ function renderStimParams() {
         : (tr.group === "ENV" ? "nle-mount-env" : (tr.group === "STIM" ? "nle-mount-stim" : "nle-mount-top"));
 
       let valFieldHtml = "";
+      const inspSub = isVib
+        ? "ZCOMMAND · fires at clip start"
+        : (isAudio ? "AUDIO_FILE · fires at clip start" : tr.sub);
       if (isVib) {
         const curLvl = clampVibLevel(sel.val);
         const opts = VIB_STEP_MODES.map(m =>
@@ -578,7 +581,7 @@ function renderStimParams() {
         ).join("");
         valFieldHtml = `
             <div class="nle-insp-field nle-insp-field-wide">
-              <label for="nleInspVibSel">Motor Intensity (triggers ZCOMMAND at clip start)</label>
+              <label for="nleInspVibSel">Motor Intensity</label>
               <select id="nleInspVibSel">${opts}</select>
             </div>`;
       } else if (isAudio) {
@@ -587,7 +590,7 @@ function renderStimParams() {
         const selMode = isBuiltin ? curFile : "custom";
         valFieldHtml = `
             <div class="nle-insp-field nle-insp-field-wide">
-              <label for="nleInspAudioSel">Audio Asset (triggers LOAD(AUDIO_FILE) at clip start)</label>
+              <label for="nleInspAudioSel">Audio Asset</label>
               <div class="nle-insp-audio-row">
                 <select id="nleInspAudioSel">
                   <option value="tone" ${selMode === "tone" ? "selected" : ""}>Built-in Tone ("tone")</option>
@@ -619,7 +622,7 @@ function renderStimParams() {
               <span class="nle-mount-tag ${mountCls}">${tr.group}</span>
               <span class="nle-swatch" style="background:${tr.swatch};"></span>
               <span>${tr.label}</span>
-              <span class="nle-insp-sub">${tr.sub}</span>
+              <span class="nle-insp-sub">${inspSub}</span>
             </div>
             <div class="nle-insp-actions">
               <span class="nle-hud" id="nleInspDur">${durSec}s</span>
