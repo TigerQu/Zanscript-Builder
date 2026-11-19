@@ -44,12 +44,19 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     const sBin = Math.max(0, Math.min(totalBins, Math.round((parseFloat(c.startSec) || 0) / bin)));
     const eBin = Math.max(0, Math.min(totalBins, Math.round((parseFloat(c.endSec) || 0) / bin)));
     if (eBin > sBin) {
-      norm.push({ track: String(c.track || ""), sBin, eBin, val: parseFloat(c.val) });
+      const trId = String(c.track || "");
+      let val;
+      if (trId === "AUDIO") val = sanitizeAudioAsset(c.val);
+      else if (trId === "VIB") val = clampVibLevel(c.val);
+      else val = parseFloat(c.val);
+      norm.push({ track: trId, sBin, eBin, val });
     }
   }
 
   const hasAnyTempClip = norm.some(c => c.track === "TEMP");
   const hasAnyBottomClip = norm.some(c => c.track.startsWith("U_"));
+  const hasAnyVibClip = norm.some(c => c.track === "VIB");
+  const hasAnyAudioClip = norm.some(c => c.track === "AUDIO");
   const ptSet = new Set([0, totalBins]);
   for (const c of norm) {
     ptSet.add(c.sBin);
@@ -87,15 +94,29 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       ? (tempHit ? Math.min(40, Math.max(10, Number((tempHit.val || baseT).toFixed(1)))) : baseT)
       : null;
 
+    const vibHit = norm.find(c => c.track === "VIB" && c.sBin <= b0 && c.eBin >= b1);
+    const vibTrigger = Boolean(vibHit && vibHit.sBin === b0);
+    const vibCode = vibHit ? vibLevelToCode(vibHit.val) : null;
+
+    const audioHit = norm.find(c => c.track === "AUDIO" && c.sBin <= b0 && c.eBin >= b1);
+    const audioTrigger = Boolean(audioHit && audioHit.sBin === b0);
+    const audioFile = audioHit ? audioHit.val : null;
+
     const sig = "T:" + topLights.map(l => `${l.id}:${l.pct}`).join("+") +
       "|B:" + bottomLights.map(l => `${l.id}:${l.pct}`).join("+") +
-      "|C:" + (effectiveTemp !== null ? effectiveTemp : "none");
+      "|C:" + (effectiveTemp !== null ? effectiveTemp : "none") +
+      "|V:" + (vibTrigger ? ("TRIG:" + vibCode) : (vibCode || "none")) +
+      "|A:" + (audioTrigger ? ("TRIG:" + audioFile) : (audioFile || "none"));
     const prev = rawSlices[rawSlices.length - 1];
-    if (prev && prev.sig === sig) {
+    // Never merge a slice that fires a one-shot trigger (vibTrigger or audioTrigger) into the previous slice
+    if (prev && !vibTrigger && !audioTrigger && !prev.vibTrigger && !prev.audioTrigger && prev.sig === sig) {
       prev.b1 = b1;
       prev.bins = prev.b1 - prev.b0;
     } else {
-      rawSlices.push({ b0, b1, bins: b1 - b0, topLights, bottomLights, effectiveTemp, sig });
+      rawSlices.push({
+        b0, b1, bins: b1 - b0, topLights, bottomLights, effectiveTemp,
+        vibTrigger, vibCode, audioTrigger, audioFile, sig
+      });
     }
   }
 
@@ -105,6 +126,18 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     const tLen = s.topLights.length;
     const bLen = s.bottomLights.length;
     const tempSuffix = s.effectiveTemp !== null ? `_${s.effectiveTemp}C` : "";
+    const stimTagParts = [];
+    const stimOvParts = [];
+    if (s.vibTrigger) {
+      stimTagParts.push(`V${s.vibCode}`);
+      stimOvParts.push(s.vibCode);
+    }
+    if (s.audioTrigger) {
+      stimTagParts.push("AUD");
+      stimOvParts.push("AUD");
+    }
+    const stimSuffix = stimTagParts.length ? "_" + stimTagParts.join("_") : "";
+    const stimOv = stimOvParts.length ? " " + stimOvParts.join("+") : "";
     let lightTag;
     let ovLight;
 
@@ -136,7 +169,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     } else {
       if (tLen === 1 && bLen === 1) {
         const fullCombo = `${s.topLights[0].id}_U_${s.bottomLights[0].id}`;
-        lightTag = (`S${sNum}_${fullCombo}${tempSuffix}`).length <= 24
+        lightTag = (`S${sNum}_${fullCombo}${tempSuffix}${stimSuffix}`).length <= 24
           ? fullCombo
           : `T${shortMap[s.topLights[0].id]}_U${shortMap[s.bottomLights[0].id]}`;
         ovLight = `T:${shortMap[s.topLights[0].id]} B:${shortMap[s.bottomLights[0].id]}`;
@@ -146,8 +179,8 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       }
     }
 
-    const csvTag = `S${sNum}_${lightTag}${tempSuffix}`.slice(0, 24);
-    const overlayText = `S${sNum} ${ovLight}${s.effectiveTemp !== null ? " " + s.effectiveTemp + "C" : ""}`;
+    const csvTag = `S${sNum}_${lightTag}${tempSuffix}${stimSuffix}`.slice(0, 24);
+    const overlayText = `S${sNum} ${ovLight}${s.effectiveTemp !== null ? " " + s.effectiveTemp + "C" : ""}${stimOv}`;
     return {
       idx: sNum,
       startSec: s.b0 * bin,
@@ -157,6 +190,10 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       bottomLights: s.bottomLights,
       lights: [...s.topLights, ...s.bottomLights],
       effectiveTemp: s.effectiveTemp,
+      vibTrigger: s.vibTrigger,
+      vibCode: s.vibCode,
+      audioTrigger: s.audioTrigger,
+      audioFile: s.audioFile,
       csvTag,
       overlayText
     };
@@ -165,7 +202,10 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
   const initialTemp = hasAnyTempClip && slices.length > 0 ? slices[0].effectiveTemp : null;
   const anyTempChange = hasAnyTempClip && slices.some(sl => Math.abs(sl.effectiveTemp - initialTemp) > 0.01);
 
-  return { totalBins, totalSec, bin, hasAnyTempClip, hasAnyBottomClip, initialTemp, anyTempChange, slices };
+  return {
+    totalBins, totalSec, bin, hasAnyTempClip, hasAnyBottomClip,
+    hasAnyVibClip, hasAnyAudioClip, initialTemp, anyTempChange, slices
+  };
 }
 
 function computeTempRampSteps(startRaw, endRaw, stepRaw) {
@@ -186,6 +226,18 @@ function computeTempRampSteps(startRaw, endRaw, stepRaw) {
   }
   return steps;
 }
+
+const OPTIONAL_STIM_PARAM_DEFAULTS = {
+  audioFile: "tone",
+  audioCustomFile: "stereo.wav",
+  audioAmbient: "DARK",
+  ppiPrepulse: "U3",
+  ppiPulse: "U0",
+  ppiIsiMs: 300,
+  ppiPairs: 5,
+  ppiPattern: "alternating",
+  ppiAmbient: "DARK"
+};
 
 function cloneDefaultStimParams() {
   return {
@@ -213,7 +265,8 @@ function cloneDefaultStimParams() {
     rampEndTemp: 30,
     rampStepTemp: 2,
     rampHoldSec: 300,
-    rampLight: "DARK"
+    rampLight: "DARK",
+    ...OPTIONAL_STIM_PARAM_DEFAULTS
   };
 }
 
@@ -301,13 +354,16 @@ function resetAssayFieldsAndDom() {
   setVal("ledMount", "OVERHEAD");
   applyZ3RgbMapToCatalogs(state.z3RgbMap);
 
+  setVal("zoneMode", "concentric");
   setChk("chk_dist", true);
   setChk("chk_msd", true);
   setChk("chk_zones", false);
+  setChk("chk_zchange", false);
   setChk("chk_xy", false);
   setVal("videoMode", "1fps");
   setChk("chk_tracks", true);
   setChk("chk_heatmap", false);
+  setChk("chk_picture", false);
 
   const daph = ORGANISM_PRESETS[0];
   setVal("targetSize", daph.targetSize);

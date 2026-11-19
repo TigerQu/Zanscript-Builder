@@ -89,6 +89,12 @@ body {
   border: 1px solid rgba(9, 105, 218, 0.25);
 }
 
+.badge-hw.is-alt {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: rgba(154, 103, 0, 0.35);
+}
+
 .badge-custom {
   font-size: 10.5px;
   font-weight: 600;

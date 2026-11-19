@@ -161,24 +161,71 @@ const STIMULI = [
   { id: "light_off_startle", name: "Light-Off Startle", meta: "Brief dark pulses + ITI" },
   { id: "light_on_pulse", name: "Light-On Flash", meta: "Bright flashes in dark" },
   { id: "vibration_startle", name: "Vibration Startle", meta: "Stepper motor tap + ITI" },
+  { id: "acoustic_startle", name: "Acoustic Startle", meta: "Built-in sound card cue + ITI" },
+  { id: "ppi", name: "Prepulse Inhibition (PPI)", meta: "Weak prepulse + ISI + pulse" },
   { id: "circadian", name: "Long-Term Cycle", meta: "Multi-hour / multi-day L:D" },
-  { id: "multi_phase", name: "Multi-Track Timeline", meta: "Top/Bot LEDs & temp tracks", advanced: true,
-    desc: "Draw your own sequence on a timeline editor: separate top and bottom LED tracks (White, 470, 530, 625, UV) plus a temperature track, repeated for any number of cycles." },
+  { id: "multi_phase", name: "Multi-Track Timeline", meta: "Top/Bot LEDs, temp, vib & audio", advanced: true,
+    desc: "Draw your own multi-modal sequence: independent top and bottom LED tracks (White, 470, 530, 625, UV), temperature, vibration tap, and audio tracks repeated for any number of cycles." },
   { id: "temp_ramp", name: "Temperature Step / Ramp", meta: "Stepped thermal curve (°C)" }
 ];
 
+const VIB_STEP_MODES = [
+  { level: 0, code: "U0", label: "U0 · Strong (Full Step)", short: "U0" },
+  { level: 1, code: "U1", label: "U1 · Medium (Half Step)", short: "U1" },
+  { level: 2, code: "U2", label: "U2 · Mild (Quarter Step)", short: "U2" },
+  { level: 3, code: "U3", label: "U3 · Gentle (Eighth Step)", short: "U3" }
+];
+
+const AUDIO_BUILTINS = ["tone", "mono"];
+
+function clampVibLevel(raw) {
+  if (typeof raw === "string") {
+    const m = raw.trim().toUpperCase().match(/^U([0-3])$/);
+    if (m) return parseInt(m[1], 10);
+  }
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? Math.min(3, Math.max(0, n)) : 2;
+}
+
+function vibLevelToCode(raw) {
+  return "U" + clampVibLevel(raw);
+}
+
+function sanitizeAudioAsset(raw) {
+  const cleaned = String(raw || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_.-]+/g, "")
+    .replace(/^\.+/, "")
+    .slice(0, 32);
+  return cleaned || "tone";
+}
+
+function getZoneAssetName(plate, zoneMode) {
+  if (!plate) return "dz24";
+  const base = plate.zoneBmp || "dz24";
+  if (zoneMode === "half_tb") {
+    return base.startsWith("dz") ? "ldz" + base.slice(2) : "ldz_" + base;
+  }
+  if (zoneMode === "half_lr") {
+    return base.startsWith("dz") ? "lrz" + base.slice(2) : "lrz_" + base;
+  }
+  return base;
+}
+
 const NLE_TRACKS = [
-  { id: "WHITE",   group: "TOP", colorId: "WHITE", label: "White",     sub: "Top Ch 4",  kind: "light", swatch: "#eab308", bg: "#fef08a", border: "#ca8a04", text: "#713f12" },
-  { id: "BLUE",    group: "TOP", colorId: "BLUE",  label: "Blue 470",  sub: "Top Ch 1",  kind: "light", swatch: "#3b82f6", bg: "#bfdbfe", border: "#2563eb", text: "#1e3a8a" },
-  { id: "GREEN",   group: "TOP", colorId: "GREEN", label: "Green 530", sub: "Top Ch 3",  kind: "light", swatch: "#22c55e", bg: "#bbf7d0", border: "#16a34a", text: "#14532d" },
-  { id: "RED",     group: "TOP", colorId: "RED",   label: "Red 625",   sub: "Top Ch 5",  kind: "light", swatch: "#ef4444", bg: "#fecaca", border: "#dc2626", text: "#7f1d1d" },
-  { id: "UV",      group: "TOP", colorId: "UV",    label: "UV 365",    sub: "Top Ch 0",  kind: "light", swatch: "#a855f7", bg: "#e9d5ff", border: "#9333ea", text: "#581c87" },
-  { id: "U_WHITE", group: "BOT", colorId: "WHITE", label: "White",     sub: "Bot Ch 12", kind: "light", swatch: "#eab308", bg: "#fef9c3", border: "#a16207", text: "#713f12" },
-  { id: "U_BLUE",  group: "BOT", colorId: "BLUE",  label: "Blue 470",  sub: "Bot Ch 9",  kind: "light", swatch: "#38bdf8", bg: "#dbeafe", border: "#0284c7", text: "#0c4a6e" },
-  { id: "U_GREEN", group: "BOT", colorId: "GREEN", label: "Green 530", sub: "Bot Ch 11", kind: "light", swatch: "#34d399", bg: "#d1fae5", border: "#059669", text: "#064e3b" },
-  { id: "U_RED",   group: "BOT", colorId: "RED",   label: "Red 625",   sub: "Bot Ch 13", kind: "light", swatch: "#fb7185", bg: "#ffe4e6", border: "#e11d48", text: "#881337" },
-  { id: "U_UV",    group: "BOT", colorId: "UV",    label: "UV 365",    sub: "Bot Ch 8",  kind: "light", swatch: "#c084fc", bg: "#f3e8ff", border: "#7e22ce", text: "#4c1d95" },
-  { id: "TEMP",    group: "ENV", colorId: null,    label: "Temp °C",   sub: "Therm",     kind: "temp",  swatch: "#f97316", bg: "#fed7aa", border: "#ea580c", text: "#7c2d12" }
+  { id: "WHITE",   group: "TOP",  colorId: "WHITE", label: "White",     sub: "Top Ch 4",    kind: "light", swatch: "#eab308", bg: "#fef08a", border: "#ca8a04", text: "#713f12" },
+  { id: "BLUE",    group: "TOP",  colorId: "BLUE",  label: "Blue 470",  sub: "Top Ch 1",    kind: "light", swatch: "#3b82f6", bg: "#bfdbfe", border: "#2563eb", text: "#1e3a8a" },
+  { id: "GREEN",   group: "TOP",  colorId: "GREEN", label: "Green 530", sub: "Top Ch 3",    kind: "light", swatch: "#22c55e", bg: "#bbf7d0", border: "#16a34a", text: "#14532d" },
+  { id: "RED",     group: "TOP",  colorId: "RED",   label: "Red 625",   sub: "Top Ch 5",    kind: "light", swatch: "#ef4444", bg: "#fecaca", border: "#dc2626", text: "#7f1d1d" },
+  { id: "UV",      group: "TOP",  colorId: "UV",    label: "UV 365",    sub: "Top Ch 0",    kind: "light", swatch: "#a855f7", bg: "#e9d5ff", border: "#9333ea", text: "#581c87" },
+  { id: "U_WHITE", group: "BOT",  colorId: "WHITE", label: "White",     sub: "Bot Ch 12",   kind: "light", swatch: "#eab308", bg: "#fef9c3", border: "#a16207", text: "#713f12" },
+  { id: "U_BLUE",  group: "BOT",  colorId: "BLUE",  label: "Blue 470",  sub: "Bot Ch 9",    kind: "light", swatch: "#38bdf8", bg: "#dbeafe", border: "#0284c7", text: "#0c4a6e" },
+  { id: "U_GREEN", group: "BOT",  colorId: "GREEN", label: "Green 530", sub: "Bot Ch 11",   kind: "light", swatch: "#34d399", bg: "#d1fae5", border: "#059669", text: "#064e3b" },
+  { id: "U_RED",   group: "BOT",  colorId: "RED",   label: "Red 625",   sub: "Bot Ch 13",   kind: "light", swatch: "#fb7185", bg: "#ffe4e6", border: "#e11d48", text: "#881337" },
+  { id: "U_UV",    group: "BOT",  colorId: "UV",    label: "UV 365",    sub: "Bot Ch 8",    kind: "light", swatch: "#c084fc", bg: "#f3e8ff", border: "#7e22ce", text: "#4c1d95" },
+  { id: "TEMP",    group: "ENV",  colorId: null,    label: "Temp °C",   sub: "Therm",       kind: "temp",  swatch: "#f97316", bg: "#fed7aa", border: "#ea580c", text: "#7c2d12" },
+  { id: "VIB",     group: "STIM", colorId: null,    label: "Vib Tap",   sub: "Motor U0-U3", kind: "vib",   swatch: "#ec4899", bg: "#fbcfe8", border: "#db2777", text: "#831843" },
+  { id: "AUDIO",   group: "STIM", colorId: null,    label: "Audio",     sub: "Sound Card",  kind: "audio", swatch: "#06b6d4", bg: "#cffafe", border: "#0891b2", text: "#164e63" }
 ];
 
 function applyZ3RgbMapToCatalogs(mapId) {

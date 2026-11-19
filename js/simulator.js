@@ -206,12 +206,21 @@ function renderSimulatorFrame(cfgIn) {
 
   const plateCross = document.getElementById("simPlateCrossBar");
   const vibBadge = document.getElementById("simVibBadge");
+  const audBadge = document.getElementById("simAudioBadge");
+  const hasMpVib = cfg.stimId === "multi_phase" && (cfg.timelineClips || []).some(c => c.track === "VIB");
+  const hasMpAud = cfg.stimId === "multi_phase" && (cfg.timelineClips || []).some(c => c.track === "AUDIO");
   if (plateCross) plateCross.classList.toggle("is-vibrating", Boolean(sampled.vibration));
   if (vibBadge) {
     vibBadge.classList.toggle("active", Boolean(sampled.vibration));
     vibBadge.textContent = sampled.vibration
       ? `TAP ${sampled.vibration}`
-      : (cfg.stimId === "vibration_startle" ? "Stepper Armed" : "Motor Idle");
+      : ((cfg.stimId === "vibration_startle" || cfg.stimId === "ppi" || hasMpVib) ? "Motor Armed" : "Motor Idle");
+  }
+  if (audBadge) {
+    audBadge.classList.toggle("active", Boolean(sampled.audio));
+    audBadge.textContent = sampled.audio
+      ? `AUD: ${sampled.audio}`
+      : ((cfg.stimId === "acoustic_startle" || hasMpAud) ? "Audio Armed" : "Audio Idle");
   }
 
   // 2D Top-Down Plate Illumination
@@ -277,6 +286,7 @@ function renderSimulatorFrame(cfgIn) {
   if (hwBar) {
     const thermStr = sampled.tempC !== null ? `THERMOSTAT=${sampled.tempC.toFixed(1)}\u00B0C` : "THERMOSTAT=OFF";
     const vibStr = sampled.vibration ? ` \u00B7 <code>ZCOMMAND("${sampled.vibration} ...")</code>` : "";
+    const audStr = sampled.audio ? ` \u00B7 <code>LOAD(AUDIO_FILE,"${sampled.audio}")</code>` : "";
     if (cfg.hw === "Z3") {
       const topOrder = ledIds
         .map(cid => [cid, LED_COLORS[cid].z3Over])
@@ -293,7 +303,7 @@ function renderSimulatorFrame(cfgIn) {
       const topTxt = topPairs.length ? topPairs.join(" ") : "0";
       const botTxt = botPairs.length ? botPairs.join(" ") : "0";
       hwBar.innerHTML =
-        `<span class="sim-hw-left"><code>X_LED_DRIVE</code> Top[${topTxt}] \u00B7 Bot[${botTxt}] \u00B7 IR[Ch2,Ch10:ON]${vibStr}</span>` +
+        `<span class="sim-hw-left"><code>X_LED_DRIVE</code> Top[${topTxt}] \u00B7 Bot[${botTxt}] \u00B7 IR[Ch2,Ch10:ON]${vibStr}${audStr}</span>` +
         `<span class="sim-hw-right"><code>${thermStr}</code></span>`;
     } else {
       const gpoSet = new Set();
@@ -303,7 +313,7 @@ function renderSimulatorFrame(cfgIn) {
         }
       }
       hwBar.innerHTML =
-        `<span class="sim-hw-left"><code>Z2 GPO</code> GPO6=${gpoSet.has(6) ? 1 : 0} GPO7=${gpoSet.has(7) ? 1 : 0} GPO8=${gpoSet.has(8) ? 1 : 0} \u00B7 IR:ON${vibStr}</span>` +
+        `<span class="sim-hw-left"><code>Z2 GPO</code> GPO6=${gpoSet.has(6) ? 1 : 0} GPO7=${gpoSet.has(7) ? 1 : 0} GPO8=${gpoSet.has(8) ? 1 : 0} \u00B7 IR:ON${vibStr}${audStr}</span>` +
         `<span class="sim-hw-right"><code>${thermStr}</code></span>`;
     }
   }
@@ -474,8 +484,13 @@ function refreshAll() {
   document.getElementById("previewMainScript").textContent = s4.filename;
   document.getElementById("nameAsciiWarn").classList.toggle("show", cfg.hasNonAsciiWarning);
 
-  // Header badge
-  document.getElementById("hwBadge").textContent = "MWP " + cfg.hw;
+  // Header badge (also surfaces alternate GRB-Shift RGB pinout when active)
+  const hwBadgeEl = document.getElementById("hwBadge");
+  if (hwBadgeEl) {
+    const isAltPinout = cfg.hw === "Z3" && cfg.z3RgbMap === "GRB_SHIFT";
+    hwBadgeEl.textContent = isAltPinout ? "MWP Z3 · GRB-Shift" : ("MWP " + cfg.hw);
+    hwBadgeEl.classList.toggle("is-alt", isAltPinout);
+  }
   const orgObj = ORGANISM_PRESETS.find(o => o.id === state.organism);
 
   // Visual previews, 2D simulator & geometry status
@@ -492,8 +507,11 @@ function refreshAll() {
     cfg.numWells === 1 ? "1 (A1)" : `${cfg.numWells} (${first}-${last})`;
   document.getElementById("statRuntime").textContent = formatDuration(s4.totalRuntimeSec);
   document.getElementById("statRows").textContent = `${s4.totalRows} rows`;
+  const csvTags = ["Summary"];
+  if (cfg.useXy) csvTags.push("XY");
+  if (cfg.useZoneChanges) csvTags.push("ZChange");
   document.getElementById("statFiles").textContent =
-    s4.csvCount === 2 ? "2 CSVs (Summary + XY)" : "1 Summary CSV";
+    s4.csvCount === 1 ? "1 Summary CSV" : `${s4.csvCount} CSVs (${csvTags.join(" + ")})`;
   renderRunSummary(cfg, s4, orgObj);
 
   // Active step tab content

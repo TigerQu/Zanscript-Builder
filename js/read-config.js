@@ -45,16 +45,27 @@ function readConfig() {
   const useTopLight = ledMount === "OVERHEAD" || ledMount === "BOTH";
   const useUnderLight = ledMount === "UNDERNEATH" || ledMount === "BOTH";
 
+  const zoneModeEl = document.getElementById("zoneMode");
+  const zoneModeRaw = zoneModeEl ? zoneModeEl.value : "concentric";
+  const zoneMode = ["concentric", "half_tb", "half_lr"].includes(zoneModeRaw) ? zoneModeRaw : "concentric";
+  const zoneBmp = getZoneAssetName(plate, zoneMode);
+
   const useDist = document.getElementById("chk_dist").checked;
   const useMsd = document.getElementById("chk_msd").checked;
   const useZones = document.getElementById("chk_zones").checked;
+  const useZoneChangesEl = document.getElementById("chk_zchange");
+  const useZoneChanges = Boolean(useZoneChangesEl && useZoneChangesEl.checked);
   const useXy = document.getElementById("chk_xy").checked;
   const videoMode = document.getElementById("videoMode").value;
   const useTracks = document.getElementById("chk_tracks").checked;
   const useHeatmap = document.getElementById("chk_heatmap").checked;
+  const usePictureEl = document.getElementById("chk_picture");
+  const usePicture = Boolean(usePictureEl && usePictureEl.checked);
 
   return {
     plate,
+    zoneMode,
+    zoneBmp,
     wells: getWellLabels(plate.rows, plate.cols),
     numWells: plate.rows * plate.cols,
     hw,
@@ -80,10 +91,12 @@ function readConfig() {
     useDist,
     useMsd,
     useZones,
+    useZoneChanges,
     useXy,
     videoMode,
     useTracks,
     useHeatmap,
+    usePicture,
     geo,
     stimId: state.stimId,
     sp: state.stimParams,

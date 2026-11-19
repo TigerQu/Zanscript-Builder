@@ -19,6 +19,7 @@ const VIDEO_LABELS = {
   "1fps": "1 fps timelapse",
   "0.2fps": "0.2 fps timelapse",
   "full": "30 fps video",
+  "dual": "Dual 30 + 1 fps",
   "off": "No video"
 };
 
@@ -83,11 +84,13 @@ function renderRunSummary(cfg, s4, orgObj) {
   if (cfg.useDist) metrics.push("Distance");
   if (cfg.useMsd) metrics.push("Activity");
   if (cfg.useZones) metrics.push("Zones");
+  if (cfg.useZoneChanges) metrics.push("Zone Events");
   if (cfg.useXy) metrics.push("Raw XY");
   setText("sumData", metrics.join(" · "));
   const extras = [];
   if (cfg.useTracks) extras.push("tracks");
   if (cfg.useHeatmap) extras.push("heatmap");
+  if (cfg.usePicture) extras.push("photo");
   setText("sumDataSub", (VIDEO_LABELS[cfg.videoMode] || cfg.videoMode) + (extras.length ? " · " + extras.join(" + ") : ""));
 }
 

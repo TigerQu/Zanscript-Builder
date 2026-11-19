@@ -650,6 +650,194 @@ try {
         ok ? "" : JSON.stringify(slotCheck));
       await page.close();
     }
+
+    // 6i. Multi-Track Timeline VIB & AUDIO tracks (single onset trigger even across splits, simulator, preflight, round-trip, GRB badge)
+    {
+      const { page } = await openFreshPage("#stimulus");
+      const mmCheck = await page.evaluate(() => {
+        const mapSel = document.getElementById("z3RgbMap");
+        mapSel.value = "GRB_SHIFT";
+        mapSel.dispatchEvent(new Event("change"));
+
+        state.stimId = "multi_phase";
+        state.stimParams.mpTimelineSec = 60;
+        state.timelineClips = [
+          { id: 1, track: "WHITE", startSec: 0,  endSec: 60, val: 40 },
+          { id: 2, track: "BLUE",  startSec: 25, endSec: 35, val: 100 },
+          { id: 3, track: "VIB",   startSec: 20, endSec: 40, val: 1 },
+          { id: 4, track: "AUDIO", startSec: 20, endSec: 40, val: "alarm.wav" }
+        ];
+        renderStimGrid();
+        renderStimParams();
+        refreshAll();
+
+        const code = refreshAll._latestBundle[4].code;
+        const s2Block = code.split("ACTION RUN_S2")[1].split("COMPLETE")[0];
+        const s3Block = code.split("ACTION RUN_S3")[1].split("COMPLETE")[0];
+
+        // Scrub into S2 (acclim 120 + autoref 60 + 22s = 202s)
+        setSimulatorTime(202);
+        const vibTxt = document.getElementById("simVibBadge").textContent;
+        const audTxt = document.getElementById("simAudioBadge").textContent;
+        const hwTxt = document.getElementById("simHwReadout").textContent;
+        const badgeTxt = document.getElementById("hwBadge").textContent;
+        const checks = computePreflightChecks();
+
+        // Round-trip save & reopen preserves VIB int and AUDIO string clips
+        const saved = buildExperimentPayload();
+        applyExperimentData(saved);
+        const restoredClips = state.timelineClips.map(({ track, startSec, endSec, val }) => ({ track, startSec, endSec, val }));
+
+        return {
+          hwBadgeAlt: badgeTxt === "MWP Z3 · GRB-Shift" && document.getElementById("hwBadge").classList.contains("is-alt"),
+          s2TriggersBoth: s2Block.includes('ZCOMMAND("U1 D1000 M1 M-1 M1 M-1 M1 M-1 M1 M-1 M1 M-1")') &&
+            s2Block.includes('LOAD(AUDIO_FILE,"alarm.wav")'),
+          s3NoDuplicateTrigger: !s3Block.includes("ZCOMMAND(") && !s3Block.includes("LOAD(AUDIO_FILE"),
+          simBadgesActive: vibTxt === "TAP U1" && audTxt === "AUD: alarm.wav",
+          simReadoutHasBoth: hwTxt.includes('ZCOMMAND("U1 ...') && hwTxt.includes('LOAD(AUDIO_FILE,"alarm.wav")'),
+          preflightCustomWav: checks.some((c) => c.title.includes("alarm.wav")),
+          clipsRoundTrip: JSON.stringify(restoredClips) === JSON.stringify([
+            { track: "WHITE", startSec: 0,  endSec: 60, val: 40 },
+            { track: "BLUE",  startSec: 25, endSec: 35, val: 100 },
+            { track: "VIB",   startSec: 20, endSec: 40, val: 1 },
+            { track: "AUDIO", startSec: 20, endSec: 40, val: "alarm.wav" }
+          ])
+        };
+      });
+      const ok = Object.values(mmCheck).every(Boolean);
+      report(ok, "Multi-Track VIB & AUDIO tracks fire once at clip onset across splits, simulate live, round-trip & show GRB-Shift badge",
+        ok ? "" : JSON.stringify(mmCheck));
+      await page.close();
+    }
+
+    // 6j. Acoustic Startle & Prepulse Inhibition (PPI) protocols
+    {
+      const { page } = await openFreshPage("#stimulus");
+      const protoCheck = await page.evaluate(() => {
+        // 1) Acoustic Startle with custom .wav
+        state.stimId = "acoustic_startle";
+        state.stimParams.audioFile = "custom";
+        state.stimParams.audioCustomFile = "chirp.wav";
+        state.stimParams.numPulses = 3;
+        state.stimParams.preBaselineSec = 10;
+        state.stimParams.itiSec = 10;
+        state.stimParams.acclimSec = 20;
+        renderStimGrid();
+        renderStimParams();
+        refreshAll();
+        const audCode = refreshAll._latestBundle[4].code;
+        const audSample = sampleAssayStateAtTime(refreshAll._latestCfg, 20 + 60 + 10 + 0.5);
+        const audSaved = buildExperimentPayload();
+        applyExperimentData(audSaved);
+        const audRoundTrip = JSON.stringify(buildExperimentPayload().experiment) === JSON.stringify(audSaved.experiment);
+
+        // 2) PPI alternating Pulse-Alone + PPI
+        state.stimId = "ppi";
+        state.stimParams.ppiPrepulse = "U3";
+        state.stimParams.ppiPulse = "U0";
+        state.stimParams.ppiIsiMs = 250;
+        state.stimParams.ppiPairs = 4;
+        state.stimParams.ppiPattern = "alternating";
+        state.stimParams.preBaselineSec = 10;
+        state.stimParams.itiSec = 10;
+        state.stimParams.acclimSec = 20;
+        renderStimGrid();
+        renderStimParams();
+        refreshAll();
+        const ppiS4 = refreshAll._latestBundle[4];
+        const ppiCode = ppiS4.code;
+        const ppiSample1 = sampleAssayStateAtTime(refreshAll._latestCfg, 20 + 60 + 10 + 0.2); // trial 1: pulse alone
+        const ppiSample2 = sampleAssayStateAtTime(refreshAll._latestCfg, 20 + 60 + 10 + 11 + 0.2); // trial 2: PPI
+        const ppiSaved = buildExperimentPayload();
+        applyExperimentData(ppiSaved);
+        const ppiRoundTrip = JSON.stringify(buildExperimentPayload().experiment) === JSON.stringify(ppiSaved.experiment);
+
+        return {
+          audCmd: audCode.includes('LOAD(AUDIO_FILE,"chirp.wav")') && audCode.includes("TEXT:AUDIO_PULSE"),
+          audSim: audSample.audio === "chirp.wav",
+          audRoundTrip,
+          ppiCmds: ppiCode.includes('ZCOMMAND("U3 D1190 M1 M-1 M1 M-1 P250 U0 D1190 M1 M-1 M1 M-1")') &&
+            ppiCode.includes('ZCOMMAND("U0 D1190 M1 M-1 M1 M-1")') &&
+            ppiCode.includes("TEXT:PULSE_ALONE") && ppiCode.includes("TEXT:PPI_TRIAL"),
+          ppiRows: ppiS4.totalRows === 10 + 8 * 11,
+          ppiSim: ppiSample1.vibration === "U0" && ppiSample2.vibration === "U3+U0",
+          ppiRoundTrip
+        };
+      });
+      const ok = Object.values(protoCheck).every(Boolean);
+      report(ok, "Acoustic Startle and Prepulse Inhibition (PPI) generate valid Zanscript, simulate accurately, and round-trip",
+        ok ? "" : JSON.stringify(protoCheck));
+      await page.close();
+    }
+
+    // 6k. Split-Half Zones (round & square), ZONECHANGES 3-stream separation, Dual-Stream Video, and Still Photos
+    {
+      const { page } = await openFreshPage("#plate");
+      const advIoCheck = await page.evaluate(() => {
+        // Round plate + half_tb (Light-Dark Preference)
+        state.plateId = "24well";
+        document.getElementById("zoneMode").value = "half_tb";
+        document.getElementById("chk_zchange").checked = true;
+        document.getElementById("chk_xy").checked = true;
+        document.getElementById("videoMode").value = "dual";
+        document.getElementById("chk_picture").checked = true;
+        refreshAll();
+
+        const roundS2 = refreshAll._latestBundle[2].code;
+        const roundS4 = refreshAll._latestBundle[4];
+        const roundS4Code = roundS4.code;
+
+        // Square plate + half_lr
+        state.plateId = "24square";
+        document.getElementById("zoneMode").value = "half_lr";
+        refreshAll();
+        const sqS2 = refreshAll._latestBundle[2].code;
+        const sqS4Code = refreshAll._latestBundle[4].code;
+
+        // Save/reopen round trip with all new options active
+        const saved = buildExperimentPayload();
+        applyExperimentData(saved);
+        const roundTripOk = JSON.stringify(buildExperimentPayload().experiment) === JSON.stringify(saved.experiment);
+
+        // Reset Assay resets all new controls cleanly
+        document.getElementById("resetBtn").click();
+        const resetClean =
+          document.getElementById("zoneMode").value === "concentric" &&
+          document.getElementById("chk_zchange").checked === false &&
+          document.getElementById("chk_picture").checked === false &&
+          document.getElementById("videoMode").value === "1fps";
+
+        return {
+          roundHalfZone: roundS2.includes("DEFINE X_SECTOR_ANGLE 30015") &&
+            roundS2.includes("ShapeAngle(180.0)") &&
+            roundS2.includes('SaveDrawing("ldz24")') &&
+            roundS4Code.includes('LOAD(ZONES,"ldz24.bmp")'),
+          squareHalfZone: sqS2.includes("ShapeType(RECTANGLE,HALF_LEN,LENGTH)") &&
+            sqS2.includes("ACTION DRAW_HALF_GRID") &&
+            sqS2.includes('SaveDrawing("lrz24sq")') &&
+            sqS4Code.includes('LOAD(ZONES,"lrz24sq.bmp")'),
+          threeCsvStreams: roundS4.csvCount === 3 &&
+            roundS4Code.includes('LOGFILE(0,"mwp_ld_2x300s_24w_ZCHANGE")') &&
+            roundS4Code.includes('LOGFILE(1,"mwp_ld_2x300s_24w_XY")') &&
+            roundS4Code.includes('LOGFILE(2,"mwp_ld_2x300s_24w")') &&
+            roundS4Code.includes('LOAD(ZONECHANGES,"ON")') &&
+            roundS4Code.includes('LOAD(ZONECHANGES,"OFF")') &&
+            roundS4Code.includes("SET(LOG_STREAM,2)"),
+          dualVideo: roundS4Code.includes("SET(VIDEO_STREAM,0)") &&
+            roundS4Code.includes("SET(VIDEO_STREAM,1)") &&
+            roundS4Code.includes("_30fps") &&
+            roundS4Code.includes("_1fps"),
+          stillPhotos: roundS4Code.includes('PICTURE("mwp_ld_2x300s_24w_start")') &&
+            roundS4Code.includes('PICTURE("mwp_ld_2x300s_24w_end")'),
+          roundTripOk,
+          resetClean
+        };
+      });
+      const ok = Object.values(advIoCheck).every(Boolean);
+      report(ok, "Split-half zones (round & square), ZONECHANGES 3-stream CSVs, Dual Video, & Still Photos work and reset cleanly",
+        ok ? "" : JSON.stringify(advIoCheck));
+      await page.close();
+    }
   }
 } finally {
   await browser.close();

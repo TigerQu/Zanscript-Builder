@@ -149,6 +149,107 @@ function renderStimParams() {
             <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
           </div>
         </div>`;
+  } else if (id === "acoustic_startle") {
+    const audioSel = sp.audioFile || "tone";
+    const isCustomAudio = audioSel === "custom";
+    box.innerHTML = `
+        <div class="form-grid-3">
+          <div class="field">
+            <label>Audio Cue (Built-in Sound Card)</label>
+            <select data-sp="audioFile" id="acousticAudioSel">
+              <option value="tone" ${audioSel === "tone" ? "selected" : ""}>Built-in Tone ("tone")</option>
+              <option value="mono" ${audioSel === "mono" ? "selected" : ""}>Built-in Mono ("mono")</option>
+              <option value="custom" ${isCustomAudio ? "selected" : ""}>Custom .wav in Assets</option>
+            </select>
+          </div>
+          <div class="field" id="acousticCustomWrap" style="${isCustomAudio ? "" : "display:none;"}">
+            <label>Custom Audio Filename (.wav)</label>
+            <input type="text" data-sp="audioCustomFile" value="${sanitizeAudioAsset(sp.audioCustomFile || "stereo.wav")}" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Ambient Chamber Light</label>
+            <select data-sp="audioAmbient">
+              <option value="DARK" ${sp.audioAmbient === "DARK" ? "selected" : ""}>Dark (IR Only)</option>
+              <option value="LIGHT" ${sp.audioAmbient === "LIGHT" ? "selected" : ""}>Stimulus Light ON</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Number of Audio Cues</label>
+            <input type="number" min="1" max="100" step="1" data-sp="numPulses" value="${sp.numPulses}">
+          </div>
+          <div class="field">
+            <label>Inter-Trial Interval (sec)</label>
+            <input type="number" min="1" max="1800" step="5" data-sp="itiSec" value="${sp.itiSec}">
+          </div>
+          <div class="field">
+            <label>Pre-Cue Baseline (sec)</label>
+            <input type="number" min="0" max="3600" step="10" data-sp="preBaselineSec" value="${sp.preBaselineSec}">
+          </div>
+          <div class="field">
+            <label>Acclimation (sec)</label>
+            <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
+          </div>
+          <div class="field">
+            <label>Time Bin (sec)</label>
+            <input type="number" min="1" max="300" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
+          </div>
+        </div>`;
+  } else if (id === "ppi") {
+    box.innerHTML = `
+        <div class="form-grid-3">
+          <div class="field">
+            <label>Prepulse Intensity (Weak)</label>
+            <select data-sp="ppiPrepulse">
+              <option value="U3" ${sp.ppiPrepulse === "U3" ? "selected" : ""}>Gentle (Eighth Step - U3)</option>
+              <option value="U2" ${sp.ppiPrepulse === "U2" ? "selected" : ""}>Mild (Quarter Step - U2)</option>
+              <option value="U1" ${sp.ppiPrepulse === "U1" ? "selected" : ""}>Medium (Half Step - U1)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Startle Pulse Intensity (Strong)</label>
+            <select data-sp="ppiPulse">
+              <option value="U0" ${sp.ppiPulse === "U0" ? "selected" : ""}>Strong (Full Step - U0)</option>
+              <option value="U1" ${sp.ppiPulse === "U1" ? "selected" : ""}>Medium (Half Step - U1)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Prepulse-to-Pulse ISI (ms)</label>
+            <input type="number" min="50" max="2000" step="50" data-sp="ppiIsiMs" value="${sp.ppiIsiMs}">
+          </div>
+          <div class="field">
+            <label>Trial Schedule</label>
+            <select data-sp="ppiPattern">
+              <option value="alternating" ${sp.ppiPattern === "alternating" ? "selected" : ""}>Alternating (Pulse-Alone &amp; PPI)</option>
+              <option value="ppi_only" ${sp.ppiPattern === "ppi_only" ? "selected" : ""}>PPI Trials Only</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Number of Pairs / Trials</label>
+            <input type="number" min="1" max="50" step="1" data-sp="ppiPairs" value="${sp.ppiPairs}">
+          </div>
+          <div class="field">
+            <label>Ambient Chamber Light</label>
+            <select data-sp="ppiAmbient">
+              <option value="DARK" ${sp.ppiAmbient === "DARK" ? "selected" : ""}>Dark (IR Only)</option>
+              <option value="LIGHT" ${sp.ppiAmbient === "LIGHT" ? "selected" : ""}>Stimulus Light ON</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Inter-Trial Interval (sec)</label>
+            <input type="number" min="1" max="1800" step="5" data-sp="itiSec" value="${sp.itiSec}">
+          </div>
+          <div class="field">
+            <label>Pre-Trial Baseline (sec)</label>
+            <input type="number" min="0" max="3600" step="10" data-sp="preBaselineSec" value="${sp.preBaselineSec}">
+          </div>
+          <div class="field">
+            <label>Acclimation (sec)</label>
+            <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
+          </div>
+        </div>
+        <div class="proto-note">
+          Uses official MWP stepper PPI command: <code>ZCOMMAND("${sp.ppiPrepulse || "U3"} D1190 M1 M-1 M1 M-1 P${Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300)} ${sp.ppiPulse || "U0"} D1190 M1 M-1 M1 M-1")</code>. Alternating mode logs <code>PULSE_ALONE</code> and <code>PPI_TRIAL</code> rows so % PPI can be computed directly.
+        </div>`;
   } else if (id === "circadian") {
     box.innerHTML = `
         <div class="form-grid">
@@ -187,8 +288,10 @@ function renderStimParams() {
     ).join("");
 
     const tracksHtml = NLE_TRACKS.map(tr => {
-      const mountCls = tr.group === "BOT" ? "nle-mount-bot" : (tr.group === "ENV" ? "nle-mount-env" : "nle-mount-top");
-      const isGroupStart = tr.id === "U_WHITE" || tr.id === "TEMP";
+      const mountCls = tr.group === "BOT"
+        ? "nle-mount-bot"
+        : (tr.group === "ENV" ? "nle-mount-env" : (tr.group === "STIM" ? "nle-mount-stim" : "nle-mount-top"));
+      const isGroupStart = tr.id === "U_WHITE" || tr.id === "TEMP" || tr.id === "VIB";
       const isHidden = tr.group === "BOT" && !state.showUnderTracks;
       const rowCls = "nle-track-row" + (isGroupStart ? " nle-group-start" : "") + (isHidden ? " nle-row-hidden" : "");
       return `
@@ -235,6 +338,7 @@ function renderStimParams() {
               <option value="" selected disabled>Load Preset...</option>
               <option value="bg_opto">Preset: White BG + Opto</option>
               <option value="bot_bg_top_opto">Preset: Bot White + Top Opto</option>
+              <option value="multi_modal">Preset: Multi-Modal (Light + Vib + Audio)</option>
               <option value="rgb_overlap">Preset: RGB Overlap</option>
               <option value="sequential">Preset: Seq Sweep</option>
             </select>
@@ -388,12 +492,15 @@ function renderStimParams() {
         return;
       }
       const baseT = parseFloat(document.getElementById("thermostatTemp").value) || 22;
+      const defaultVal = trackId === "TEMP"
+        ? baseT
+        : (trackId === "VIB" ? 2 : (trackId === "AUDIO" ? "tone" : 100));
       const newClip = {
         id: ++_nextClipId,
         track: trackId,
         startSec: slot[0],
         endSec: slot[1],
-        val: trackId === "TEMP" ? baseT : 100
+        val: defaultVal
       };
       state.timelineClips.push(newClip);
       state.selectedClipId = newClip.id;
@@ -455,14 +562,57 @@ function renderStimParams() {
       }
       const tr = NLE_TRACKS.find(t => t.id === sel.track) || NLE_TRACKS[0];
       const isTemp = tr.kind === "temp";
-      const valLabel = isTemp ? "Temp (°C)" : "Brightness (%)";
-      const valDisabled = (!isTemp && !hwIsZ3) ? "disabled" : "";
-      const valMin = isTemp ? "10" : "5";
-      const valMax = isTemp ? "40" : "100";
-      const valStep = isTemp ? "0.5" : "1";
+      const isVib = tr.kind === "vib";
+      const isAudio = tr.kind === "audio";
       const durSec = Math.max(0, sel.endSec - sel.startSec);
 
-      const mountCls = tr.group === "BOT" ? "nle-mount-bot" : (tr.group === "ENV" ? "nle-mount-env" : "nle-mount-top");
+      const mountCls = tr.group === "BOT"
+        ? "nle-mount-bot"
+        : (tr.group === "ENV" ? "nle-mount-env" : (tr.group === "STIM" ? "nle-mount-stim" : "nle-mount-top"));
+
+      let valFieldHtml = "";
+      if (isVib) {
+        const curLvl = clampVibLevel(sel.val);
+        const opts = VIB_STEP_MODES.map(m =>
+          `<option value="${m.level}" ${m.level === curLvl ? "selected" : ""}>${m.label}</option>`
+        ).join("");
+        valFieldHtml = `
+            <div class="nle-insp-field nle-insp-field-wide">
+              <label for="nleInspVibSel">Motor Intensity (triggers ZCOMMAND at clip start)</label>
+              <select id="nleInspVibSel">${opts}</select>
+            </div>`;
+      } else if (isAudio) {
+        const curFile = sanitizeAudioAsset(sel.val);
+        const isBuiltin = AUDIO_BUILTINS.includes(curFile);
+        const selMode = isBuiltin ? curFile : "custom";
+        valFieldHtml = `
+            <div class="nle-insp-field nle-insp-field-wide">
+              <label for="nleInspAudioSel">Audio Asset (triggers LOAD(AUDIO_FILE) at clip start)</label>
+              <div class="nle-insp-audio-row">
+                <select id="nleInspAudioSel">
+                  <option value="tone" ${selMode === "tone" ? "selected" : ""}>Built-in Tone ("tone")</option>
+                  <option value="mono" ${selMode === "mono" ? "selected" : ""}>Built-in Mono ("mono")</option>
+                  <option value="custom" ${selMode === "custom" ? "selected" : ""}>Custom .wav</option>
+                </select>
+                <input type="text" id="nleInspAudioCustom" value="${isBuiltin ? "stereo.wav" : curFile}" style="${selMode === "custom" ? "" : "display:none;"}" autocomplete="off">
+              </div>
+            </div>`;
+      } else {
+        const valLabel = isTemp ? "Temp (°C)" : "Brightness (%)";
+        const valDisabled = (!isTemp && !hwIsZ3) ? "disabled" : "";
+        const valMin = isTemp ? "10" : "5";
+        const valMax = isTemp ? "40" : "100";
+        const valStep = isTemp ? "0.5" : "1";
+        valFieldHtml = `
+            <div class="nle-insp-field nle-insp-field-wide">
+              <label for="nleInspVal">${valLabel}</label>
+              <div class="nle-insp-slider">
+                <input type="range" id="nleInspRange" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled} aria-label="${valLabel}">
+                <input type="number" id="nleInspVal" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled}>
+              </div>
+            </div>`;
+      }
+
       insp.innerHTML = `
           <div class="nle-insp-head">
             <div class="nle-insp-title">
@@ -485,19 +635,16 @@ function renderStimParams() {
               <label for="nleInspEnd">End (sec)</label>
               <input type="number" id="nleInspEnd" min="${bin}" max="${totalSec}" step="${bin}" value="${sel.endSec}">
             </div>
-            <div class="nle-insp-field nle-insp-field-wide">
-              <label for="nleInspVal">${valLabel}</label>
-              <div class="nle-insp-slider">
-                <input type="range" id="nleInspRange" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled} aria-label="${valLabel}">
-                <input type="number" id="nleInspVal" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled}>
-              </div>
-            </div>
+            ${valFieldHtml}
           </div>`;
 
       const sInp = document.getElementById("nleInspStart");
       const eInp = document.getElementById("nleInspEnd");
       const rInp = document.getElementById("nleInspRange");
       const vInp = document.getElementById("nleInspVal");
+      const vibSel = document.getElementById("nleInspVibSel");
+      const audSel = document.getElementById("nleInspAudioSel");
+      const audCustom = document.getElementById("nleInspAudioCustom");
       const dBtn = document.getElementById("nleDelClipBtn");
 
       const applyStartEnd = (normalize) => {
@@ -515,23 +662,60 @@ function renderStimParams() {
       sInp.addEventListener("change", () => applyStartEnd(true));
       eInp.addEventListener("change", () => applyStartEnd(true));
 
-      const applyVal = (rawVal, fromRange) => {
-        const raw = parseFloat(rawVal);
-        if (!Number.isFinite(raw)) return;
-        sel.val = isTemp
-          ? Math.min(40, Math.max(10, Number(raw.toFixed(1))))
-          : Math.min(100, Math.max(5, Math.round(raw)));
-        if (fromRange && vInp) vInp.value = sel.val;
-        if (!fromRange && rInp) rInp.value = sel.val;
-        syncNleDom(false, false);
-        scheduleRefresh();
-      };
-      if (rInp) {
-        rInp.addEventListener("input", () => applyVal(rInp.value, true));
-        rInp.addEventListener("change", () => flushRefresh());
+      if (vibSel) {
+        vibSel.addEventListener("change", () => {
+          sel.val = clampVibLevel(vibSel.value);
+          syncNleDom(false, false);
+          flushRefresh();
+        });
       }
-      vInp.addEventListener("input", () => applyVal(vInp.value, false));
-      vInp.addEventListener("change", () => { vInp.value = sel.val; flushRefresh(); });
+      if (audSel) {
+        audSel.addEventListener("change", () => {
+          if (audSel.value === "custom") {
+            if (audCustom) {
+              audCustom.style.display = "";
+              sel.val = sanitizeAudioAsset(audCustom.value || "stereo.wav");
+            }
+          } else {
+            if (audCustom) audCustom.style.display = "none";
+            sel.val = audSel.value;
+          }
+          syncNleDom(false, false);
+          flushRefresh();
+        });
+      }
+      if (audCustom) {
+        audCustom.addEventListener("input", () => {
+          sel.val = sanitizeAudioAsset(audCustom.value);
+          syncNleDom(false, false);
+          scheduleRefresh();
+        });
+        audCustom.addEventListener("change", () => {
+          sel.val = sanitizeAudioAsset(audCustom.value);
+          audCustom.value = sel.val;
+          syncNleDom(false, false);
+          flushRefresh();
+        });
+      }
+      if (vInp) {
+        const applyVal = (rawVal, fromRange) => {
+          const raw = parseFloat(rawVal);
+          if (!Number.isFinite(raw)) return;
+          sel.val = isTemp
+            ? Math.min(40, Math.max(10, Number(raw.toFixed(1))))
+            : Math.min(100, Math.max(5, Math.round(raw)));
+          if (fromRange && vInp) vInp.value = sel.val;
+          if (!fromRange && rInp) rInp.value = sel.val;
+          syncNleDom(false, false);
+          scheduleRefresh();
+        };
+        if (rInp) {
+          rInp.addEventListener("input", () => applyVal(rInp.value, true));
+          rInp.addEventListener("change", () => flushRefresh());
+        }
+        vInp.addEventListener("input", () => applyVal(vInp.value, false));
+        vInp.addEventListener("change", () => { vInp.value = sel.val; flushRefresh(); });
+      }
 
       dBtn.addEventListener("click", () => deleteSelectedClip());
       updateLiveHud();
@@ -543,7 +727,11 @@ function renderStimParams() {
       const dur = Math.max(0, effEnd - effStart);
       const ratio = dur / Math.max(1, totalSec);
       if (ratio < 0.055) return "";
-      const main = tr.kind === "temp" ? `${c.val}°C` : (hwIsZ3 ? `${c.val}%` : "ON");
+      let main;
+      if (tr.kind === "temp") main = `${c.val}°C`;
+      else if (tr.kind === "vib") main = `${vibLevelToCode(c.val)} Tap`;
+      else if (tr.kind === "audio") main = sanitizeAudioAsset(c.val);
+      else main = hwIsZ3 ? `${c.val}%` : "ON";
       return ratio >= 0.18 ? `${main} (${effStart}-${effEnd}s)` : main;
     }
 
@@ -733,6 +921,17 @@ function renderStimParams() {
           { id: ++_nextClipId, track: "TEMP",    startSec: 0,   endSec: 90,  val: baseT },
           { id: ++_nextClipId, track: "TEMP",    startSec: 90,  endSec: 180, val: Math.min(40, baseT + 4) }
         ];
+      } else if (pType === "multi_modal") {
+        state.showUnderTracks = false;
+        state.timelineClips = [
+          { id: ++_nextClipId, track: "WHITE", startSec: 0,   endSec: 180, val: 35 },
+          { id: ++_nextClipId, track: "BLUE",  startSec: 30,  endSec: 50,  val: 100 },
+          { id: ++_nextClipId, track: "VIB",   startSec: 60,  endSec: 65,  val: 2 },
+          { id: ++_nextClipId, track: "AUDIO", startSec: 100, endSec: 105, val: "tone" },
+          { id: ++_nextClipId, track: "RED",   startSec: 130, endSec: 150, val: 100 },
+          { id: ++_nextClipId, track: "VIB",   startSec: 130, endSec: 135, val: 0 },
+          { id: ++_nextClipId, track: "AUDIO", startSec: 130, endSec: 135, val: "mono" }
+        ];
       } else if (pType === "rgb_overlap") {
         state.showUnderTracks = false;
         state.timelineClips = [
@@ -824,12 +1023,15 @@ function renderStimParams() {
             if (ed <= s) return;
 
             if (!draftClip) {
+              const draftVal = trackId === "TEMP"
+                ? baseT
+                : (trackId === "VIB" ? 2 : (trackId === "AUDIO" ? "tone" : 100));
               draftClip = {
                 id: ++_nextClipId,
                 track: trackId,
                 startSec: s,
                 endSec: ed,
-                val: trackId === "TEMP" ? baseT : 100
+                val: draftVal
               };
               state.timelineClips.push(draftClip);
               state.selectedClipId = draftClip.id;
@@ -977,12 +1179,38 @@ function renderStimParams() {
           noteEl.innerHTML = `<strong>Generated Plateaus (${st.length}):</strong> ${st.map(t => t + " °C").join(" &rarr; ")}.<br>Standard MWP heaters regulate from room ambient up to +10 °C above ambient (&plusmn;0.5 °C) and automatically return to Start Temp when the assay finishes. Ensure the cooling fan is spinning.`;
         }
       }
+      if (state.stimId === "acoustic_startle" && spKey === "audioFile") {
+        const cw = document.getElementById("acousticCustomWrap");
+        if (cw) cw.style.display = el.value === "custom" ? "" : "none";
+      }
+      if (state.stimId === "ppi") {
+        const noteEl = box.querySelector(".proto-note");
+        if (noteEl) {
+          const pre = state.stimParams.ppiPrepulse || "U3";
+          const pul = state.stimParams.ppiPulse || "U0";
+          const isi = Math.max(50, parseInt(state.stimParams.ppiIsiMs, 10) || 300);
+          noteEl.innerHTML = `Uses official MWP stepper PPI command: <code>ZCOMMAND("${pre} D1190 M1 M-1 M1 M-1 P${isi} ${pul} D1190 M1 M-1 M1 M-1")</code>. Alternating mode logs <code>PULSE_ALONE</code> and <code>PPI_TRIAL</code> rows so % PPI can be computed directly.`;
+        }
+      }
       refreshAll();
     });
     el.addEventListener("change", () => {
       state.stimParams[spKey] = el.value;
       if (state.stimId === "multi_phase" && box._syncNleDom && (spKey === "mpTimelineSec" || spKey === "timeBinSec")) {
         box._syncNleDom(true);
+      }
+      if (state.stimId === "acoustic_startle" && spKey === "audioFile") {
+        const cw = document.getElementById("acousticCustomWrap");
+        if (cw) cw.style.display = el.value === "custom" ? "" : "none";
+      }
+      if (state.stimId === "ppi") {
+        const noteEl = box.querySelector(".proto-note");
+        if (noteEl) {
+          const pre = state.stimParams.ppiPrepulse || "U3";
+          const pul = state.stimParams.ppiPulse || "U0";
+          const isi = Math.max(50, parseInt(state.stimParams.ppiIsiMs, 10) || 300);
+          noteEl.innerHTML = `Uses official MWP stepper PPI command: <code>ZCOMMAND("${pre} D1190 M1 M-1 M1 M-1 P${isi} ${pul} D1190 M1 M-1 M1 M-1")</code>. Alternating mode logs <code>PULSE_ALONE</code> and <code>PPI_TRIAL</code> rows so % PPI can be computed directly.`;
+        }
       }
       refreshAll();
     });

@@ -91,7 +91,9 @@ function renderPlateSvg(cfg) {
   const trayH = 85.5;
   let items = `<rect x="0" y="0" width="${trayW}" height="${trayH}" rx="${isPetri ? 8 : 5}" fill="#ffffff" stroke="#afb8c1" stroke-width="1.2"/>`;
 
-  const showInner = cfg.useZones || document.getElementById("inlineGeoDetails").open;
+  const zMode = cfg.zoneMode || "concentric";
+  const zoneBmp = cfg.zoneBmp || p.zoneBmp;
+  const showInner = cfg.useZones || cfg.useZoneChanges || zMode !== "concentric" || document.getElementById("inlineGeoDetails").open;
 
   for (let r = 0; r < p.rows; r++) {
     for (let c = 0; c < p.cols; c++) {
@@ -99,15 +101,33 @@ function renderPlateSvg(cfg) {
       const cy = g.yOffset + r * g.rowStep;
       if (p.shape === "SQUARE") {
         const s = g.r;
-        items += `<rect x="${(cx - s / 2).toFixed(2)}" y="${(cy - s / 2).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" fill="#ddf4ff" stroke="#0969da" stroke-width="0.9"/>`;
+        const x0 = cx - s / 2;
+        const y0 = cy - s / 2;
+        items += `<rect x="${x0.toFixed(2)}" y="${y0.toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" fill="#ddf4ff" stroke="#0969da" stroke-width="0.9"/>`;
         if (showInner) {
-          const si = g.rDz;
-          items += `<rect x="${(cx - si / 2).toFixed(2)}" y="${(cy - si / 2).toFixed(2)}" width="${si.toFixed(2)}" height="${si.toFixed(2)}" fill="none" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          if (zMode === "half_tb") {
+            items += `<rect x="${x0.toFixed(2)}" y="${y0.toFixed(2)}" width="${s.toFixed(2)}" height="${(s / 2).toFixed(2)}" fill="rgba(5, 80, 174, 0.14)" stroke="none"/>`;
+            items += `<line x1="${x0.toFixed(2)}" y1="${cy.toFixed(2)}" x2="${(cx + s / 2).toFixed(2)}" y2="${cy.toFixed(2)}" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          } else if (zMode === "half_lr") {
+            items += `<rect x="${x0.toFixed(2)}" y="${y0.toFixed(2)}" width="${(s / 2).toFixed(2)}" height="${s.toFixed(2)}" fill="rgba(5, 80, 174, 0.14)" stroke="none"/>`;
+            items += `<line x1="${cx.toFixed(2)}" y1="${y0.toFixed(2)}" x2="${cx.toFixed(2)}" y2="${(cy + s / 2).toFixed(2)}" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          } else {
+            const si = g.rDz;
+            items += `<rect x="${(cx - si / 2).toFixed(2)}" y="${(cy - si / 2).toFixed(2)}" width="${si.toFixed(2)}" height="${si.toFixed(2)}" fill="none" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          }
         }
       } else {
         items += `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${g.r.toFixed(2)}" fill="#ddf4ff" stroke="#0969da" stroke-width="0.9"/>`;
         if (showInner) {
-          items += `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${g.rDz.toFixed(2)}" fill="none" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          if (zMode === "half_tb") {
+            items += `<path d="M ${(cx - g.r).toFixed(2)} ${cy.toFixed(2)} A ${g.r.toFixed(2)} ${g.r.toFixed(2)} 0 0 1 ${(cx + g.r).toFixed(2)} ${cy.toFixed(2)} Z" fill="rgba(5, 80, 174, 0.14)" stroke="none"/>`;
+            items += `<line x1="${(cx - g.r).toFixed(2)}" y1="${cy.toFixed(2)}" x2="${(cx + g.r).toFixed(2)}" y2="${cy.toFixed(2)}" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          } else if (zMode === "half_lr") {
+            items += `<path d="M ${cx.toFixed(2)} ${(cy - g.r).toFixed(2)} A ${g.r.toFixed(2)} ${g.r.toFixed(2)} 0 0 0 ${cx.toFixed(2)} ${(cy + g.r).toFixed(2)} Z" fill="rgba(5, 80, 174, 0.14)" stroke="none"/>`;
+            items += `<line x1="${cx.toFixed(2)}" y1="${(cy - g.r).toFixed(2)}" x2="${cx.toFixed(2)}" y2="${(cy + g.r).toFixed(2)}" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          } else {
+            items += `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${g.rDz.toFixed(2)}" fill="none" stroke="#0550ae" stroke-dasharray="1.6,1.4" stroke-width="0.75"/>`;
+          }
         }
       }
     }
@@ -119,7 +139,7 @@ function renderPlateSvg(cfg) {
   document.getElementById("platePreviewLabel").textContent =
     cfg.numWells === 1 ? "1 Arena (A1)" : `${p.rows} x ${p.cols} (${first}-${last})`;
   document.getElementById("plateAssetHint").textContent =
-    `Assets: ${p.arenaBmp}.bmp${cfg.useZones ? `, ${p.zoneBmp}.bmp` : ""}`;
+    `Assets: ${p.arenaBmp}.bmp${(cfg.useZones || cfg.useZoneChanges || zMode !== "concentric") ? `, ${zoneBmp}.bmp` : ""}`;
 }
 
 function renderConfigModalTable() {
@@ -232,9 +252,9 @@ function updateConfigStatusBadges() {
 }
 
 function syncCheckStyles() {
-  ["dist", "msd", "zones", "xy"].forEach(k => {
+  ["dist", "msd", "zones", "zchange", "xy"].forEach(k => {
     const chk = document.getElementById("chk_" + k);
     const lbl = document.getElementById("lbl_" + k);
-    lbl.classList.toggle("checked", chk.checked);
+    if (chk && lbl) lbl.classList.toggle("checked", chk.checked);
   });
 }

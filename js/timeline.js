@@ -29,10 +29,14 @@ function renderNleSummaryBar(cfgIn) {
           ? (sl.lights[0].mount === "BOT" ? "Bot " : "") + sl.lights[0].colObj.short
           : lightTokens.join("+"));
     const tSuffix = sl.effectiveTemp !== null ? ` ${sl.effectiveTemp}°C` : "";
+    const stimBits = [];
+    if (sl.vibTrigger) stimBits.push(sl.vibCode);
+    if (sl.audioTrigger) stimBits.push("Aud");
+    const stimSuffix = stimBits.length ? ` +${stimBits.join("+")}` : "";
     const dur = Math.max(0.001, sl.endSec - sl.startSec);
-    const tip = `S${sl.idx} (${sl.startSec}-${sl.endSec}s): ${lbl}${tSuffix}`;
+    const tip = `S${sl.idx} (${sl.startSec}-${sl.endSec}s): ${lbl}${tSuffix}${stimSuffix}`;
     const prev = segs[segs.length - 1];
-    if (cls === "tl-overlap" && prev && prev.cls === "tl-overlap") {
+    if (cls === "tl-overlap" && !sl.vibTrigger && !sl.audioTrigger && prev && prev.cls === "tl-overlap" && !prev._hasStim) {
       prev.w += dur;
       lightTokens.forEach(tok => {
         if (!prev._toks.includes(tok)) prev._toks.push(tok);
@@ -45,11 +49,12 @@ function renderNleSummaryBar(cfgIn) {
       segs.push({
         cls,
         w: dur,
-        txt: `S${sl.idx}: ${lbl}${tSuffix}`,
-        medTxt: nLights === 0 ? `S${sl.idx}: Dark` : `S${sl.idx}: ${lightTokens.join("+")}${tSuffix}`,
-        shortTxt: `S${sl.idx}`,
+        txt: `S${sl.idx}: ${lbl}${tSuffix}${stimSuffix}`,
+        medTxt: nLights === 0 ? `S${sl.idx}: Dark${stimSuffix}` : `S${sl.idx}: ${lightTokens.join("+")}${tSuffix}${stimSuffix}`,
+        shortTxt: stimBits.length ? `S${sl.idx}+` : `S${sl.idx}`,
         tip,
-        _toks: lightTokens.slice()
+        _toks: lightTokens.slice(),
+        _hasStim: stimBits.length > 0
       });
     }
   }
@@ -222,6 +227,77 @@ function renderTimeline(cfg, s4) {
       segs.push({ cls: "tl-acclim", w: itiDur, txt: `+${pulses - n}`, t0: cursor, t1: s4.totalRuntimeSec });
     }
     desc.textContent = `${sp.numPulses} taps (${sp.vibIntensity}, ${sp.itiSec}s ITI)`;
+  } else if (cfg.stimId === "acoustic_startle") {
+    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preDur = Math.round(preSec / bin) * bin;
+    const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+    const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+    const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
+    const trialDur = bin + itiDur;
+    const audioAsset = sp.audioFile === "custom"
+      ? sanitizeAudioAsset(sp.audioCustomFile || "stereo.wav")
+      : sanitizeAudioAsset(sp.audioFile || "tone");
+    const baseCls = sp.audioAmbient === "LIGHT" ? activeCls : "tl-dark";
+    preSetupSec = acclim + autorefBase;
+    let cursor = 0;
+    if (preSetupSec > 0) {
+      segs.push({ cls: "tl-acclim", w: acclim > 0 ? acclim : autorefBase, txt: acclim > 0 ? "Acclim" : "Autoref", t0: 0, t1: preSetupSec });
+      cursor = preSetupSec;
+    }
+    if (preDur > 0) {
+      segs.push({ cls: baseCls, w: preDur, txt: "Base", t0: cursor, t1: cursor + preDur });
+      cursor += preDur;
+    }
+    const n = Math.min(8, pulses);
+    const cueVisW = Math.max(4, itiDur * 0.18);
+    for (let i = 0; i < n; i++) {
+      segs.push({ cls: "tl-audio", w: cueVisW, txt: "", t0: cursor, t1: cursor + bin });
+      segs.push({ cls: baseCls, w: itiDur, txt: "", t0: cursor + bin, t1: cursor + trialDur });
+      cursor += trialDur;
+    }
+    if (pulses > n) {
+      segs.push({ cls: "tl-acclim", w: itiDur, txt: `+${pulses - n}`, t0: cursor, t1: s4.totalRuntimeSec });
+    }
+    desc.textContent = `${pulses} audio cues ("${audioAsset}", ${sp.itiSec}s ITI)`;
+  } else if (cfg.stimId === "ppi") {
+    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preDur = Math.round(preSec / bin) * bin;
+    const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
+    const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+    const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
+    const trialDur = bin + itiDur;
+    const isAlt = (sp.ppiPattern || "alternating") === "alternating";
+    const totalTrials = isAlt ? pairs * 2 : pairs;
+    const prepulse = vibLevelToCode(sp.ppiPrepulse || "U3");
+    const pulse = vibLevelToCode(sp.ppiPulse || "U0");
+    const isiMs = Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300));
+    const baseCls = sp.ppiAmbient === "LIGHT" ? activeCls : "tl-dark";
+    preSetupSec = acclim + autorefBase;
+    let cursor = 0;
+    if (preSetupSec > 0) {
+      segs.push({ cls: "tl-acclim", w: acclim > 0 ? acclim : autorefBase, txt: acclim > 0 ? "Acclim" : "Autoref", t0: 0, t1: preSetupSec });
+      cursor = preSetupSec;
+    }
+    if (preDur > 0) {
+      segs.push({ cls: baseCls, w: preDur, txt: "Base", t0: cursor, t1: cursor + preDur });
+      cursor += preDur;
+    }
+    const n = Math.min(8, totalTrials);
+    const cueVisW = Math.max(4, itiDur * 0.18);
+    for (let i = 0; i < n; i++) {
+      const isPpi = !isAlt || (i % 2 === 1);
+      segs.push({ cls: isPpi ? "tl-ppi" : "tl-vib", w: cueVisW, txt: "", t0: cursor, t1: cursor + bin });
+      segs.push({ cls: baseCls, w: itiDur, txt: "", t0: cursor + bin, t1: cursor + trialDur });
+      cursor += trialDur;
+    }
+    if (totalTrials > n) {
+      segs.push({ cls: "tl-acclim", w: itiDur, txt: `+${totalTrials - n}`, t0: cursor, t1: s4.totalRuntimeSec });
+    }
+    desc.textContent = `${totalTrials} trials (${isAlt ? "Alt Pulse/PPI" : "PPI only"} · ${prepulse}+${isiMs}ms+${pulse})`;
   } else if (cfg.stimId === "circadian") {
     const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
     const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
@@ -305,6 +381,8 @@ function renderTimeline(cfg, s4) {
     const extraTags = [];
     if (comp.hasAnyBottomClip) extraTags.push("top+bot");
     if (comp.hasAnyTempClip) extraTags.push("temp");
+    if (comp.hasAnyVibClip) extraTags.push("vib");
+    if (comp.hasAnyAudioClip) extraTags.push("audio");
     desc.textContent = `${sp.mpCycles}x timeline (${comp.totalSec}s · ${comp.slices.length} slice${comp.slices.length === 1 ? "" : "s"}${extraTags.length ? " · " + extraTags.join(" + ") : ""})`;
   } else if (cfg.stimId === "temp_ramp") {
     const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);

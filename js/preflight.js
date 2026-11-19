@@ -10,7 +10,7 @@
 
 const PREFLIGHT_ROOM_TEMP_C = 22;     // assumed room temperature for the heater-range check
 const PREFLIGHT_HEATER_RISE_C = 10;   // MWP heaters regulate up to ~+10 °C above ambient
-const VIDEO_FPS = { "1fps": 1, "0.2fps": 0.2, "full": 30, "off": 0 };
+const VIDEO_FPS = { "1fps": 1, "0.2fps": 0.2, "full": 30, "dual": 31, "off": 0 };
 
 function resolveTargetTempInfo(cfg, mpComp) {
   const sp = cfg.sp || state.stimParams;
@@ -151,6 +151,10 @@ function computePreflightChecks(cfgIn, bundleIn) {
     usesUv = sp.baseLight !== "DARK" && cfg.ledColor === "UV";
   } else if (cfg.stimId === "vibration_startle") {
     usesUv = sp.vibAmbient === "LIGHT" && cfg.ledColor === "UV";
+  } else if (cfg.stimId === "acoustic_startle") {
+    usesUv = sp.audioAmbient === "LIGHT" && cfg.ledColor === "UV";
+  } else if (cfg.stimId === "ppi") {
+    usesUv = sp.ppiAmbient === "LIGHT" && cfg.ledColor === "UV";
   } else if (cfg.stimId === "temp_ramp") {
     usesUv = sp.rampLight === "LIGHT" && cfg.ledColor === "UV";
   } else if (cfg.stimId === "circadian") {
@@ -160,10 +164,29 @@ function computePreflightChecks(cfgIn, bundleIn) {
     usesUv = cfg.ledColor === "UV";
   }
 
+  // Custom .wav audio asset reminder
+  const customAudioFiles = new Set();
+  if (cfg.stimId === "acoustic_startle" && sp.audioFile === "custom") {
+    const fn = sanitizeAudioAsset(sp.audioCustomFile || "stereo.wav");
+    if (!AUDIO_BUILTINS.includes(fn)) customAudioFiles.add(fn);
+  } else if (cfg.stimId === "multi_phase" && mpComp && mpComp.hasAnyAudioClip) {
+    for (const sl of mpComp.slices) {
+      if (sl.audioTrigger && sl.audioFile && !AUDIO_BUILTINS.includes(sl.audioFile)) {
+        customAudioFiles.add(sl.audioFile);
+      }
+    }
+  }
+  if (customAudioFiles.size > 0) {
+    const filesStr = [...customAudioFiles].map(f => `"${f}"`).join(", ");
+    add("info", `Custom audio file required (${filesStr})`,
+      "Upload custom .wav audio files into the unit's Assets directory before running Step 4.", "stimulus");
+  }
+
   // Multi-track & Legacy MWP Z2 checks
   if (cfg.stimId === "multi_phase") {
     const hasCompiledLight = mpComp.slices.some(sl => sl.topLights.length > 0 || sl.bottomLights.length > 0);
-    if (!mpComp.hasAnyTempClip && !hasCompiledLight) {
+    const hasCompiledStim = Boolean(mpComp.hasAnyVibClip || mpComp.hasAnyAudioClip);
+    if (!mpComp.hasAnyTempClip && !hasCompiledLight && !hasCompiledStim) {
       if (!cfg.timelineClips.length) {
         add("warn", "Multi-track timeline is empty", "The run will stay dark (IR tracking only) for the whole timeline.", "stimulus");
       } else {
@@ -171,7 +194,7 @@ function computePreflightChecks(cfgIn, bundleIn) {
           "All clips lie outside the timeline length, so the run will stay dark (IR tracking only) for the whole timeline.", "stimulus");
       }
     } else if (!hasCompiledLight) {
-      add("info", "No LED clips on the timeline", "Only temperature changes; the chamber stays dark (IR only).", "stimulus");
+      add("info", "No LED clips on the timeline", "Visible LEDs stay off (IR tracking only) while environment / stimulus tracks run.", "stimulus");
     }
 
     if (cfg.hw !== "Z3") {
@@ -208,8 +231,8 @@ function computePreflightChecks(cfgIn, bundleIn) {
   const fps = VIDEO_FPS[cfg.videoMode];
   if (fps) {
     const frames = s4.totalRuntimeSec * fps;
-    if (cfg.videoMode === "full" && s4.totalRuntimeSec > 1800) {
-      add("warn", `Full 30 fps video for ${formatDuration(s4.totalRuntimeSec)}`,
+    if ((cfg.videoMode === "full" || cfg.videoMode === "dual") && s4.totalRuntimeSec > 1800) {
+      add("warn", `${cfg.videoMode === "dual" ? "Dual-stream (30 + 1 fps)" : "Full 30 fps"} video for ${formatDuration(s4.totalRuntimeSec)}`,
         `Up to ${fmtNum(frames)} frames - very large files. The 1 fps timelapse is usually enough for tracking review.`, "data");
     } else if (runtimeH > 6 && fps >= 1) {
       add("info", `Long recording: up to ${fmtNum(frames)} video frames`,
@@ -234,7 +257,7 @@ function computePreflightChecks(cfgIn, bundleIn) {
   }
 
   // Always-on summary of what is ready
-  add("ok", `${s4.csvCount === 2 ? "4 scripts, 2 CSV files" : "4 scripts, 1 CSV file"} ready`,
+  add("ok", `4 scripts, ${s4.csvCount} CSV file${s4.csvCount === 1 ? "" : "s"} ready`,
     `${stim ? stim.name : cfg.stimId} · ${formatDuration(s4.totalRuntimeSec)} · ${cfg.plate.name} · MWP ${cfg.hw}`, "");
 
   const rank = { warn: 0, info: 1, ok: 2 };

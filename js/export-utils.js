@@ -23,7 +23,7 @@ function highlightZanscript(code) {
     let html = esc(codePart)
       .replace(/"([^"]*)"/g, '<span class="zs-str">"$1"</span>')
       .replace(/\b(ACTION|COMPLETE|DEFINE|IF|ELSEIF|ELSE|ENDIF|WHILE|ENDWHILE|INCLUDE)\b/g, '<span class="zs-kw">$1</span>')
-      .replace(/\b(INVOKE|SET|WAIT|LOAD|AUTOREFERENCE|LOGCREATE|LOGAPPEND|LOGRUN|LOGDATA|LOGFILE|VIDEO|VIDEOSKIP|VIDEOSTOP|ZCOMMAND|LIGHTS|Calibration|ResetDrawing|ShapeType|ShapeDraw|SaveDrawing|TargetMarker)\b/g, '<span class="zs-cmd">$1</span>')
+      .replace(/\b(INVOKE|SET|WAIT|LOAD|AUTOREFERENCE|LOGCREATE|LOGAPPEND|LOGRUN|LOGDATA|LOGFILE|VIDEO|VIDEOSKIP|VIDEOSTOP|PICTURE|ZCOMMAND|LIGHTS|Calibration|ResetDrawing|ClearDrawing|ShapeType|ShapeAngle|ShapeDraw|SaveDrawing|TargetMarker)\b/g, '<span class="zs-cmd">$1</span>')
       .replace(/(@\w+)/g, '<span class="zs-var">$1</span>');
 
     if (commentPart) {

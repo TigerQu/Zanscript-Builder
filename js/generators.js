@@ -47,6 +47,15 @@ function buildAssayDataSlug(cfg) {
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const vib = String(sp.vibIntensity || "U3").toLowerCase();
     detail = `vibration_${pulses}x_${vib}`;
+  } else if (cfg.stimId === "acoustic_startle") {
+    const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+    const rawAud = sp.audioFile === "custom" ? sanitizeAudioAsset(sp.audioCustomFile || "stereo.wav") : sanitizeAudioAsset(sp.audioFile || "tone");
+    const audSlug = sanitizeSlug(rawAud.replace(/\.wav$/i, ""), 12) || "tone";
+    detail = `acoustic_${pulses}x_${audSlug}`;
+  } else if (cfg.stimId === "ppi") {
+    const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
+    const isi = Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300);
+    detail = `ppi_${isi}ms_${pairs}x`;
   } else if (cfg.stimId === "circadian") {
     const lHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
     const dHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
@@ -282,17 +291,126 @@ function generateStep1(cfg) {
 function generateStep2(cfg) {
   const p = cfg.plate;
   const g = cfg.geo;
+  const zMode = cfg.zoneMode || "concentric";
+  const zoneBmp = cfg.zoneBmp || p.zoneBmp;
+  const isSplit = zMode === "half_tb" || zMode === "half_lr";
   const sizeLabel = p.shape === "SQUARE" ? "LENGTH" : "RADIUS";
   const sizeDzLabel = p.shape === "SQUARE" ? "LENGTH_DZ" : "RADIUS_DZ";
   const userLine = buildResearcherComment(cfg);
+
+  const zoneModeDesc = zMode === "half_tb"
+    ? "50/50 top/bottom split zones (Light-Dark Preference)"
+    : (zMode === "half_lr"
+        ? "50/50 left/right split zones (Side Preference)"
+        : "50/50 outer/inner zones");
 
   const headerLines = [`# Step 2: Plate Arena & Dual-Zone Asset Builder (${p.name})`];
   if (userLine) headerLines.push(userLine);
   headerLines.push(
     `# Config profile: ${sanitizeAsciiComment(state.profileName, 40) || "Default MWP"}`,
     `# Place an EMPTY ${p.name} plate into the MWP stand before running.`,
-    `# Generates "${p.arenaBmp}.bmp" (full wells) and "${p.zoneBmp}.bmp" (50/50 outer/inner zones) in Assets.`
+    `# Generates "${p.arenaBmp}.bmp" (full wells) and "${zoneBmp}.bmp" (${zoneModeDesc}) in Assets.`
   );
+
+  const extraDefines = [];
+  if (isSplit && p.shape === "DISC") {
+    extraDefines.push("DEFINE X_SECTOR_ANGLE 30015  # Required for 180-deg semicircle zones");
+  } else if (isSplit && p.shape === "SQUARE") {
+    extraDefines.push(
+      `DEFINE HALF_LEN ${Number((g.r / 2).toFixed(2))}`,
+      `DEFINE QUARTER_LEN ${Number((g.r / 4).toFixed(2))}`
+    );
+  }
+
+  let buildZonesLines;
+  let extraGridAction = [];
+  if (!isSplit) {
+    buildZonesLines = [
+      "ACTION BUILD_DUAL_ZONES",
+      "",
+      "    ResetDrawing()",
+      `    ShapeType(${p.shape},${sizeLabel})`,
+      "    @ARENA_ZONE_MODE = 1",
+      "    INVOKE(DRAW_GRID,1)",
+      "",
+      `    ShapeType(${p.shape},${sizeDzLabel})`,
+      "    @ARENA_ZONE_MODE = 2",
+      "    INVOKE(DRAW_GRID,1)",
+      `    SaveDrawing("${zoneBmp}")`,
+      "",
+      "COMPLETE"
+    ];
+  } else if (p.shape === "DISC") {
+    const splitAngle = zMode === "half_lr" ? "90.0" : "180.0";
+    buildZonesLines = [
+      "ACTION BUILD_DUAL_ZONES",
+      "",
+      "    ResetDrawing()",
+      "    ShapeAngle(0.0)",
+      "    SET(X_SECTOR_ANGLE,0.0)",
+      `    ShapeType(DISC,${sizeLabel})`,
+      "    @ARENA_ZONE_MODE = 1",
+      "    INVOKE(DRAW_GRID,1)",
+      "",
+      `    ShapeAngle(${splitAngle})`,
+      "    SET(X_SECTOR_ANGLE,180.0)",
+      `    ShapeType(DISC,${sizeLabel})`,
+      "    @ARENA_ZONE_MODE = 2",
+      "    INVOKE(DRAW_GRID,1)",
+      `    SaveDrawing("${zoneBmp}")`,
+      "",
+      "COMPLETE"
+    ];
+  } else {
+    const rectCmd = zMode === "half_lr"
+      ? "    ShapeType(RECTANGLE,HALF_LEN,LENGTH)"
+      : "    ShapeType(RECTANGLE,LENGTH,HALF_LEN)";
+    const drawHalfCmd = zMode === "half_lr"
+      ? "            ShapeDraw(@X_POSITION - QUARTER_LEN,@Y_POSITION)"
+      : "            ShapeDraw(@X_POSITION,@Y_POSITION - QUARTER_LEN)";
+    buildZonesLines = [
+      "ACTION BUILD_DUAL_ZONES",
+      "",
+      "    ResetDrawing()",
+      "    ShapeType(SQUARE,LENGTH)",
+      "    @ARENA_ZONE_MODE = 1",
+      "    INVOKE(DRAW_GRID,1)",
+      "",
+      rectCmd,
+      "    @ARENA_ZONE_MODE = 2",
+      "    INVOKE(DRAW_HALF_GRID,1)",
+      `    SaveDrawing("${zoneBmp}")`,
+      "",
+      "COMPLETE"
+    ];
+    extraGridAction = [
+      "",
+      "ACTION DRAW_HALF_GRID",
+      "",
+      "    @ROW_COUNTER = 0",
+      "    @Y_POSITION = Y_OFFSET",
+      "",
+      `    WHILE @ROW_COUNTER < ${p.rows}`,
+      "        @COLUMN_COUNTER = 0",
+      "        @X_POSITION = X_OFFSET",
+      "",
+      `        WHILE @COLUMN_COUNTER < ${p.cols}`,
+      "            SET(DrawArea,@ARENA_ZONE_MODE)",
+      drawHalfCmd,
+      '            SaveDrawing("TEMP")',
+      "            WAIT(DRAWDELAY)",
+      "",
+      "            @X_POSITION = @X_POSITION + COL_STEP",
+      "            @COLUMN_COUNTER = @COLUMN_COUNTER + 1",
+      "        ENDWHILE",
+      "",
+      "        @Y_POSITION = @Y_POSITION + ROW_STEP",
+      "        @ROW_COUNTER = @ROW_COUNTER + 1",
+      "    ENDWHILE",
+      "",
+      "COMPLETE"
+    ];
+  }
 
   const code = [
     ...headerLines,
@@ -307,6 +425,7 @@ function generateStep2(cfg) {
     `DEFINE ROW_STEP ${g.rowStep}`,
     `DEFINE ${sizeLabel} ${g.r}`,
     `DEFINE ${sizeDzLabel} ${g.rDz}`,
+    ...extraDefines,
     "",
     "DEFINE ARENA_ZONE_MODE 200",
     "DEFINE ROW_COUNTER 101",
@@ -335,19 +454,7 @@ function generateStep2(cfg) {
     "",
     "COMPLETE",
     "",
-    "ACTION BUILD_DUAL_ZONES",
-    "",
-    "    ResetDrawing()",
-    `    ShapeType(${p.shape},${sizeLabel})`,
-    "    @ARENA_ZONE_MODE = 1",
-    "    INVOKE(DRAW_GRID,1)",
-    "",
-    `    ShapeType(${p.shape},${sizeDzLabel})`,
-    "    @ARENA_ZONE_MODE = 2",
-    "    INVOKE(DRAW_GRID,1)",
-    `    SaveDrawing("${p.zoneBmp}")`,
-    "",
-    "COMPLETE",
+    ...buildZonesLines,
     "",
     "ACTION DRAW_GRID",
     "",
@@ -380,16 +487,23 @@ function generateStep2(cfg) {
     "    ENDWHILE",
     "",
     "COMPLETE",
+    ...extraGridAction,
     ""
   ].join("\n");
 
   const pShort = p.shortCode || p.id;
   const fname = `02_${cfg.lastName || "mwp"}_${pShort}.zs`;
 
+  const zoneSchemaLabel = zMode === "half_tb"
+    ? "Zone 1 = bottom half, Zone 2 = top half"
+    : (zMode === "half_lr"
+        ? "Zone 1 = right half, Zone 2 = left half"
+        : "Zone 1 = outer ring, Zone 2 = inner center");
+
   return {
     filename: fname,
-    instruction: `<strong>Physical setup:</strong> Insert an <strong>empty ${p.name} plate</strong> and run once while watching Live View. Saves <code>${p.arenaBmp}.bmp</code> and <code>${p.zoneBmp}.bmp</code> into Assets. Adjust offsets in Step 1 (or Plate Config) if wells need alignment.`,
-    schemaText: `Assets created: ${p.arenaBmp}.bmp (${cfg.numWells} arenas) + ${p.zoneBmp}.bmp (Zone 1 = outer ring, Zone 2 = inner center).`,
+    instruction: `<strong>Physical setup:</strong> Insert an <strong>empty ${p.name} plate</strong> and run once while watching Live View. Saves <code>${p.arenaBmp}.bmp</code> and <code>${zoneBmp}.bmp</code> into Assets. Adjust offsets in Plate (or Plate Config) if wells need alignment.`,
+    schemaText: `Assets created: ${p.arenaBmp}.bmp (${cfg.numWells} arenas) + ${zoneBmp}.bmp (${zoneSchemaLabel}).`,
     code
   };
 }
@@ -408,6 +522,8 @@ function generateStep3(cfg) {
     (cfg.stimId === "ld_transitions" && cfg.sp.ldStart === "DARK") ||
     (cfg.stimId === "light_on_pulse") ||
     (cfg.stimId === "vibration_startle" && cfg.sp.vibAmbient === "DARK") ||
+    (cfg.stimId === "acoustic_startle" && cfg.sp.audioAmbient === "DARK") ||
+    (cfg.stimId === "ppi" && cfg.sp.ppiAmbient === "DARK") ||
     (cfg.stimId === "multi_phase" && cfg.sp.mpAcclimLight === "DARK") ||
     (cfg.stimId === "temp_ramp" && cfg.sp.rampLight === "DARK");
 
@@ -580,8 +696,14 @@ function generateStep4(cfg) {
   }
 
   const isCircadian = cfg.stimId === "circadian";
-  const hasTrials = ["ld_transitions", "light_off_startle", "light_on_pulse", "vibration_startle", "multi_phase", "temp_ramp"].includes(cfg.stimId);
+  const hasTrials = ["ld_transitions", "light_off_startle", "light_on_pulse", "vibration_startle", "acoustic_startle", "ppi", "multi_phase", "temp_ramp"].includes(cfg.stimId);
   const activeLightTag = (cfg.ledColorObj && cfg.ledColorObj.tag) ? cfg.ledColorObj.tag : "LIGHT";
+  const zoneBmp = cfg.zoneBmp || p.zoneBmp;
+  const needZoneBmp = Boolean(cfg.useZones || cfg.useZoneChanges);
+  const useStream2 = Boolean(cfg.useZoneChanges);
+  const wrapSummaryLog = (logLines) => (useStream2
+    ? ["    SET(LOG_STREAM,2)", ...logLines, "    SET(LOG_STREAM,0)"]
+    : logLines);
 
   let metaHeaders;
   if (isCircadian) {
@@ -626,7 +748,7 @@ function generateStep4(cfg) {
     );
 
     extraActions.push(
-      buildSampleAction("SAMPLE_BIN", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${lightLabel}|COUNTER1`, dataExprs)
+      buildSampleAction("SAMPLE_BIN", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${lightLabel}|COUNTER1`, dataExprs, useStream2)
     );
 
     totalRuntimeSec = acclim + cfg.autorefTimeout + numBins * bin;
@@ -692,8 +814,8 @@ function generateStep4(cfg) {
         "",
         "COMPLETE"
       ].join("\n"),
-      buildSampleAction("SAMPLE_LIGHT", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}|COUNTER2|COUNTER1`, dataExprs),
-      buildSampleAction("SAMPLE_DARK", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DARK|COUNTER2|COUNTER1", dataExprs)
+      buildSampleAction("SAMPLE_LIGHT", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}|COUNTER2|COUNTER1`, dataExprs, useStream2),
+      buildSampleAction("SAMPLE_DARK", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DARK|COUNTER2|COUNTER1", dataExprs, useStream2)
     );
 
     totalRuntimeSec = acclim + cfg.autorefTimeout + cycles * 2 * phaseBins * bin;
@@ -770,9 +892,11 @@ function generateStep4(cfg) {
           '    LOGDATA(DATA_SELECT,"begin")',
           '    LOGDATA(DATA_DELTA,"end")',
           "",
-          '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:STARTLE|COUNTER2|COUNTER1")',
-          ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
-          "    LOGRUN()",
+          ...wrapSummaryLog([
+            '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:STARTLE|COUNTER2|COUNTER1")',
+            ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+            "    LOGRUN()"
+          ]),
           "",
           "COMPLETE"
         ].join("\n")
@@ -792,17 +916,17 @@ function generateStep4(cfg) {
           "",
           "COMPLETE"
         ].join("\n"),
-        buildSampleAction("SAMPLE_STARTLE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:STARTLE|COUNTER2|COUNTER1", dataExprs)
+        buildSampleAction("SAMPLE_STARTLE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:STARTLE|COUNTER2|COUNTER1", dataExprs, useStream2)
       );
     }
 
     if (preBins > 0) {
       extraActions.push(
-        buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs)
+        buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs, useStream2)
       );
     }
     extraActions.push(
-      buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs)
+      buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs, useStream2)
     );
 
     totalRuntimeSec = acclim + cfg.autorefTimeout + preBins * bin + pulses * (pulseBins + itiBins) * bin;
@@ -879,9 +1003,11 @@ function generateStep4(cfg) {
           '    LOGDATA(DATA_SELECT,"begin")',
           '    LOGDATA(DATA_DELTA,"end")',
           "",
-          `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_FLASH|COUNTER2|COUNTER1")`,
-          ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
-          "    LOGRUN()",
+          ...wrapSummaryLog([
+            `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_FLASH|COUNTER2|COUNTER1")`,
+            ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+            "    LOGRUN()"
+          ]),
           "",
           "COMPLETE"
         ].join("\n")
@@ -901,17 +1027,17 @@ function generateStep4(cfg) {
           "",
           "COMPLETE"
         ].join("\n"),
-        buildSampleAction("SAMPLE_FLASH", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_FLASH|COUNTER2|COUNTER1`, dataExprs)
+        buildSampleAction("SAMPLE_FLASH", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_FLASH|COUNTER2|COUNTER1`, dataExprs, useStream2)
       );
     }
 
     if (preBins > 0) {
       extraActions.push(
-        buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs)
+        buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs, useStream2)
       );
     }
     extraActions.push(
-      buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs)
+      buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs, useStream2)
     );
 
     totalRuntimeSec = acclim + cfg.autorefTimeout + preBins * bin + pulses * (pulseBins + itiBins) * bin;
@@ -974,24 +1100,231 @@ function generateStep4(cfg) {
         '    LOGDATA(DATA_SELECT,"begin")',
         '    LOGDATA(DATA_DELTA,"end")',
         "",
-        '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:VIBRATION|COUNTER2|COUNTER1")',
-        ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
-        "    LOGRUN()",
+        ...wrapSummaryLog([
+          '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:VIBRATION|COUNTER2|COUNTER1")',
+          ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+          "    LOGRUN()"
+        ]),
         "",
         "COMPLETE"
       ].join("\n")
     );
     if (preBins > 0) {
       extraActions.push(
-        buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs)
+        buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs, useStream2)
       );
     }
     extraActions.push(
-      buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs)
+      buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs, useStream2)
     );
 
     totalRuntimeSec = acclim + cfg.autorefTimeout + preBins * bin + pulses * (1 + itiBins) * bin;
     totalRows = preBins + pulses * (1 + itiBins);
+
+  } else if (cfg.stimId === "acoustic_startle") {
+    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preBins = Math.round(preSec / bin);
+    const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+    const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+    const itiBins = Math.max(1, Math.round(itiSec / bin));
+    const audioAsset = sp.audioFile === "custom"
+      ? sanitizeAudioAsset(sp.audioCustomFile || "stereo.wav")
+      : sanitizeAudioAsset(sp.audioFile || "tone");
+    const ambientAction = sp.audioAmbient === "LIGHT" ? "LIGHTS_ON" : "LIGHTS_OFF";
+
+    topDefines.push(
+      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      `DEFINE TIME_BIN ${bin}`,
+      `DEFINE BASELINE_BINS ${preBins}`,
+      `DEFINE NUM_PULSES ${pulses}`,
+      `DEFINE ITI_BINS ${itiBins}`
+    );
+
+    mainSchedule.push(
+      `    INVOKE(${ambientAction},1)`,
+      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
+      "    WAIT(ACCLIMATION_SEC)",
+      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+      "    AUTOREFERENCE()",
+      "__START_RECORDING__"
+    );
+    if (preBins > 0) {
+      mainSchedule.push(
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("BASELINE")}")`,
+        "    INVOKE(SAMPLE_BASELINE,BASELINE_BINS)"
+      );
+    }
+    mainSchedule.push("    INVOKE(AUDIO_TRIAL,NUM_PULSES)");
+
+    extraActions.push(
+      [
+        "ACTION AUDIO_TRIAL",
+        "",
+        "    SET(COUNTER2,COUNTER_INC)",
+        "    INVOKE(AUDIO_PULSE,1)",
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("POST-AUDIO ITI")}")`,
+        "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+        "",
+        "COMPLETE",
+        "",
+        "ACTION AUDIO_PULSE",
+        "",
+        "    SET(COUNTER1,COUNTER_INC)",
+        '    LOGDATA(DATA_SNAPSHOT,"begin")',
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUDIO " + audioAsset.toUpperCase())}")`,
+        `    LOAD(AUDIO_FILE,"${audioAsset}")`,
+        "    WAIT(TIME_BIN)",
+        '    LOGDATA(DATA_SNAPSHOT,"end")',
+        '    LOGDATA(DATA_SELECT,"begin")',
+        '    LOGDATA(DATA_DELTA,"end")',
+        "",
+        ...wrapSummaryLog([
+          '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:AUDIO_PULSE|COUNTER2|COUNTER1")',
+          ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+          "    LOGRUN()"
+        ]),
+        "",
+        "COMPLETE"
+      ].join("\n")
+    );
+    if (preBins > 0) {
+      extraActions.push(
+        buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs, useStream2)
+      );
+    }
+    extraActions.push(
+      buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs, useStream2)
+    );
+
+    totalRuntimeSec = acclim + cfg.autorefTimeout + preBins * bin + pulses * (1 + itiBins) * bin;
+    totalRows = preBins + pulses * (1 + itiBins);
+
+  } else if (cfg.stimId === "ppi") {
+    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preBins = Math.round(preSec / bin);
+    const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
+    const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+    const itiBins = Math.max(1, Math.round(itiSec / bin));
+    const prepulse = vibLevelToCode(sp.ppiPrepulse || "U3");
+    const pulse = vibLevelToCode(sp.ppiPulse || "U0");
+    const isiMs = Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300));
+    const isAlt = (sp.ppiPattern || "alternating") === "alternating";
+    const ambientAction = sp.ppiAmbient === "LIGHT" ? "LIGHTS_ON" : "LIGHTS_OFF";
+    const totalTrials = isAlt ? pairs * 2 : pairs;
+
+    topDefines.push(
+      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      `DEFINE TIME_BIN ${bin}`,
+      `DEFINE BASELINE_BINS ${preBins}`,
+      `DEFINE NUM_BLOCKS ${pairs}  # ${isAlt ? "Alternating Pulse-Alone + PPI pairs" : "PPI trials only"} (ISI=${isiMs}ms)`,
+      `DEFINE ITI_BINS ${itiBins}`
+    );
+
+    mainSchedule.push(
+      `    INVOKE(${ambientAction},1)`,
+      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
+      "    WAIT(ACCLIMATION_SEC)",
+      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
+      "    AUTOREFERENCE()",
+      "__START_RECORDING__"
+    );
+    if (preBins > 0) {
+      mainSchedule.push(
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("BASELINE")}")`,
+        "    INVOKE(SAMPLE_BASELINE,BASELINE_BINS)"
+      );
+    }
+    mainSchedule.push("    INVOKE(PPI_BLOCK,NUM_BLOCKS)");
+
+    const blockBody = isAlt
+      ? [
+          "ACTION PPI_BLOCK",
+          "",
+          "    SET(COUNTER2,COUNTER_INC)",
+          "    INVOKE(PULSE_ALONE_BIN,1)",
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("POST-PULSE ITI")}")`,
+          "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+          "",
+          "    SET(COUNTER2,COUNTER_INC)",
+          "    INVOKE(PPI_PULSE_BIN,1)",
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("POST-PPI ITI")}")`,
+          "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+          "",
+          "COMPLETE"
+        ].join("\n")
+      : [
+          "ACTION PPI_BLOCK",
+          "",
+          "    SET(COUNTER2,COUNTER_INC)",
+          "    INVOKE(PPI_PULSE_BIN,1)",
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("POST-PPI ITI")}")`,
+          "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+          "",
+          "COMPLETE"
+        ].join("\n");
+
+    extraActions.push(blockBody);
+    if (isAlt) {
+      extraActions.push(
+        [
+          "ACTION PULSE_ALONE_BIN",
+          "",
+          "    SET(COUNTER1,COUNTER_INC)",
+          '    LOGDATA(DATA_SNAPSHOT,"begin")',
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("PULSE ALONE " + pulse)}")`,
+          `    ZCOMMAND("${pulse} D1190 M1 M-1 M1 M-1")`,
+          "    WAIT(TIME_BIN)",
+          '    LOGDATA(DATA_SNAPSHOT,"end")',
+          '    LOGDATA(DATA_SELECT,"begin")',
+          '    LOGDATA(DATA_DELTA,"end")',
+          "",
+          ...wrapSummaryLog([
+            '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:PULSE_ALONE|COUNTER2|COUNTER1")',
+            ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+            "    LOGRUN()"
+          ]),
+          "",
+          "COMPLETE"
+        ].join("\n")
+      );
+    }
+    extraActions.push(
+      [
+        "ACTION PPI_PULSE_BIN",
+        "",
+        "    SET(COUNTER1,COUNTER_INC)",
+        '    LOGDATA(DATA_SNAPSHOT,"begin")',
+        `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(`PPI ${prepulse}+${isiMs}ms+${pulse}`)}")`,
+        `    ZCOMMAND("${prepulse} D1190 M1 M-1 M1 M-1 P${isiMs} ${pulse} D1190 M1 M-1 M1 M-1")`,
+        "    WAIT(TIME_BIN)",
+        '    LOGDATA(DATA_SNAPSHOT,"end")',
+        '    LOGDATA(DATA_SELECT,"begin")',
+        '    LOGDATA(DATA_DELTA,"end")',
+        "",
+        ...wrapSummaryLog([
+          '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:PPI_TRIAL|COUNTER2|COUNTER1")',
+          ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+          "    LOGRUN()"
+        ]),
+        "",
+        "COMPLETE"
+      ].join("\n")
+    );
+    if (preBins > 0) {
+      extraActions.push(
+        buildSampleAction("SAMPLE_BASELINE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:BASELINE|COUNTER2|COUNTER1", dataExprs, useStream2)
+      );
+    }
+    extraActions.push(
+      buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs, useStream2)
+    );
+
+    totalRuntimeSec = acclim + cfg.autorefTimeout + preBins * bin + totalTrials * (1 + itiBins) * bin;
+    totalRows = preBins + totalTrials * (1 + itiBins);
 
   } else if (cfg.stimId === "circadian") {
     const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
@@ -1073,13 +1406,15 @@ function generateStep4(cfg) {
         '    LOGDATA(DATA_SELECT,"begin")',
         '    LOGDATA(DATA_DELTA,"end")',
         "",
-        "    IF @PHASE_VAR = 1",
-        `        LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}|@100|@101|COUNTER1")`,
-        "    ELSE",
-        '        LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DARK|@100|@101|COUNTER1")',
-        "    ENDIF",
-        ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
-        "    LOGRUN()",
+        ...wrapSummaryLog([
+          "    IF @PHASE_VAR = 1",
+          `        LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}|@100|@101|COUNTER1")`,
+          "    ELSE",
+          '        LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DARK|@100|@101|COUNTER1")',
+          "    ENDIF",
+          ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+          "    LOGRUN()"
+        ]),
         "",
         "COMPLETE"
       ].join("\n")
@@ -1151,6 +1486,12 @@ function generateStep4(cfg) {
       if (sl.effectiveTemp !== null) {
         runLines.push(`    SET(THERMOSTAT,${sl.effectiveTemp})`);
       }
+      if (sl.vibTrigger) {
+        runLines.push(`    ZCOMMAND("${sl.vibCode} D1000 M1 M-1 M1 M-1 M1 M-1 M1 M-1 M1 M-1")`);
+      }
+      if (sl.audioTrigger) {
+        runLines.push(`    LOAD(AUDIO_FILE,"${sl.audioFile}")`);
+      }
       runLines.push(
         `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(sl.overlayText)}")`,
         `    INVOKE(SAMPLE_S${sl.idx},S${sl.idx}_BINS)`,
@@ -1160,7 +1501,7 @@ function generateStep4(cfg) {
 
       extraActions.push(
         runLines.join("\n"),
-        buildSampleAction(`SAMPLE_S${sl.idx}`, `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${sl.csvTag}|COUNTER2|COUNTER1`, dataExprs)
+        buildSampleAction(`SAMPLE_S${sl.idx}`, `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${sl.csvTag}|COUNTER2|COUNTER1`, dataExprs, useStream2)
       );
     }
 
@@ -1213,7 +1554,7 @@ function generateStep4(cfg) {
     steps.forEach((t, idx) => {
       const sNum = idx + 1;
       extraActions.push(
-        buildSampleAction(`SAMPLE_T${sNum}`, `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:TEMP_${t}C|COUNTER2|COUNTER1`, dataExprs)
+        buildSampleAction(`SAMPLE_T${sNum}`, `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:TEMP_${t}C|COUNTER2|COUNTER1`, dataExprs, useStream2)
       );
     });
 
@@ -1227,7 +1568,7 @@ function generateStep4(cfg) {
   ];
   if (userLine) out.push(userLine);
   out.push(
-    `# Required asset(s) in unit Assets folder: "${p.arenaBmp}.bmp"${cfg.useZones ? ` and "${p.zoneBmp}.bmp"` : ""}`,
+    `# Required asset(s) in unit Assets folder: "${p.arenaBmp}.bmp"${needZoneBmp ? ` and "${zoneBmp}.bmp"` : ""}`,
     "",
     ...topDefines
   );
@@ -1282,6 +1623,12 @@ function generateStep4(cfg) {
       "SET(LOG_STREAM_PERFRAME,1)"
     );
   }
+  if (useStream2) {
+    out.push(
+      "",
+      `LOGFILE(2,"${runSlug}")`
+    );
+  }
 
   // ACTION MAIN
   out.push(
@@ -1298,15 +1645,26 @@ function generateStep4(cfg) {
   }
 
   out.push(`    LOAD(ARENAS,"${p.arenaBmp}.bmp")`);
-  if (cfg.useZones) {
-    out.push(`    LOAD(ZONES,"${p.zoneBmp}.bmp")`);
+  if (needZoneBmp) {
+    out.push(`    LOAD(ZONES,"${zoneBmp}.bmp")`);
   }
 
-  out.push(
-    "",
-    `    LOGFILE(0,"${runSlug}")`,
-    "    INVOKE(SETUP_HEADERS,1)"
-  );
+  if (useStream2) {
+    out.push(
+      "",
+      `    LOGFILE(0,"${runSlug}_ZCHANGE")`,
+      "    INVOKE(SETUP_ZCHANGE_HEADERS,1)",
+      "    SET(LOG_STREAM,2)",
+      "    INVOKE(SETUP_HEADERS,1)",
+      "    SET(LOG_STREAM,0)"
+    );
+  } else {
+    out.push(
+      "",
+      `    LOGFILE(0,"${runSlug}")`,
+      "    INVOKE(SETUP_HEADERS,1)"
+    );
+  }
 
   if (cfg.useXy) {
     out.push(
@@ -1319,13 +1677,26 @@ function generateStep4(cfg) {
   out.push("");
 
   const recStartLines = [];
+  if (cfg.usePicture) {
+    recStartLines.push(`    PICTURE("${runSlug}_start")`);
+  }
   if (cfg.useTracks) {
     recStartLines.push(
       "    SET(X_DRAWTRACKS,1)",
       "    SET(X_TRACKTIME,15)"
     );
   }
-  if (cfg.videoMode !== "off") {
+  if (cfg.videoMode === "dual") {
+    recStartLines.push(
+      "    SET(VIDEO_STREAM,0)",
+      `    VIDEO(VIDEO_LENGTH,"${runSlug}_30fps")`,
+      "    VIDEOSKIP(0)",
+      "    SET(VIDEO_STREAM,1)",
+      `    VIDEO(VIDEO_LENGTH,"${runSlug}_1fps")`,
+      "    VIDEOSKIP(29)",
+      "    SET(VIDEO_STREAM,0)"
+    );
+  } else if (cfg.videoMode !== "off") {
     recStartLines.push(`    VIDEO(VIDEO_LENGTH,"${runSlug}")`);
     if (cfg.videoMode === "1fps") {
       recStartLines.push("    VIDEOSKIP(29)");
@@ -1338,6 +1709,9 @@ function generateStep4(cfg) {
   if (cfg.useXy) {
     recStartLines.push("    SET(LOG_PERFRAME,ON)");
   }
+  if (useStream2) {
+    recStartLines.push('    LOAD(ZONECHANGES,"ON")');
+  }
 
   for (const line of mainSchedule) {
     if (line === "__START_RECORDING__") {
@@ -1348,13 +1722,27 @@ function generateStep4(cfg) {
   }
 
   out.push("");
+  if (useStream2) {
+    out.push('    LOAD(ZONECHANGES,"OFF")');
+  }
   if (cfg.useXy) {
     out.push("    SET(LOG_PERFRAME,OFF)");
   }
   if (cfg.useHeatmap) {
     out.push("    SET(MAKEMAP,20)");
   }
-  if (cfg.videoMode !== "off") {
+  if (cfg.usePicture) {
+    out.push(`    PICTURE("${runSlug}_end")`);
+  }
+  if (cfg.videoMode === "dual") {
+    out.push(
+      "    SET(VIDEO_STREAM,0)",
+      "    VIDEOSTOP",
+      "    SET(VIDEO_STREAM,1)",
+      "    VIDEOSTOP",
+      "    SET(VIDEO_STREAM,0)"
+    );
+  } else if (cfg.videoMode !== "off") {
     out.push("    VIDEOSTOP");
   }
   if (restoreTempAtEnd !== null) {
@@ -1382,6 +1770,19 @@ function generateStep4(cfg) {
     "COMPLETE",
     ""
   );
+
+  if (useStream2) {
+    out.push(
+      "ACTION SETUP_ZCHANGE_HEADERS",
+      "",
+      '    LOGCREATE("TEXT:TIME|TEXT:|TEXT:")',
+      '    LOGAPPEND("TEXT:ARENA|TEXT:ACTION|TEXT:ZONE")',
+      "    LOGRUN()",
+      "",
+      "COMPLETE",
+      ""
+    );
+  }
 
   if (cfg.useXy) {
     const xyWellHeaders = [];
@@ -1415,20 +1816,34 @@ function generateStep4(cfg) {
   if (cfg.useXy) {
     schemaDesc += `  +  XY CSV (${runSlug}_XY): RUNTIME | X_${firstWell} | Y_${firstWell} ...`;
   }
+  if (useStream2) {
+    schemaDesc += `  +  Zone Events (${runSlug}_ZCHANGE): TIME | ARENA | ACTION | ZONE`;
+  }
+
+  const csvCount = 1 + (cfg.useXy ? 1 : 0) + (useStream2 ? 1 : 0);
 
   return {
     filename: `04_${slotSlug}.zs`,
     bundleFolder: runSlug,
-    instruction: `<strong>Main experiment:</strong> Confirm <code>${p.arenaBmp}.bmp</code>${cfg.useZones ? ` and <code>${p.zoneBmp}.bmp</code>` : ""} exist in Assets, load your ${p.name} plate with organisms, and click <strong>Run</strong>.`,
+    instruction: `<strong>Main experiment:</strong> Confirm <code>${p.arenaBmp}.bmp</code>${needZoneBmp ? ` and <code>${zoneBmp}.bmp</code>` : ""} exist in Assets, load your ${p.name} plate with organisms, and click <strong>Run</strong>.`,
     schemaText: schemaDesc,
     code: out.join("\n"),
     totalRuntimeSec,
     totalRows,
-    csvCount: cfg.useXy ? 2 : 1
+    csvCount
   };
 }
 
-function buildSampleAction(name, logCreateStr, dataExprs) {
+function buildSampleAction(name, logCreateStr, dataExprs, useStream2) {
+  const logBlock = [
+    `    LOGCREATE("${logCreateStr}")`,
+    ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+    "    LOGRUN()"
+  ];
+  const wrappedLog = useStream2
+    ? ["    SET(LOG_STREAM,2)", ...logBlock, "    SET(LOG_STREAM,0)"]
+    : logBlock;
+
   return [
     `ACTION ${name}`,
     "",
@@ -1439,9 +1854,7 @@ function buildSampleAction(name, logCreateStr, dataExprs) {
     '    LOGDATA(DATA_SELECT,"begin")',
     '    LOGDATA(DATA_DELTA,"end")',
     "",
-    `    LOGCREATE("${logCreateStr}")`,
-    ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
-    "    LOGRUN()",
+    ...wrappedLog,
     "",
     "COMPLETE"
   ].join("\n");
@@ -1478,7 +1891,7 @@ function generateAllSteps(cfg) {
     "",
     `2. ${s2.filename}`,
     `   - Run ONCE with an EMPTY ${cfg.plate.name} plate.`,
-    `   - Generates "${cfg.plate.arenaBmp}.bmp" and "${cfg.plate.zoneBmp}.bmp" inside the unit's Assets directory.`,
+    `   - Generates "${cfg.plate.arenaBmp}.bmp" and "${cfg.zoneBmp || cfg.plate.zoneBmp}.bmp" inside the unit's Assets directory.`,
     "",
     `3. ${s3.filename} (Optional)`,
     "   - Run with organisms loaded to check TARGET_SIZE and DETECTOR_THRESHOLD on Live View.",

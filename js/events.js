@@ -74,9 +74,15 @@ function bindEvents() {
   });
 
   // Exported Data Checkboxes
-  ["dist", "msd", "zones", "xy"].forEach(k => {
-    document.getElementById("chk_" + k).addEventListener("change", (e) => {
-      const anyChecked = ["dist", "msd", "zones", "xy"].some(id => document.getElementById("chk_" + id).checked);
+  const metricIds = ["dist", "msd", "zones", "zchange", "xy"];
+  metricIds.forEach(k => {
+    const chkEl = document.getElementById("chk_" + k);
+    if (!chkEl) return;
+    chkEl.addEventListener("change", (e) => {
+      const anyChecked = metricIds.some(id => {
+        const el = document.getElementById("chk_" + id);
+        return Boolean(el && el.checked);
+      });
       if (!anyChecked) {
         e.target.checked = true;
         showToast("At least one exported data type is required");
@@ -142,7 +148,7 @@ function bindEvents() {
 
   // General Assay / Hardware Inputs
   [
-    "videoMode", "chk_tracks", "chk_heatmap", "expPrefix", "hwVersion", "ledColor",
+    "videoMode", "chk_tracks", "chk_heatmap", "chk_picture", "zoneMode", "expPrefix", "hwVersion", "ledColor",
     "targetSize", "detThreshold", "msdThreshold", "autorefTimeout",
     "thermostatTemp", "chk_thermostat", "ledBrightness", "ledMount", "z3RgbMap"
   ].forEach(id => {

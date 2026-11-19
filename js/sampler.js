@@ -17,6 +17,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
       bottomChannels,
       tempC: null,
       vibration: null,
+      audio: null,
       nlePlayheadPct: null
     };
   }
@@ -41,6 +42,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
   let phaseName = "READY";
   let tempC = cfg.useThermostat ? Number((parseFloat(cfg.thermostatTemp) || 22).toFixed(1)) : null;
   let vibration = null;
+  let audio = null;
   let nlePlayheadPct = null;
 
   if (cfg.stimId === "baseline") {
@@ -61,7 +63,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     } else {
       phaseName = "TRACKING " + (isDark ? "DARK" : activeLightTag);
     }
-    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
   }
 
   if (cfg.stimId === "ld_transitions") {
@@ -91,7 +93,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
       if (lightOn) setSingleChannelOn(colId);
       phaseName = `PHASE: ${lightOn ? activeLightTag : "DARK"} (Cycle ${cycIdx + 1}/${cycles})`;
     }
-    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
   }
 
   if (cfg.stimId === "light_off_startle" || cfg.stimId === "light_on_pulse") {
@@ -142,7 +144,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
           : `DARK ITI (Trial ${trIdx + 1}/${pulses})`;
       }
     }
-    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
   }
 
   if (cfg.stimId === "vibration_startle") {
@@ -182,7 +184,93 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
         phaseName = `POST-VIB ITI (Trial ${trIdx + 1}/${pulses})`;
       }
     }
-    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
+  }
+
+  if (cfg.stimId === "acoustic_startle") {
+    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preBins = Math.round(preSec / bin);
+    const preDur = preBins * bin;
+    const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
+    const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+    const itiBins = Math.max(1, Math.round(itiSec / bin));
+    const itiDur = itiBins * bin;
+    const trialDur = bin + itiDur;
+    const audioAsset = sp.audioFile === "custom"
+      ? sanitizeAudioAsset(sp.audioCustomFile || "stereo.wav")
+      : sanitizeAudioAsset(sp.audioFile || "tone");
+    if (sp.audioAmbient === "LIGHT") setSingleChannelOn(colId);
+
+    totalRuntimeSec = acclim + autorefBase + preDur + pulses * trialDur;
+    const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+
+    if (t < acclim) {
+      phaseName = "ACCLIMATION";
+    } else if (t < acclim + autorefBase) {
+      phaseName = "AUTOREFERENCING";
+    } else if (t < acclim + autorefBase + preDur) {
+      phaseName = "BASELINE";
+    } else {
+      const rel = Math.min(Math.max(0, pulses * trialDur - 0.0001), t - acclim - autorefBase - preDur);
+      const trIdx = Math.min(pulses - 1, Math.floor(rel / trialDur));
+      const inTrial = rel - trIdx * trialDur;
+      if (inTrial < bin) {
+        audio = audioAsset;
+        phaseName = `AUDIO "${audioAsset}" (Trial ${trIdx + 1}/${pulses})`;
+      } else {
+        phaseName = `POST-AUDIO ITI (Trial ${trIdx + 1}/${pulses})`;
+      }
+    }
+    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
+  }
+
+  if (cfg.stimId === "ppi") {
+    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preBins = Math.round(preSec / bin);
+    const preDur = preBins * bin;
+    const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
+    const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+    const itiBins = Math.max(1, Math.round(itiSec / bin));
+    const itiDur = itiBins * bin;
+    const trialDur = bin + itiDur;
+    const prepulse = vibLevelToCode(sp.ppiPrepulse || "U3");
+    const pulse = vibLevelToCode(sp.ppiPulse || "U0");
+    const isiMs = Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300));
+    const isAlt = (sp.ppiPattern || "alternating") === "alternating";
+    const totalTrials = isAlt ? pairs * 2 : pairs;
+    if (sp.ppiAmbient === "LIGHT") setSingleChannelOn(colId);
+
+    totalRuntimeSec = acclim + autorefBase + preDur + totalTrials * trialDur;
+    const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+
+    if (t < acclim) {
+      phaseName = "ACCLIMATION";
+    } else if (t < acclim + autorefBase) {
+      phaseName = "AUTOREFERENCING";
+    } else if (t < acclim + autorefBase + preDur) {
+      phaseName = "BASELINE";
+    } else {
+      const rel = Math.min(Math.max(0, totalTrials * trialDur - 0.0001), t - acclim - autorefBase - preDur);
+      const trIdx = Math.min(totalTrials - 1, Math.floor(rel / trialDur));
+      const inTrial = rel - trIdx * trialDur;
+      const isPpiTrial = !isAlt || (trIdx % 2 === 1);
+      const tapWindow = Math.min(0.85, bin);
+      if (inTrial < tapWindow) {
+        vibration = isPpiTrial ? `${prepulse}+${pulse}` : pulse;
+        phaseName = isPpiTrial
+          ? `PPI ${prepulse}+${isiMs}ms+${pulse} (Trial ${trIdx + 1}/${totalTrials})`
+          : `PULSE ALONE ${pulse} (Trial ${trIdx + 1}/${totalTrials})`;
+      } else if (inTrial < bin) {
+        phaseName = isPpiTrial ? `PPI BIN (Trial ${trIdx + 1}/${totalTrials})` : `PULSE BIN (Trial ${trIdx + 1}/${totalTrials})`;
+      } else {
+        phaseName = `POST-${isPpiTrial ? "PPI" : "PULSE"} ITI (Trial ${trIdx + 1}/${totalTrials})`;
+      }
+    }
+    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
   }
 
   if (cfg.stimId === "circadian") {
@@ -213,7 +301,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
       if (isLight) setSingleChannelOn(colId);
       phaseName = `DAY ${dayIdx + 1} ${isLight ? activeLightTag : "DARK"} HR ${phaseHr}`;
     }
-    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
   }
 
   if (cfg.stimId === "multi_phase") {
@@ -262,10 +350,16 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
         if (sl.effectiveTemp !== null) {
           tempC = sl.effectiveTemp;
         }
+        if (sl.vibCode) {
+          vibration = sl.vibCode;
+        }
+        if (sl.audioFile) {
+          audio = sl.audioFile;
+        }
         phaseName = cycles > 1 ? `${sl.overlayText} (Cycle ${cycIdx + 1}/${cycles})` : sl.overlayText;
       }
     }
-    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
   }
 
   if (cfg.stimId === "temp_ramp") {
@@ -292,11 +386,11 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
       tempC = steps[stIdx];
       phaseName = `TEMP TARGET ${steps[stIdx]}C (Step ${stIdx + 1}/${steps.length})`;
     }
-    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+    return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
   }
 
   const tFallback = Math.max(0, parseFloat(tSecRaw) || 0);
-  return { tSec: tFallback, totalRuntimeSec: tFallback, phaseName, topChannels, bottomChannels, tempC, vibration, nlePlayheadPct };
+  return { tSec: tFallback, totalRuntimeSec: tFallback, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
 }
 
 if (typeof window !== "undefined") {

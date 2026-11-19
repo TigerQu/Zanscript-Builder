@@ -38,11 +38,32 @@ const EXPERIMENT_INPUTS = {
   chk_heatmap: "checked"
 };
 
+// Optional newer controls serialized only when non-default (keeps existing experiment.json round-trips stable)
+const OPTIONAL_EXPERIMENT_INPUTS = {
+  zoneMode: { prop: "value", def: "concentric" },
+  chk_zchange: { prop: "checked", def: false },
+  chk_picture: { prop: "checked", def: false }
+};
+
 function buildExperimentPayload() {
   const inputs = {};
   for (const [id, prop] of Object.entries(EXPERIMENT_INPUTS)) {
     const el = document.getElementById(id);
     if (el) inputs[id] = prop === "checked" ? Boolean(el.checked) : String(el.value);
+  }
+  for (const [id, meta] of Object.entries(OPTIONAL_EXPERIMENT_INPUTS)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const val = meta.prop === "checked" ? Boolean(el.checked) : String(el.value);
+    if (val !== meta.def) inputs[id] = val;
+  }
+  const stimParamsOut = {};
+  for (const [k, v] of Object.entries(state.stimParams)) {
+    if (k in OPTIONAL_STIM_PARAM_DEFAULTS) {
+      if (v !== OPTIONAL_STIM_PARAM_DEFAULTS[k]) stimParamsOut[k] = v;
+    } else {
+      stimParamsOut[k] = v;
+    }
   }
   const geo = state.plateGeometries[state.plateId];
   const experiment = {
@@ -50,7 +71,7 @@ function buildExperimentPayload() {
     plateId: state.plateId,
     stimId: state.stimId,
     inputs,
-    stimParams: { ...state.stimParams },
+    stimParams: stimParamsOut,
     timelineClips: state.timelineClips.map(c => ({ track: c.track, startSec: c.startSec, endSec: c.endSec, val: c.val })),
     showUnderTracks: Boolean(state.showUnderTracks)
   };
@@ -101,10 +122,18 @@ function sanitizeTimelineClips(rawClips) {
     const startSec = Math.max(0, rawS);
     const endSec = rawE;
     if (endSec <= startSec) continue;
-    const rawVal = parseFloat(c.val);
-    const val = c.track === "TEMP"
-      ? (Number.isFinite(rawVal) ? Math.min(40, Math.max(10, Number(rawVal.toFixed(1)))) : 22)
-      : (Number.isFinite(rawVal) ? Math.min(100, Math.max(5, Math.round(rawVal))) : 100);
+    let val;
+    if (c.track === "TEMP") {
+      const rawVal = parseFloat(c.val);
+      val = Number.isFinite(rawVal) ? Math.min(40, Math.max(10, Number(rawVal.toFixed(1)))) : 22;
+    } else if (c.track === "VIB") {
+      val = clampVibLevel(c.val);
+    } else if (c.track === "AUDIO") {
+      val = sanitizeAudioAsset(c.val);
+    } else {
+      const rawVal = parseFloat(c.val);
+      val = Number.isFinite(rawVal) ? Math.min(100, Math.max(5, Math.round(rawVal))) : 100;
+    }
     if (!byTrack.has(c.track)) byTrack.set(c.track, { slots: [], list: [] });
     const bucket = byTrack.get(c.track);
     bucket.slots.push(slot);
@@ -190,7 +219,11 @@ function applyExperimentData(payload, opts) {
   state.showUnderTracks = Boolean(exp.showUnderTracks) || state.timelineClips.some(c => String(c.track).startsWith("U_"));
 
   const inputs = exp.inputs || {};
-  for (const [id, prop] of Object.entries(EXPERIMENT_INPUTS)) {
+  const allInputSpecs = { ...EXPERIMENT_INPUTS };
+  for (const [id, meta] of Object.entries(OPTIONAL_EXPERIMENT_INPUTS)) {
+    allInputSpecs[id] = meta.prop;
+  }
+  for (const [id, prop] of Object.entries(allInputSpecs)) {
     if (!(id in inputs)) continue;
     const el = document.getElementById(id);
     if (!el) continue;
@@ -207,7 +240,7 @@ function applyExperimentData(payload, opts) {
 
   // Ensure at least one exported CSV metric is enabled
   if (typeof document !== "undefined") {
-    const anyMetric = ["chk_dist", "chk_msd", "chk_zones", "chk_xy"].some(id => {
+    const anyMetric = ["chk_dist", "chk_msd", "chk_zones", "chk_zchange", "chk_xy"].some(id => {
       const el = document.getElementById(id);
       return Boolean(el && el.checked);
     });

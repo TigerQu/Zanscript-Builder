@@ -92,7 +92,9 @@
 .tl-light  { background: #fff8c5; color: #7d4e00; }
 .tl-dark   { background: #24292f; color: #f0f6fc; }
 .tl-pulse  { background: #ff818266; color: #82071e; }
-.tl-vib    { background: #ddf4ff; color: #0550ae; }
+.tl-vib    { background: #fbcfe8; color: #831843; }
+.tl-audio  { background: #cffafe; color: #164e63; }
+.tl-ppi    { background: #e0e7ff; color: #3730a3; }
 .tl-blue   { background: #dbeafe; color: #1e40af; }
 .tl-green  { background: #dcfce7; color: #166534; }
 .tl-red    { background: #fee2e2; color: #991b1b; }
@@ -346,6 +348,11 @@
   background-color: #fffaf5;
 }
 
+.nle-track-row[data-track-group="STIM"] .nle-track-hdr,
+.nle-track-row[data-track-group="STIM"] .nle-lane {
+  background-color: #fdf6fb;
+}
+
 .nle-mount-tag {
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -372,6 +379,12 @@
   background: #fff1e5;
   color: #bc4c00;
   border: 1px solid rgba(188, 76, 0, 0.28);
+}
+
+.nle-mount-stim {
+  background: #fce7f3;
+  color: #9d174d;
+  border: 1px solid rgba(157, 23, 77, 0.28);
 }
 
 .nle-mount-sum {
@@ -1086,8 +1099,16 @@
   text-overflow: ellipsis;
 }
 
+.sim-plate-cross-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .sim-temp-badge,
-.sim-vib-badge {
+.sim-vib-badge,
+.sim-audio-badge {
   height: 22px;
   line-height: 20px;
   padding: 0 8px;
@@ -1105,15 +1126,34 @@
   color: #c9d1d9;
 }
 
-.sim-vib-badge {
+.sim-vib-badge,
+.sim-audio-badge {
   background: #161b22;
   color: #8b949e;
 }
 
 .sim-vib-badge.active {
-  background: #1f6feb;
-  border-color: #58a6ff;
+  background: #be185d;
+  border-color: #f472b6;
   color: #ffffff;
+}
+
+.sim-audio-badge.active {
+  background: #0e7490;
+  border-color: #22d3ee;
+  color: #ffffff;
+}
+
+.nle-insp-audio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nle-insp-audio-row select,
+.nle-insp-audio-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Top view of the plate */
