@@ -624,7 +624,7 @@ function renderStimParams() {
               <select id="nleInspVibSel">${opts}</select>
             </div>`;
         extraRowHtml = `
-            <div class="nle-insp-extra-row">
+            <div class="nle-insp-extra-row is-single">
               <div class="nle-insp-field">
                 <label for="nleInspRepMode">Trigger Mode</label>
                 <div class="nle-insp-audio-row">
@@ -653,7 +653,7 @@ function renderStimParams() {
               </div>
             </div>`;
         extraRowHtml = `
-            <div class="nle-insp-extra-row">
+            <div class="nle-insp-extra-row is-single">
               <div class="nle-insp-field">
                 <label for="nleInspRepMode">Trigger Mode</label>
                 <div class="nle-insp-audio-row">
@@ -681,15 +681,9 @@ function renderStimParams() {
             </div>`;
         if (isLight) {
           const endValShown = hasRamp ? Math.round(sel.endVal) : (sel.val >= 50 ? 0 : 100);
+          const endDisabled = (!hasRamp || !hwIsZ3) ? "disabled" : "";
           extraRowHtml = `
             <div class="nle-insp-extra-row">
-              <div class="nle-insp-field">
-                <label class="nle-insp-inline-toggle">
-                  <input type="checkbox" id="nleInspRampChk" ${hasRamp ? "checked" : ""} ${!hwIsZ3 ? "disabled" : ""}>
-                  Smooth PWM Ramp to End (%)
-                </label>
-                <input type="number" id="nleInspEndVal" min="0" max="100" step="5" value="${endValShown}" ${(!hasRamp || !hwIsZ3) ? "disabled" : ""}>
-              </div>
               <div class="nle-insp-field">
                 <label for="nleInspStrobeSel">Flash / Strobe Mode</label>
                 <select id="nleInspStrobeSel">
@@ -698,6 +692,16 @@ function renderStimParams() {
                   <option value="5" ${curStrobe === 5 ? "selected" : ""}>5 Hz Strobe (100ms)</option>
                   <option value="10" ${curStrobe === 10 ? "selected" : ""}>10 Hz Strobe (50ms)</option>
                 </select>
+              </div>
+              <div class="nle-insp-field nle-insp-field-wide">
+                <label class="nle-insp-inline-toggle">
+                  <input type="checkbox" id="nleInspRampChk" ${hasRamp ? "checked" : ""} ${!hwIsZ3 ? "disabled" : ""}>
+                  End Brightness (%) &middot; Smooth PWM Ramp
+                </label>
+                <div class="nle-insp-slider">
+                  <input type="range" id="nleInspEndRange" min="0" max="100" step="1" value="${endValShown}" ${endDisabled} aria-label="End Brightness (%)">
+                  <input type="number" id="nleInspEndVal" min="0" max="100" step="1" value="${endValShown}" ${endDisabled}>
+                </div>
               </div>
             </div>`;
         }
@@ -739,6 +743,7 @@ function renderStimParams() {
       const repMode = document.getElementById("nleInspRepMode");
       const repSecInp = document.getElementById("nleInspRepSec");
       const rampChk = document.getElementById("nleInspRampChk");
+      const endRangeInp = document.getElementById("nleInspEndRange");
       const endValInp = document.getElementById("nleInspEndVal");
       const strobeSel = document.getElementById("nleInspStrobeSel");
       const dBtn = document.getElementById("nleDelClipBtn");
@@ -828,10 +833,26 @@ function renderStimParams() {
         });
       }
       if (endValInp) {
+        const applyEndVal = (rawVal, fromRange) => {
+          const raw = parseFloat(rawVal);
+          if (!Number.isFinite(raw)) return;
+          const ev = Math.min(100, Math.max(0, Math.round(raw)));
+          sel.endVal = ev;
+          if (fromRange) endValInp.value = ev;
+          if (!fromRange && endRangeInp) endRangeInp.value = ev;
+          syncNleDom(false, false);
+          scheduleRefresh();
+        };
+        if (endRangeInp) {
+          endRangeInp.addEventListener("input", () => applyEndVal(endRangeInp.value, true));
+          endRangeInp.addEventListener("change", () => flushRefresh());
+        }
+        endValInp.addEventListener("input", () => applyEndVal(endValInp.value, false));
         endValInp.addEventListener("change", () => {
           const ev = Math.min(100, Math.max(0, Math.round(parseFloat(endValInp.value) || 0)));
           sel.endVal = ev;
           endValInp.value = ev;
+          if (endRangeInp) endRangeInp.value = ev;
           syncNleDom(false, false);
           flushRefresh();
         });
