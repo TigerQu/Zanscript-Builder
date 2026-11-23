@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zantiks MWP CSV Analyzer</title>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/analyzer.css">
+</head>
+<body class="analyzer-body">
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-title">
+      <nav class="suite-nav" aria-label="Zantiks MWP Suite">
+        <a class="suite-nav-link" href="zantiks_script_generator.html">Script Builder</a>
+        <a class="suite-nav-link active" href="zantiks_csv_analyzer.html" aria-current="page">CSV Analyzer</a>
+      </nav>
+      <h1>
+        Zantiks MWP CSV Analyzer
+        <span class="badge-hw" id="analyzerModeBadge">Offline QC</span>
+      </h1>
+      <p>10-second QC, interactive plate &amp; maze group painting, pure-SVG plots, and GraphPad Prism / Python exports. Runs 100% offline.</p>
+    </div>
+    <div class="topbar-actions">
+      <div class="az-demo-picker">
+        <label class="sr-only" for="demoPresetSelect">Demo dataset</label>
+        <select id="demoPresetSelect" class="az-select az-select-topbar" aria-label="Load demo dataset">
+          <option value="">Load Demo…</option>
+          <option value="ld_24w">L/D 24-Well</option>
+          <option value="ppi_24w">PPI 24-Well</option>
+          <option value="ymaze_15">Y-Maze 15</option>
+        </select>
+      </div>
+      <button class="btn" type="button" id="useBuilderConfigBtn" title="Load the latest experiment saved in Script Builder (localStorage)">Use Latest Builder Config</button>
+      <button class="btn" type="button" id="clearAllBtn">Clear</button>
+    </div>
+  </div>
+</header>
+
+<main class="wizard">
+
+  <!-- 5-STEP STEPPER -->
+  <nav class="stepper stepper-5" id="analyzerStepper" aria-label="Analyzer steps">
+    <button type="button" class="stepper-item active" data-goto="data"><span class="stepper-num">1</span><span class="stepper-label">Data</span></button>
+    <button type="button" class="stepper-item" data-goto="qc"><span class="stepper-num">2</span><span class="stepper-label">QC</span></button>
+    <button type="button" class="stepper-item" data-goto="groups"><span class="stepper-num">3</span><span class="stepper-label">Groups</span></button>
+    <button type="button" class="stepper-item" data-goto="plots"><span class="stepper-num">4</span><span class="stepper-label">Plots</span></button>
+    <button type="button" class="stepper-item" data-goto="export"><span class="stepper-num">5</span><span class="stepper-label">Export</span></button>
+  </nav>
+
+  <div class="wizard-main">
+
+    <!-- ===================================================================== -->
+    <!-- STEP 1: DATA & CONTEXT IMPORT                                         -->
+    <!-- ===================================================================== -->
+    <section class="wizard-page active" data-page="data">
+      <header class="page-head">
+        <h2 class="page-title">Import Data &amp; Context</h2>
+        <p class="page-desc">Drop Zantiks MWP CSV exports and an optional Script Builder <code>experiment.json</code> or <code>.zip</code> bundle, or load a built-in demo dataset below.</p>
+      </header>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Upload Zantiks Files</h3>
+          <span class="card-hint">Summary CSV + optional _ZCHANGE, _XY, experiment.json, .zip, or plate map</span>
+        </div>
+
+        <div class="az-dropzone" id="dropZone" role="button" tabindex="0" aria-label="Drop Zantiks CSV files, experiment.json, or Builder .zip bundle">
+          <input type="file" id="analyzerFileInput" accept=".csv,.json,.zip,text/csv,application/json,application/zip" multiple hidden>
+          <div class="az-drop-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <div class="az-drop-copy">
+            <div class="az-drop-title">Drop Zantiks <code>.csv</code> files (Summary, <code>_ZCHANGE</code>, <code>_XY</code>) &amp; optional <code>experiment.json</code> / Builder <code>.zip</code></div>
+            <div class="az-drop-sub">Multiple files supported · Everything stays local in your browser over <code>file://</code></div>
+          </div>
+          <button type="button" class="btn btn-sm btn-primary az-browse-btn" id="browseFilesBtn">Choose Files…</button>
+        </div>
+
+        <div class="az-context-row">
+          <div class="az-context-badge" id="contextBadge">
+            <span class="az-ctx-dot"></span>
+            <span id="contextBadgeText">No Builder context attached</span>
+            <button type="button" class="az-ctx-clear" id="clearContextBtn" title="Detach experiment context" style="display:none;">&times;</button>
+          </div>
+          <button type="button" class="btn btn-sm" id="step1BuilderConfigBtn">Use Latest Builder Config</button>
+        </div>
+      </div>
+
+      <div class="card" id="loadedOverviewCard">
+        <div class="card-header">
+          <h3 class="card-title">Loaded Dataset Overview</h3>
+          <span class="card-hint" id="loadedOverviewHint">Waiting for CSV</span>
+        </div>
+
+        <div class="az-file-chips" id="loadedFileChips">
+          <span class="az-empty-chip-hint">No CSV files loaded yet. Drop files above or pick one of the demo datasets below.</span>
+        </div>
+
+        <div class="az-overview-grid" id="loadedOverviewGrid" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Built-in Demo Datasets</h3>
+          <span class="card-hint">Click any preset to explore the full 5-step workflow immediately</span>
+        </div>
+        <div class="az-demo-grid-3" id="step1DemoCards">
+          <button type="button" class="option-tile az-demo-card" data-demo="ld_24w">
+            <span class="tile-name"><span>L/D 24-Well</span><span class="badge-hw">VMR + QC</span></span>
+            <span class="tile-meta">3 dose groups, empty well D5, spike-glitch well D6, DIST + MSD + Z1/Z2 + TEMP_C.</span>
+          </button>
+          <button type="button" class="option-tile az-demo-card" data-demo="ppi_24w">
+            <span class="tile-name"><span>PPI 24-Well</span><span class="badge-hw">% PPI</span></span>
+            <span class="tile-meta">Alternating PULSE_ALONE &amp; PPI_TRIAL blocks showing group startle &amp; % PPI separation.</span>
+          </button>
+          <button type="button" class="option-tile az-demo-card" data-demo="ymaze_15">
+            <span class="tile-name"><span>Y-Maze 15</span><span class="badge-hw">SAB %</span></span>
+            <span class="tile-meta">15-arena Y-Maze Summary CSV paired with _ZCHANGE events for transition matrix &amp; SAB %.</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- STEP 2: QUALITY CONTROL & DIAGNOSTICS                                 -->
+    <!-- ===================================================================== -->
+    <section class="wizard-page" data-page="qc">
+      <header class="page-head">
+        <h2 class="page-title">Quality Control &amp; Diagnostics</h2>
+        <p class="page-desc">Spot empty or dead wells, reflection spikes, and chamber temperature drift in seconds. Exclude flagged wells with one click before analyzing groups.</p>
+      </header>
+
+      <div class="card az-step-empty" data-requires-csv-empty>
+        <h3>Load a CSV dataset first</h3>
+        <p>Import a Zantiks summary CSV on Step 1 (or try a built-in demo) to inspect per-well quality control, plate heatmaps, and temperature curves.</p>
+        <div class="az-step-empty-actions">
+          <button type="button" class="btn btn-primary" data-goto="data">&larr; Go to Step 1: Data</button>
+          <button type="button" class="btn" data-demo="ld_24w">Try L/D 24-Well Demo</button>
+          <button type="button" class="btn" data-demo="ppi_24w">PPI 24-Well</button>
+          <button type="button" class="btn" data-demo="ymaze_15">Y-Maze 15</button>
+        </div>
+      </div>
+
+      <div data-requires-csv-body style="display:none;">
+        <!-- 4-Card QC KPI Strip -->
+        <div class="az-kpi-strip-4" id="kpiStrip" aria-label="Quality control overview">
+          <div class="az-kpi-card">
+            <div class="az-kpi-label">Active Wells</div>
+            <div class="az-kpi-value" id="kpiActiveWells">0 / 0</div>
+            <div class="az-kpi-sub" id="kpiActiveWellsSub">0 excluded</div>
+          </div>
+          <div class="az-kpi-card" id="kpiEmptyCard">
+            <div class="az-kpi-label">Empty / Dead</div>
+            <div class="az-kpi-value" id="kpiEmptyCount">0</div>
+            <div class="az-kpi-sub" id="kpiEmptyList">All wells active</div>
+          </div>
+          <div class="az-kpi-card" id="kpiSpikeCard">
+            <div class="az-kpi-label">Spike Glitches</div>
+            <div class="az-kpi-mid-row">
+              <div class="az-kpi-value" id="kpiSpikeCount">0</div>
+              <button type="button" class="btn btn-xs btn-warn" id="excludeFlaggedBtn">Exclude Flagged</button>
+            </div>
+            <div class="az-kpi-bot-row">
+              <div class="az-kpi-sub" id="kpiSpikeList">No reflection spikes</div>
+              <button type="button" class="btn btn-xs" id="restoreAllWellsBtn" style="display:none;">Include All</button>
+            </div>
+          </div>
+          <div class="az-kpi-card">
+            <div class="az-kpi-label">Chamber Temp (TEMP_C)</div>
+            <div class="az-kpi-value" id="kpiTempRange">—</div>
+            <div class="az-kpi-sub" id="kpiTempSub">No temperature column</div>
+          </div>
+        </div>
+
+        <!-- Card 1: Plate / Maze QC Heatmap -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Plate / Maze QC Heatmap</h3>
+              <span class="card-hint" id="qcPlateSubtitle">Click any well to inspect details · Shift+click to toggle exclusion</span>
+            </div>
+            <div class="az-inline-control">
+              <label for="plateMetricSel">Color metric</label>
+              <select id="plateMetricSel" class="az-select az-select-sm"></select>
+            </div>
+          </div>
+
+          <div class="az-heatmap-bar-row">
+            <div class="az-heatmap-legend">
+              <span class="az-legend-num" id="heatLegendMin">0</span>
+              <div class="az-legend-bar" id="heatLegendBar"></div>
+              <span class="az-legend-num" id="heatLegendMax">100</span>
+            </div>
+            <div class="az-qc-legend-row">
+              <span class="az-qc-dot-item"><span class="az-qc-sym az-sym-empty"></span>Empty/Dead</span>
+              <span class="az-qc-dot-item"><span class="az-qc-sym az-sym-spike">!</span>Spike Glitch</span>
+              <span class="az-qc-dot-item"><span class="az-qc-sym az-sym-excl">&times;</span>Excluded</span>
+            </div>
+          </div>
+
+          <div class="az-plate-svg-wrap az-qc-plate-stage" id="qcPlateSvgWrap">
+            <svg id="qcPlateSvg" class="az-plate-svg" viewBox="-4 -4 136 94" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Plate quality control heatmap"></svg>
+            <div class="az-chart-tooltip" id="qcPlateTooltip" style="display:none;"></div>
+          </div>
+
+          <div class="az-well-inspector" id="qcWellInspector">
+            <div class="az-well-insp-info" id="qcWellInspectorText">Click any well on the plate map to inspect its QC metrics or toggle exclusion.</div>
+            <button type="button" class="btn btn-xs" id="qcWellInspectorExcludeBtn" style="display:none;">Exclude</button>
+          </div>
+        </div>
+
+        <!-- Card 2: Chamber Temperature (TEMP_C) -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Chamber Temperature (<code>TEMP_C</code>)</h3>
+              <span class="card-hint" id="tempChartHint">Measured temperature across the assay</span>
+            </div>
+            <button type="button" class="btn btn-xs" id="downloadTempSvgBtn">Download SVG</button>
+          </div>
+          <div class="az-chart-stage" id="tempChartStage">
+            <svg id="tempChartSvg" class="az-svg-chart" viewBox="0 0 880 225" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="az-chart-tooltip" id="tempTooltip" style="display:none;"></div>
+          </div>
+        </div>
+
+        <!-- Card 3: QC Diagnostics Table -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">QC Diagnostics &amp; Anomaly Table</h3>
+              <span class="card-hint">Anomalies sorted first · Toggle exclusion on any well</span>
+            </div>
+            <div class="az-toolbar-left">
+              <select id="qcFilterSel" class="az-select az-select-sm" aria-label="Filter QC table">
+                <option value="flagged" selected>Flagged &amp; Excluded Only</option>
+                <option value="all">All Wells</option>
+              </select>
+              <select id="qcSortSel" class="az-select az-select-sm" aria-label="Sort QC table">
+                <option value="severity" selected>Sort: Severity</option>
+                <option value="spikes">Sort: Spike Count</option>
+                <option value="dist_asc">Sort: Lowest Distance</option>
+                <option value="dist_desc">Sort: Highest Distance</option>
+                <option value="well">Sort: Well ID</option>
+              </select>
+              <button type="button" class="btn btn-xs btn-warn" id="qcExcludeFlaggedBtn">Exclude All Flagged</button>
+            </div>
+          </div>
+
+          <div class="az-qc-table-wrap">
+            <table class="az-table az-qc-table">
+              <thead>
+                <tr>
+                  <th>Excl.</th>
+                  <th>Well</th>
+                  <th>Group</th>
+                  <th>QC Flags</th>
+                  <th class="num">Total Dist</th>
+                  <th class="num">Max Bin</th>
+                  <th class="num">Spikes</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="qcAnomalyBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- STEP 3: TREATMENT GROUPS & PLATE MAP PAINTER                          -->
+    <!-- ===================================================================== -->
+    <section class="wizard-page" data-page="groups">
+      <header class="page-head">
+        <h2 class="page-title">Treatment Groups &amp; Plate Map</h2>
+        <p class="page-desc">Select a group swatch and click or drag across wells to assign experimental treatments. Save your plate map as JSON to reuse across replicates.</p>
+      </header>
+
+      <div class="card az-step-empty" data-requires-csv-empty>
+        <h3>Load a CSV dataset first</h3>
+        <p>Import a Zantiks summary CSV on Step 1 (or try a built-in demo) to paint treatment groups onto your plate or maze layout.</p>
+        <div class="az-step-empty-actions">
+          <button type="button" class="btn btn-primary" data-goto="data">&larr; Go to Step 1: Data</button>
+          <button type="button" class="btn" data-demo="ld_24w">Try L/D 24-Well Demo</button>
+          <button type="button" class="btn" data-demo="ppi_24w">PPI 24-Well</button>
+          <button type="button" class="btn" data-demo="ymaze_15">Y-Maze 15</button>
+        </div>
+      </div>
+
+      <div data-requires-csv-body style="display:none;">
+        <div class="az-groups-split">
+          <!-- Left: Large Interactive Plate / Maze Painter -->
+          <div class="card az-groups-canvas-card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Interactive Plate / Maze Painter</h3>
+                <span class="card-hint" id="brushPlateSubtitle">Click or drag across wells to paint</span>
+              </div>
+              <span class="badge-custom" id="activeBrushIndicator">Brush: Unassigned</span>
+            </div>
+
+            <div class="az-plate-svg-wrap az-brush-plate-stage" id="brushPlateSvgWrap">
+              <svg id="brushPlateSvg" class="az-plate-svg" viewBox="-4 -4 136 94" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Interactive treatment group painter"></svg>
+              <div class="az-chart-tooltip" id="brushPlateTooltip" style="display:none;"></div>
+            </div>
+
+            <div class="az-plate-foot-hint">Click or drag across wells to paint the active group. Excluded wells stay dimmed and crossed out.</div>
+          </div>
+
+          <!-- Right: Group Swatches, Rename, Quick Fill & Plate Map JSON -->
+          <div class="card az-groups-panel-card">
+            <div class="card-header">
+              <h3 class="card-title">Group Manager</h3>
+              <span class="card-hint">Swatches &amp; shortcuts</span>
+            </div>
+
+            <div class="az-brush-swatches" id="groupSwatchList" role="group" aria-label="Treatment groups"></div>
+
+            <div class="az-group-manager-stack">
+              <div class="az-brush-rename">
+                <label for="activeGroupNameInput">Rename selected group</label>
+                <input type="text" id="activeGroupNameInput" autocomplete="off" maxlength="32">
+              </div>
+
+              <div class="az-brush-btns">
+                <button type="button" class="btn btn-sm" id="addGroupBtn">+ Add Group</button>
+                <button type="button" class="btn btn-sm" id="deleteGroupBtn" title="Remove selected group">Remove Group</button>
+              </div>
+
+              <div class="az-brush-section-lbl">Painting &amp; Quick Fill</div>
+              <div class="az-brush-shortcuts">
+                <button type="button" class="btn btn-sm" id="brushExcludeBtn" data-brush-tool="exclude" title="Click or drag wells to toggle excluded status">Toggle Exclude Brush</button>
+                <button type="button" class="btn btn-sm" id="autoAssignColsBtn" title="Distribute groups evenly by plate column">Fill by Column</button>
+                <button type="button" class="btn btn-sm" id="autoAssignRowsBtn" title="Distribute groups evenly by plate row">Fill by Row</button>
+              </div>
+
+              <div class="az-brush-section-lbl">Plate Map File</div>
+              <div class="az-brush-io">
+                <button type="button" class="btn btn-sm" id="savePlateMapBtn">Save Map (.json)</button>
+                <button type="button" class="btn btn-sm" id="loadPlateMapBtn">Load Map (.json)</button>
+                <input type="file" id="plateMapFileInput" accept=".json,application/json" hidden>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- STEP 4: INTERACTIVE PURE-SVG PLOTS                                    -->
+    <!-- ===================================================================== -->
+    <section class="wizard-page" data-page="plots">
+      <header class="page-head">
+        <h2 class="page-title">Interactive Plots</h2>
+        <p class="page-desc">Explore group time-series curves, phase and protocol comparisons (VMR, Zone Preference, % PPI, SAB %), and zone transition matrices. Every plot exports as publication-ready SVG.</p>
+      </header>
+
+      <div class="card az-step-empty" data-requires-csv-empty>
+        <h3>Load a CSV dataset first</h3>
+        <p>Import a Zantiks summary CSV on Step 1 (or try a built-in demo) to generate interactive pure-SVG charts.</p>
+        <div class="az-step-empty-actions">
+          <button type="button" class="btn btn-primary" data-goto="data">&larr; Go to Step 1: Data</button>
+          <button type="button" class="btn" data-demo="ld_24w">Try L/D 24-Well Demo</button>
+          <button type="button" class="btn" data-demo="ppi_24w">PPI 24-Well</button>
+          <button type="button" class="btn" data-demo="ymaze_15">Y-Maze 15</button>
+        </div>
+      </div>
+
+      <div data-requires-csv-body style="display:none;">
+        <div class="az-charts-panel">
+          <div class="az-chart-tabs az-tabs-3" id="chartTabsBar" role="tablist">
+            <button type="button" class="az-chart-tab active" role="tab" aria-selected="true" data-chart-tab="timeseries">
+              <span class="az-tab-kicker">01 · Trace</span>
+              <span class="az-tab-name">Time Series (Mean &plusmn; SEM)</span>
+            </button>
+            <button type="button" class="az-chart-tab" role="tab" aria-selected="false" data-chart-tab="comparison">
+              <span class="az-tab-kicker">02 · Protocol Stats</span>
+              <span class="az-tab-name">Phase &amp; Group Comparison</span>
+            </button>
+            <button type="button" class="az-chart-tab" role="tab" aria-selected="false" data-chart-tab="zchange">
+              <span class="az-tab-kicker">03 · Transitions</span>
+              <span class="az-tab-name">Zone Events (_ZCHANGE)</span>
+            </button>
+          </div>
+
+          <!-- TAB 1: TIME SERIES -->
+          <div class="az-tab-pane active" id="tabPane-timeseries" role="tabpanel">
+            <div class="az-chart-toolbar">
+              <div class="az-toolbar-left">
+                <div class="az-inline-control">
+                  <label for="tsMetricSel">Metric</label>
+                  <select id="tsMetricSel" class="az-select az-select-sm"></select>
+                </div>
+                <div class="az-inline-control">
+                  <label for="tsSmoothSel">Binning</label>
+                  <select id="tsSmoothSel" class="az-select az-select-sm">
+                    <option value="1" selected>1x (Raw)</option>
+                    <option value="5">5x Smooth</option>
+                    <option value="10">10x Smooth</option>
+                    <option value="30">30x Smooth</option>
+                  </select>
+                </div>
+                <label class="az-toggle-pill"><input type="checkbox" id="tsShowSem" checked> <span>&plusmn; SEM</span></label>
+                <label class="az-toggle-pill"><input type="checkbox" id="tsShowPhases" checked> <span>Phases</span></label>
+                <label class="az-toggle-pill"><input type="checkbox" id="tsShowStim" checked> <span>Stimuli</span></label>
+              </div>
+              <div class="az-toolbar-right">
+                <button type="button" class="btn btn-xs" id="downloadTsSvgBtn">Download SVG</button>
+              </div>
+            </div>
+            <div class="az-chart-legend" id="tsLegend"></div>
+            <div class="az-chart-stage" id="tsChartStage">
+              <svg id="tsChartSvg" class="az-svg-chart" viewBox="0 0 880 320" preserveAspectRatio="xMidYMid meet"></svg>
+              <div class="az-chart-tooltip" id="tsTooltip" style="display:none;"></div>
+            </div>
+          </div>
+
+          <!-- TAB 2: PHASE & GROUP COMPARISON -->
+          <div class="az-tab-pane" id="tabPane-comparison" role="tabpanel">
+            <div class="az-chart-toolbar">
+              <div class="az-toolbar-left">
+                <div class="az-inline-control">
+                  <label for="compViewSel">Comparison</label>
+                  <select id="compViewSel" class="az-select az-select-sm"></select>
+                </div>
+              </div>
+              <div class="az-toolbar-right">
+                <button type="button" class="btn btn-xs" id="downloadCompSvgBtn">Download SVG</button>
+              </div>
+            </div>
+            <div class="az-chart-legend" id="compLegend"></div>
+            <div class="az-chart-stage" id="compChartStage">
+              <svg id="compChartSvg" class="az-svg-chart" viewBox="0 0 880 300" preserveAspectRatio="xMidYMid meet"></svg>
+              <div class="az-chart-tooltip" id="compTooltip" style="display:none;"></div>
+            </div>
+            <div class="az-comp-summary" id="compSummaryStrip"></div>
+          </div>
+
+          <!-- TAB 3: ZONE EVENTS (_ZCHANGE) -->
+          <div class="az-tab-pane" id="tabPane-zchange" role="tabpanel">
+            <div id="zchangeEmptyHint" class="az-zchange-empty">
+              <h3>No <code>_ZCHANGE</code> zone event CSV loaded</h3>
+              <p>Drop a Zantiks <code>_ZCHANGE</code> CSV on Step 1 alongside your summary CSV to inspect per-arena zone transitions, zone-to-zone transition matrices, and 3-arm Spontaneous Alternation (<code>SAB %</code>).</p>
+              <p class="az-zchange-tip">In <strong>Script Builder &rarr; Step 5 (Data &amp; Video)</strong>, enable <strong>Zone Entry / Exit Event Log</strong> to record a companion <code>_ZCHANGE</code> file on the MWP.</p>
+              <button type="button" class="btn btn-sm btn-primary" id="loadYmazeDemoFromTabBtn">Load Y-Maze 15 Demo (with _ZCHANGE)</button>
+            </div>
+            <div id="zchangeContent" style="display:none;">
+              <div class="az-chart-toolbar">
+                <div class="az-toolbar-left">
+                  <span class="az-toolbar-title">Zone Transitions &amp; Spontaneous Alternation</span>
+                  <span class="card-hint" id="zchangeSummaryHint"></span>
+                </div>
+                <div class="az-toolbar-right">
+                  <button type="button" class="btn btn-xs" id="downloadZchangeSvgBtn">Download SVG</button>
+                </div>
+              </div>
+              <div class="az-zchange-kpis" id="zchangeKpis"></div>
+              <div class="az-zchange-viz-grid">
+                <div class="az-zchange-box">
+                  <div class="az-subbox-title">Zone-to-Zone Transition Matrix</div>
+                  <div class="az-chart-stage" id="zchangeMatrixStage">
+                    <svg id="zchangeMatrixSvg" class="az-svg-chart" viewBox="0 0 360 250" preserveAspectRatio="xMidYMid meet"></svg>
+                  </div>
+                </div>
+                <div class="az-zchange-box">
+                  <div class="az-subbox-title">Per-Arena Transitions &amp; SAB %</div>
+                  <div class="az-chart-stage" id="zchangeArenaStage">
+                    <svg id="zchangeArenaSvg" class="az-svg-chart" viewBox="0 0 460 250" preserveAspectRatio="xMidYMid meet"></svg>
+                    <div class="az-chart-tooltip" id="zchangeTooltip" style="display:none;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- STEP 5: EXPORT HUB & PER-WELL TABLE                                   -->
+    <!-- ===================================================================== -->
+    <section class="wizard-page" data-page="export">
+      <header class="page-head">
+        <h2 class="page-title">Export &amp; Well Table</h2>
+        <p class="page-desc">Download publication-ready datasets for GraphPad Prism, R/pandas tidy tables, or a reproducible Python analysis script, and audit every well below.</p>
+      </header>
+
+      <div class="card az-step-empty" data-requires-csv-empty>
+        <h3>Load a CSV dataset first</h3>
+        <p>Import a Zantiks summary CSV on Step 1 (or try a built-in demo) to inspect the per-well summary table and export Prism, tidy CSV, or Python files.</p>
+        <div class="az-step-empty-actions">
+          <button type="button" class="btn btn-primary" data-goto="data">&larr; Go to Step 1: Data</button>
+          <button type="button" class="btn" data-demo="ld_24w">Try L/D 24-Well Demo</button>
+          <button type="button" class="btn" data-demo="ppi_24w">PPI 24-Well</button>
+          <button type="button" class="btn" data-demo="ymaze_15">Y-Maze 15</button>
+        </div>
+      </div>
+
+      <div data-requires-csv-body style="display:none;">
+        <!-- Card 1: Export Hub -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Export Hub</h3>
+            <span class="card-hint">Excluded wells are automatically omitted from Prism grouped exports</span>
+          </div>
+
+          <div class="az-export-hub-grid">
+            <div class="az-export-panel">
+              <div class="az-export-panel-title">GraphPad Prism Grouped Table</div>
+              <p class="az-export-panel-desc">Exports active wells arranged side-by-side by treatment group for instant paste into Prism Column tables.</p>
+              <div class="az-export-panel-controls">
+                <div class="az-inline-control">
+                  <label for="prismMetricSel">Metric</label>
+                  <select id="prismMetricSel" class="az-select az-select-sm"></select>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" id="exportPrismBtn">Prism Grouped CSV</button>
+                <button type="button" class="btn btn-sm" id="copyPrismBtn">Copy Prism Table</button>
+              </div>
+            </div>
+
+            <div class="az-export-panel">
+              <div class="az-export-panel-title">Analysis Tables &amp; Reproducible Code</div>
+              <p class="az-export-panel-desc">Download long-format bin rows (R / seaborn), per-well summary metrics, or a standalone Python script pre-wired with your groups and exclusions.</p>
+              <div class="az-export-panel-controls">
+                <button type="button" class="btn btn-sm" id="exportTidyBtn">Tidy Long CSV</button>
+                <button type="button" class="btn btn-sm" id="exportSummaryBtn">Well Summary CSV</button>
+                <button type="button" class="btn btn-sm" id="exportPythonBtn">Python Script (.py)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Per-Well Summary Table -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Per-Well Summary Table</h3>
+              <span class="card-hint" id="wellTableCountHint">0 wells</span>
+            </div>
+            <div class="az-toolbar-left">
+              <div class="az-inline-control">
+                <label for="tableGroupFilter">Group</label>
+                <select id="tableGroupFilter" class="az-select az-select-sm">
+                  <option value="__ALL__" selected>All Groups</option>
+                </select>
+              </div>
+              <div class="az-inline-control">
+                <label for="tableStatusFilter">Status</label>
+                <select id="tableStatusFilter" class="az-select az-select-sm">
+                  <option value="all" selected>All Wells</option>
+                  <option value="active">Active Only</option>
+                  <option value="excluded">Excluded Only</option>
+                  <option value="flagged">QC Flagged Only</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="az-table-wrap">
+            <table class="az-table az-well-table" id="wellSummaryTable">
+              <thead id="wellTableHead"></thead>
+              <tbody id="wellTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BACK / NEXT WIZARD NAV -->
+    <div class="wizard-nav">
+      <button type="button" class="btn" id="wizPrevBtn" disabled>&larr; Back</button>
+      <span class="wizard-progress" id="wizProgress">1 / 5</span>
+      <button type="button" class="btn btn-primary" id="wizNextBtn">Next: QC &rarr;</button>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR: DATASET SUMMARY (matches Script Builder's Run Summary) -->
+  <aside class="run-summary" aria-label="Dataset summary">
+    <div class="summary-card">
+      <div class="summary-head">
+        <div class="summary-head-row">
+          <span>Dataset Summary</span>
+          <div class="summary-actions">
+            <button type="button" class="btn btn-xs" id="sidebarQuickDemoBtn" title="Load the 24-Well Light/Dark demo">Demo</button>
+            <button type="button" class="btn btn-xs" id="sidebarClearBtn" title="Clear loaded files">Clear</button>
+          </div>
+        </div>
+        <span class="summary-autosave" id="summaryStatusLine">100% offline in this browser</span>
+      </div>
+      <div class="summary-stats">
+        <div class="metric-stat">
+          <span class="stat-label">Active Wells</span>
+          <span class="stat-val" id="statActiveWells">—</span>
+        </div>
+        <div class="metric-stat">
+          <span class="stat-label">Duration</span>
+          <span class="stat-val" id="statDuration">—</span>
+        </div>
+        <div class="metric-stat">
+          <span class="stat-label">Groups</span>
+          <span class="stat-val" id="statGroups">—</span>
+        </div>
+        <div class="metric-stat">
+          <span class="stat-label">QC Flagged</span>
+          <span class="stat-val" id="statFlagged">—</span>
+        </div>
+      </div>
+      <div class="summary-list">
+        <button type="button" class="summary-row current" data-goto="data">
+          <span class="summary-key">Data</span>
+          <span class="summary-val" id="sumDataTitle">No CSV loaded</span>
+          <span class="summary-sub" id="sumDataSub">Drop CSV or pick a demo</span>
+        </button>
+        <button type="button" class="summary-row summary-row-checks" id="sumQcRow" data-goto="qc">
+          <span class="summary-key">QC</span>
+          <span class="summary-val" id="sumQcTitle">—</span>
+          <span class="summary-sub" id="sumQcSub"></span>
+        </button>
+        <button type="button" class="summary-row" data-goto="groups">
+          <span class="summary-key">Groups</span>
+          <span class="summary-val" id="sumGroupsTitle">—</span>
+          <span class="summary-sub" id="sumGroupsSub"></span>
+        </button>
+        <button type="button" class="summary-row" data-goto="plots">
+          <span class="summary-key">Plots</span>
+          <span class="summary-val" id="sumPlotsTitle">Time Series</span>
+          <span class="summary-sub" id="sumPlotsSub"></span>
+        </button>
+        <button type="button" class="summary-row" data-goto="export">
+          <span class="summary-key">Export</span>
+          <span class="summary-val" id="sumExportTitle">Prism · CSV · Py</span>
+          <span class="summary-sub" id="sumExportSub"></span>
+        </button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div class="toast" id="toast">Done</div>
+
+<!-- Optional external plate config file (loads cleanly on file://) -->
+<script src="zantiks_plate_config.js"></script>
+
+<!-- Classic synchronous scripts (shared Builder modules without Builder main.js) -->
+<script src="js/catalogs.js"></script>
+<script src="js/maze-editor.js"></script>
+<script src="js/state.js"></script>
+<script src="js/helpers.js"></script>
+<script src="js/export-utils.js"></script>
+<script src="js/experiment-io.js"></script>
+<script src="js/analyzer-core.js"></script>
+<script src="js/analyzer-ui.js"></script>
+</body>
+</html>

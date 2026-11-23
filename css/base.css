@@ -24,7 +24,7 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   /* Layout spacing */
-  --page-max: 1240px;
+  --page-max: 1380px;
   --page-pad-x: 32px;
   --col-gap: 28px;
   --card-gap: 20px;
@@ -34,6 +34,10 @@
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -50,7 +54,7 @@ body {
 .topbar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  padding: 18px var(--page-pad-x);
+  padding: 14px var(--page-pad-x) 16px;
 }
 
 .topbar-inner {
@@ -66,6 +70,52 @@ body {
 .topbar-title {
   flex: 1 1 420px;
   min-width: 0;
+}
+
+/* Suite Switcher (shared between Script Builder and CSV Analyzer) */
+.suite-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: 8px;
+  background: #f3f5f8;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  max-width: 100%;
+}
+
+.suite-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+.suite-nav-link:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.suite-nav-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.suite-nav-link.active {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: rgba(9, 105, 218, 0.25);
+  box-shadow: 0 1px 2px rgba(31, 35, 40, 0.08);
 }
 
 .topbar-title h1 {

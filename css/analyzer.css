@@ -1,0 +1,1380 @@
+/* Zantiks MWP CSV Analyzer - 5-step wizard matching Script Builder, QC KPIs, plate/maze maps, pure-SVG charts, exports */
+
+body.analyzer-body {
+  --danger: #cf222e;
+  --danger-soft: #ffebe9;
+  --danger-border: rgba(207, 34, 46, 0.32);
+  --purple: #8250df;
+  --purple-soft: #fbefff;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 5-step stepper override (inherits all .stepper rules from css/base.css) */
+.stepper.stepper-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* Shared metric-stat styles for right sidebar (matches css/export.css) */
+.metric-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.metric-stat .stat-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.metric-stat .stat-val {
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Styled custom select controls */
+.az-select {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16' fill='none' stroke='%2359636e' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 6 8 10 12 6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 28px 7px 11px;
+  cursor: pointer;
+  line-height: 1.3;
+  transition: border-color 0.12s, background-color 0.12s, box-shadow 0.12s;
+}
+
+.az-select:hover {
+  border-color: #afb8c1;
+  background-color: var(--surface-subtle);
+}
+
+.az-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
+}
+
+.az-select-topbar {
+  padding: 7px 30px 7px 12px;
+  font-weight: 500;
+  min-width: 148px;
+}
+
+.az-select-sm {
+  font-size: 12px;
+  padding: 4px 26px 4px 9px;
+  height: 28px;
+}
+
+.az-demo-picker {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Warning / Danger utility buttons */
+.btn-warn {
+  background: var(--warn-soft);
+  border-color: rgba(154, 103, 0, 0.42);
+  color: #6b4500;
+  font-weight: 600;
+}
+
+.btn-warn:hover {
+  background: #fdeea1;
+  border-color: rgba(154, 103, 0, 0.65);
+}
+
+.btn-danger-soft {
+  background: var(--danger-soft);
+  border-color: var(--danger-border);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.btn-danger-soft:hover {
+  background: #ffd8d5;
+  border-color: var(--danger);
+}
+
+/* Step 1: Dropzone, Context Row, Overview, Demo Grid */
+.az-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  cursor: pointer;
+  transition: border-color 0.14s, background-color 0.14s, box-shadow 0.14s;
+}
+
+.az-dropzone:hover,
+.az-dropzone:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  background: #f0f8ff;
+}
+
+.az-dropzone.is-dragover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.az-drop-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.az-drop-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.az-drop-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.az-drop-title code,
+.az-drop-sub code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: rgba(9, 105, 218, 0.08);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.az-drop-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.az-browse-btn {
+  flex-shrink: 0;
+}
+
+.az-context-row {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.az-context-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-muted);
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 100%;
+}
+
+.az-context-badge.is-loaded {
+  background: var(--success-soft);
+  border-color: rgba(26, 127, 55, 0.32);
+  color: #116329;
+  font-weight: 500;
+}
+
+.az-ctx-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #afb8c1;
+  flex-shrink: 0;
+}
+
+.az-context-badge.is-loaded .az-ctx-dot {
+  background: var(--success);
+}
+
+.az-ctx-clear {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.7;
+}
+
+.az-ctx-clear:hover {
+  opacity: 1;
+}
+
+/* File chips */
+.az-file-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.az-empty-chip-hint {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.az-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  font-size: 12px;
+  color: var(--text);
+  max-width: 100%;
+}
+
+.az-file-chip-kind {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.az-file-chip-kind.is-zchange {
+  background: var(--purple-soft);
+  color: var(--purple);
+}
+
+.az-file-chip-kind.is-xy {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.az-file-chip-name {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.az-file-chip-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.az-file-chip-rm {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 3px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 50%;
+}
+
+.az-file-chip-rm:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* Loaded Overview Metrics Grid */
+.az-overview-grid {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-muted);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.az-ov-cell {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.az-ov-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.az-ov-val {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.az-ov-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Step 1 Demo 3-card Grid */
+.az-demo-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.az-demo-card {
+  width: 100%;
+  padding: 13px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.az-demo-card .tile-meta {
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+/* Empty State Card on Steps 2-5 when no CSV loaded */
+.az-step-empty {
+  text-align: center;
+  padding: 40px 28px;
+}
+
+.az-step-empty h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.az-step-empty p {
+  margin: 0 auto 18px;
+  max-width: 520px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.az-step-empty-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Step 2: 4-Card QC KPI Strip */
+.az-kpi-strip-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: var(--card-gap);
+}
+
+.az-kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.az-kpi-card.is-warn {
+  background: #fffdf2;
+  border-color: rgba(154, 103, 0, 0.42);
+}
+
+.az-kpi-card.is-alert {
+  background: #fff8f7;
+  border-color: var(--danger-border);
+}
+
+.az-kpi-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.az-kpi-value {
+  margin-top: 3px;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.az-kpi-card.is-warn .az-kpi-value {
+  color: var(--warn);
+}
+
+.az-kpi-card.is-alert .az-kpi-value {
+  color: var(--danger);
+}
+
+.az-kpi-sub {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.az-kpi-mid-row,
+.az-kpi-bot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.az-kpi-bot-row {
+  margin-top: 4px;
+}
+
+.az-kpi-bot-row .az-kpi-sub {
+  margin-top: 0;
+}
+
+.az-kpi-mid-row .btn,
+.az-kpi-bot-row .btn {
+  flex-shrink: 0;
+}
+
+/* Inline controls & legends */
+.az-inline-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.az-inline-control label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.az-heatmap-bar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 24px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-muted);
+}
+
+.az-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  max-width: 380px;
+}
+
+.az-legend-num {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.az-legend-bar {
+  flex: 1 1 auto;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 35, 40, 0.12);
+  background: linear-gradient(90deg, #eff6ff 0%, #93c5fd 35%, #2563eb 72%, #1e3a8a 100%);
+}
+
+.az-qc-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.az-qc-dot-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.az-qc-sym {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.az-sym-empty {
+  border: 1.5px dashed #8c959f;
+  background: #f3f4f6;
+}
+
+.az-sym-spike {
+  background: #cf222e;
+  color: #ffffff;
+}
+
+.az-sym-excl {
+  background: #eaeef2;
+  color: #59636e;
+  border: 1px solid #afb8c1;
+}
+
+/* Large Spacious Plate / Maze SVG Containers (Steps 2 & 3) */
+.az-plate-svg-wrap {
+  position: relative;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  padding: 12px 16px;
+  user-select: none;
+}
+
+.az-plate-svg {
+  display: block;
+  width: 100%;
+  margin: 0 auto;
+  height: auto;
+  touch-action: none;
+}
+
+.az-qc-plate-stage .az-plate-svg {
+  max-width: 370px;
+}
+
+.az-brush-plate-stage .az-plate-svg {
+  max-width: 520px;
+}
+
+/* Step 3 side-by-side Plate Painter + Group Manager */
+.az-groups-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--card-gap);
+  align-items: start;
+  margin-bottom: var(--card-gap);
+}
+
+.az-groups-canvas-card,
+.az-groups-panel-card {
+  margin-bottom: 0;
+}
+
+.az-group-manager-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.az-brush-section-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.az-brush-io {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.az-well-hit {
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+
+.az-well-hit:hover {
+  filter: brightness(0.95);
+}
+
+.az-well-lbl {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+.az-well-inspector {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-muted);
+  background: var(--surface-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+}
+
+.az-well-insp-info {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  min-width: 0;
+}
+
+.az-well-insp-info strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.az-plate-foot-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Step 3: Group Swatches & Manager */
+.az-brush-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.az-swatch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
+}
+
+.az-swatch-btn:hover {
+  background: var(--surface-subtle);
+}
+
+.az-swatch-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.18);
+  background: #f0f8ff;
+}
+
+.az-swatch-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.az-swatch-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.az-group-manager-grid {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.az-brush-rename {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.az-brush-rename label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.az-brush-rename input[type="text"] {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.az-brush-rename input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
+}
+
+.az-brush-rename input[type="text"]:disabled {
+  background: #eaeef2;
+  color: var(--text-muted);
+}
+
+.az-brush-btns,
+.az-brush-shortcuts {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.az-brush-shortcuts .btn.active {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* Step 4: Spacious 3-Tab Pure-SVG Charting Studio */
+.az-charts-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: var(--card-gap);
+  min-width: 0;
+}
+
+.az-chart-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  background: #f3f5f8;
+  border-bottom: 1px solid var(--border);
+}
+
+.az-chart-tab {
+  padding: 13px 18px;
+  border: none;
+  border-right: 1px solid var(--border-muted);
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 0.12s, color 0.12s;
+  min-width: 0;
+}
+
+.az-chart-tab:last-child {
+  border-right: none;
+}
+
+.az-chart-tab:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.az-chart-tab.active {
+  background: var(--surface);
+  border-bottom-color: var(--accent);
+}
+
+.az-tab-kicker {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.az-chart-tab.active .az-tab-kicker {
+  color: var(--accent);
+}
+
+.az-tab-name {
+  display: block;
+  margin-top: 3px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.az-tab-pane {
+  display: none;
+  padding: 18px 22px 22px;
+}
+
+.az-tab-pane.active {
+  display: block;
+}
+
+.az-chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.az-toolbar-left,
+.az-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+
+.az-toolbar-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.az-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.az-toggle-pill input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin: 0;
+  cursor: pointer;
+}
+
+.az-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  min-height: 24px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+}
+
+.az-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+  transition: opacity 0.12s, background-color 0.12s;
+}
+
+.az-legend-item:hover {
+  background: var(--surface-subtle);
+  border-color: var(--border-muted);
+}
+
+.az-legend-item.is-muted {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.az-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.az-legend-n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.az-chart-stage {
+  position: relative;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  overflow: visible;
+}
+
+.az-svg-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Floating Tooltip */
+.az-chart-tooltip {
+  position: absolute;
+  z-index: 40;
+  pointer-events: none;
+  background: rgba(31, 35, 40, 0.94);
+  color: #ffffff;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  line-height: 1.45;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.22);
+  max-width: 260px;
+  white-space: nowrap;
+}
+
+.az-tt-title {
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  margin-bottom: 3px;
+  color: #f0f6fc;
+}
+
+.az-tt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.az-tt-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.az-tt-val {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* Comparison Summary Cards */
+.az-comp-summary {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+  gap: 12px;
+}
+
+.az-stat-mini {
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-muted);
+  background: var(--surface-subtle);
+}
+
+.az-stat-mini-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.az-stat-mini-val {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.az-stat-mini-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* Zone Events (_ZCHANGE) Tab */
+.az-zchange-empty {
+  padding: 40px 24px;
+  text-align: center;
+  background: var(--surface-subtle);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.az-zchange-empty h3 {
+  margin: 0 0 8px;
+  font-size: 15.5px;
+  font-weight: 600;
+}
+
+.az-zchange-empty p {
+  margin: 0 auto 10px;
+  max-width: 560px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.az-zchange-tip {
+  font-size: 12px !important;
+  margin-bottom: 16px !important;
+}
+
+.az-zchange-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.az-zchange-viz-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.15fr);
+  gap: 14px;
+}
+
+.az-zchange-box {
+  min-width: 0;
+}
+
+.az-subbox-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 7px;
+}
+
+/* Step 5: Export Hub */
+.az-export-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.az-export-panel {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.az-export-panel-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.az-export-panel-desc {
+  margin: -6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.az-export-panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Tables (Step 2 QC & Step 5 Per-Well) */
+.az-qc-table-wrap {
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+}
+
+.az-table-wrap {
+  max-height: 460px;
+  overflow: auto;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+}
+
+.az-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.az-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-subtle);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.az-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.az-table th.sortable:hover {
+  color: var(--text);
+  background: #eff2f6;
+}
+
+.az-table td {
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--border-muted);
+  vertical-align: middle;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.az-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.az-table tbody tr:hover {
+  background: #f6f8fa;
+}
+
+.az-table tbody tr.is-excluded {
+  background: #fafbfc;
+  color: var(--text-muted);
+}
+
+.az-table tbody tr.is-excluded td:not(:first-child) {
+  opacity: 0.65;
+}
+
+.az-table th.num,
+.az-table td.num {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.az-well-id-cell {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.az-group-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.az-table-grp-sel {
+  font-size: 11.5px;
+  height: 24px;
+  padding: 0 22px 0 7px;
+}
+
+.az-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.az-pill-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.az-pill-empty {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.az-pill-spike {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.az-pill-excl {
+  background: #eaeef2;
+  color: var(--text-muted);
+}
+
+.az-chk {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+/* Toast (matching css/modal.css) */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #1f2328;
+  color: #ffffff;
+  padding: 9px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+  z-index: 120;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1120px) {
+  .az-kpi-strip-4,
+  .az-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .az-export-hub-grid,
+  .az-groups-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 780px) {
+  .az-demo-grid-3,
+  .az-zchange-viz-grid,
+  .az-zchange-kpis,
+  .az-chart-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .az-dropzone {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 560px) {
+  .az-kpi-strip-4,
+  .az-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}

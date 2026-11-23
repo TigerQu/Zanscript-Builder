@@ -1,8 +1,8 @@
 # Zanscript-Builder
 
-**Zanscript-Builder** (*Zantiks MWP Script Builder*) is a standalone, zero-dependency browser application for designing behavioral tracking experiments on **Zantiks MWP** systems (**MWP Z3** and **MWP Z2 / Z2S**). It generates ready-to-compile **Zanscript (`.zs`)** files for camera calibration, multi-well plate arena/zone asset creation, tracking parameter verification, and full stimulus-driven assays.
+**Zanscript-Builder** (*Zantiks MWP Script Builder & CSV Analyzer*) is a standalone, zero-dependency browser suite for designing behavioral tracking experiments and analyzing exported CSV data on **Zantiks MWP** systems (**MWP Z3** and **MWP Z2 / Z2S**). **Script Builder** (`zantiks_script_generator.html`) generates ready-to-compile **Zanscript (`.zs`)** files for camera calibration, multi-well plate arena/zone asset creation, tracking parameter verification, and full stimulus-driven assays; the companion **CSV Analyzer** (`zantiks_csv_analyzer.html`) provides closed-loop 10-second QC, interactive plate-map treatment grouping, pure-SVG charting, and one-click GraphPad Prism / Python exports—completely offline.
 
-**Live Web Builder:** [https://tigerqu.github.io/Zanscript-Builder/](https://tigerqu.github.io/Zanscript-Builder/)
+**Live Web Builder:** [https://tigerqu.github.io/Zanscript-Builder/](https://tigerqu.github.io/Zanscript-Builder/) · **Live CSV Analyzer:** [https://tigerqu.github.io/Zanscript-Builder/zantiks_csv_analyzer.html](https://tigerqu.github.io/Zanscript-Builder/zantiks_csv_analyzer.html)
 
 > [!IMPORTANT]
 > **Unofficial Community Tool — Use at Your Own Risk**
@@ -27,6 +27,11 @@ Inspect syntax-highlighted Zanscripts and CSV column schemas for all four workfl
 
 ![Script tabs and ZIP bundle export](assets/demo_script_export.gif)
 
+### 4. Companion 5-Step CSV Analyzer & Closed-Loop QC
+Switch seamlessly from **Script Builder** to **CSV Analyzer** in the top bar and walk through **Data → QC → Groups → Plots → Export** with 1-click anomaly exclusion, interactive plate-map painting, pure-SVG charts, and GraphPad Prism / Python exports:
+
+![5-step CSV Analyzer workflow](assets/demo_csv_analyzer.gif)
+
 ---
 
 ## Key Features
@@ -43,6 +48,7 @@ Inspect syntax-highlighted Zanscripts and CSV column schemas for all four workfl
 - **Zantiks-Safe Naming**: Automatically extracts researcher surnames and sanitizes study tags into space-free ASCII identifiers accepted by the Zantiks Control Console compiler.
 - **Save, Share & Reopen Experiments**: Every choice auto-saves in your browser. **Save as file** downloads the whole design as `*_experiment.json`; **Open…** loads that file — or a scripts `.zip` downloaded from the app, which now includes `experiment.json` — to restore it exactly. Plate calibration offsets always stay with your own unit.
 - **Pre-flight Checks**: The Export page lists warnings and notes before you download (heater range, short pulses vs. time bin, Z3-only features on Z2 units, UV LEDs, very large video / XY files, factory plate offsets, and more), each with a button that jumps to the page where it can be fixed.
+- **Companion 5-Step CSV Analyzer & Closed-Loop QC (`zantiks_csv_analyzer.html`)**: Switch seamlessly between **Script Builder** and **CSV Analyzer** via the width-aligned (`1380 px`) top-bar suite switcher. Walk through the same calm 5-step wizard (`Data` → `QC` → `Groups` → `Plots` → `Export`) with a persistent **Dataset Summary** sidebar: drop Zantiks Summary, `_ZCHANGE`, or `_XY` CSVs alongside a Builder `.zip` / `experiment.json` (or click **Use Latest Builder Config**), exclude empty/dead wells and reflection-glitch spikes in one click, paint treatment groups (`Fill by Column` / `Fill by Row` / `Toggle Exclude Brush`) on a true-scale interactive SVG plate/maze map, inspect Mean ± SEM time-series, VMR, Thigmotaxis, `% PPI`, and Y-Maze `SAB %` pure-SVG charts, and export **Prism Grouped CSV**, **Tidy Long CSV**, **Well Summary CSV**, or a ready-to-run **Python Script (`.py`)**.
 
 ---
 
@@ -51,8 +57,12 @@ Inspect syntax-highlighted Zanscripts and CSV column schemas for all four workfl
 ```text
 Zanscript-Builder/
 ├── index.html                      # Redirect entry point for GitHub Pages
-├── zantiks_script_generator.html   # The app: page markup; loads css/ and js/
-├── css/                            # Styles, one file per area (base, components, stimulus, data, export, modal)
+├── zantiks_script_generator.html   # Script Builder app: page markup; loads css/ and js/
+├── zantiks_csv_analyzer.html       # Companion 5-step CSV Analyzer app: offline QC, plate map & SVG charts
+├── css/                            # Styles, one file per area:
+│   ├── base.css                    #   design tokens (1380px unified layout), shared topbar & wizard shell
+│   ├── components.css, stimulus.css, data.css, export.css, modal.css
+│   └── analyzer.css                #   5-step CSV Analyzer wizard, plate map & chart styles
 ├── js/                             # App code as plain scripts, loaded in order:
 │   ├── catalogs.js                 #   organisms, plates, mazes, LEDs, protocols
 │   ├── maze-editor.js              #   official maze presets & 3D-printed maze SVG canvas editor
@@ -64,11 +74,13 @@ Zanscript-Builder/
 │   ├── timeline.js, ui-setup.js    #   timeline bar, organism / plate / modal rendering
 │   ├── export-utils.js, events.js  #   code highlighting, ZIP writer, event bindings
 │   ├── wizard.js                   #   step-by-step navigation and Run Summary
-│   ├── experiment-io.js            #   save / open / auto-save experiments
+│   ├── experiment-io.js            #   save / open / auto-save experiments & ZIP reader
 │   ├── preflight.js                #   Export-page checks
-│   └── main.js                     #   start-up (must load last)
+│   ├── main.js                     #   Script Builder start-up (must load last on Builder page)
+│   ├── analyzer-core.js            #   CSV parser, QC engine, protocol metrics, demos & exporters
+│   └── analyzer-ui.js              #   5-step CSV Analyzer wizard, plate painter, SVG charts & UI wiring
 ├── zantiks_plate_config.js         # External plate geometry calibration profile (mm)
-├── tests/                          # Automated tests: scenarios (experiment files) + golden script output
+├── tests/                          # Automated tests: Builder golden scripts + CSV Analyzer checks
 ├── package.json                    # Test tooling only (the app needs no install or build)
 ├── .github/workflows/tests.yml     # Runs the tests on every push and pull request
 ├── assets/                         # Walkthrough GIFs for documentation
@@ -76,7 +88,7 @@ Zanscript-Builder/
 └── README.md                       # Documentation & hardware verification matrix
 ```
 
-> **Note:** When running locally, keep `css/`, `js/` and `zantiks_plate_config.js` next to `zantiks_script_generator.html` (just clone or download the whole folder). Everything loads over `file://` with no server, build step or install.
+> **Note:** When running locally, keep `css/`, `js/` and `zantiks_plate_config.js` next to `zantiks_script_generator.html` and `zantiks_csv_analyzer.html` (just clone or download the whole folder). Both pages load over `file://` with no server, build step or install.
 
 ---
 
@@ -92,7 +104,7 @@ Zanscript-Builder/
    1. **Study** – Researcher name & study tag (optional; appends ASCII-safe tags to generated filenames and folders), MWP hardware revision (`MWP Z3` or `MWP Z2 / Z2S`), **Stimulus Light Wavelength** (`White`, `Blue`, `Green`, `Red`, `UV`), **Z3 Light Brightness (%)**, and **Z3 LED Position / Mount** (`Overhead Only (Top Ch 0-5)`, `Underneath Only (Bottom Ch 8-13)`, or `Both Overhead + Underneath`).
    2. **Organism** – Pick an organism preset, then fine-tune `TARGET_SIZE`, thresholds, `AUTOREF_TIMEOUT` and thermostat settings.
    3. **Plate** – Select the plate format (and adjust millimeter offsets if needed).
-   4. **Stimulus** – Select one of the 7 standard protocols and configure phase durations/pulses, or open the **Advanced** section to arrange independent Overhead (`TOP`) and `Bottom LEDs (Ch 8-13)` (`BOT`) + `Temp °C` clips in the **Multi-Track Timeline**, and scrub or play through the entire assay in the **Sequence Preview** card (**Chamber · side view** & **Plate · top view**, `1x`–`60x` speed, synced playhead, and live `X_LED_DRIVE` PWM / `THERMOSTAT` readout).
+   4. **Stimulus** – Choose from 10 protocols (9 standard assays including **Acoustic Startle** and **Prepulse Inhibition (PPI)**, or open **Advanced** for the **13-track Multi-Track Timeline** combining independent Overhead `TOP` and `Bottom LEDs (Ch 8-13)` (`BOT`) LEDs with custom PWM curves and strobe bursts, `Temp °C`, `Vib Tap`, and `Audio`), then scrub or play through the entire assay in **Sequence Preview** (**Chamber · side view** & **Plate · top view**, `1x`–`60x` speed, synced playhead, and live `X_LED_DRIVE` PWM / `ZCOMMAND` / `AUDIO_FILE` / `THERMOSTAT` readout).
    5. **Data & Video** – Choose CSV metrics, recording frame rate and overlays.
    6. **Export** – Review and download the generated scripts.
    - The **Run Summary** sidebar shows every choice, the total runtime and CSV size at all times; click a row to jump back and edit it.
@@ -102,6 +114,7 @@ Zanscript-Builder/
    - *Tip:* Click **Copy Slot Name** (or the filename badge) to copy the `.zs`-stripped service name (e.g. `04_qu_24w`) for pasting once into Zantiks **Settings → Zanscript shortcuts (Slots 1–20)**. Rebuilding the same slot script updates it in place without re-entering Settings, while `LOGFILE(0, ...)` tags every exported CSV with full protocol details.
    - Read the **Pre-flight Checks** at the top of the page first.
 4. **Keep or share the design**: it auto-saves in this browser. Use **Save as file** in the Run Summary to share it, and **Open…** to load an `experiment.json` or a downloaded scripts `.zip`.
+5. **Analyze your exported CSVs**: click **CSV Analyzer** in the top-bar suite switcher (or open `zantiks_csv_analyzer.html`) and walk through its 5-step wizard (**Data** → **QC** → **Groups** → **Plots** → **Export**) while the persistent **Dataset Summary** sidebar tracks active wells, duration, groups, and QC flags—drop your `.csv` exports + Builder `.zip` / `experiment.json` (or click **Use Latest Builder Config** / pick a built-in demo), exclude flagged anomalies, paint treatment groups, inspect pure-SVG charts, and export GraphPad Prism, Tidy CSV, Well Summary CSV, or Python (`.py`) outputs.
 
 ---
 
@@ -190,17 +203,19 @@ Selecting an organism chip populates recommended tracking and environmental para
 
 ## Stimulus Protocols
 
-Single-channel illumination protocols (`baseline`, `ld_transitions`, `light_off_startle`, `light_on_pulse`, `vibration_startle`, `circadian`) honor the Study page's **Stimulus Light Wavelength** (`White`, `Blue`, `Green`, `Red`, `UV`) and **Z3 LED Position / Mount** (`Overhead Only (Top Ch 0-5)`, `Underneath Only (Bottom Ch 8-13)`, or `Both Overhead + Underneath`), leaving **850 nm IR** (`Ch 2` / `Ch 10`) untouched. Every protocol can be previewed across its full acclimation + assay timeline in the Stimulus page's **Sequence Preview** card (**Chamber · side view** & **Plate · top view**, **Play / Pause**, `0s` reset, `1x` / `5x` / `20x` / `60x` speed, time scrubber, and live `X_LED_DRIVE` PWM / `GPO` / `THERMOSTAT` channel readout).
+Single-channel illumination protocols (`baseline`, `ld_transitions`, `light_off_startle`, `light_on_pulse`, `vibration_startle`, `acoustic_startle`, `ppi`, `circadian`) honor the Study page's **Stimulus Light Wavelength** (`White`, `Blue`, `Green`, `Red`, `UV`) and **Z3 LED Position / Mount** (`Overhead Only (Top Ch 0-5)`, `Underneath Only (Bottom Ch 8-13)`, or `Both Overhead + Underneath`), leaving **850 nm IR** (`Ch 2` / `Ch 10`) untouched. Every protocol can be previewed across its full acclimation + assay timeline in the Stimulus page's **Sequence Preview** card (**Chamber · side view** & **Plate · top view**, **Play / Pause**, `0s` reset, `1x` / `5x` / `20x` / `60x` speed, time scrubber, and live `X_LED_DRIVE` PWM / `GPO` / `ZCOMMAND` / `AUDIO_FILE` / `THERMOSTAT` channel readout).
 
 | Protocol | ID | Schedule & Configurable Parameters |
 | :--- | :--- | :--- |
 | **None (Baseline)** | `baseline` | Acclimation (`acclimSec`) → `AUTOREFERENCE()` → Constant **Light** (selected wavelength & `Overhead` / `Underneath` / `Both` mount) or **Dark (IR-only)** recording (`durationSec`, `timeBinSec`). |
 | **Light / Dark Cycles** | `ld_transitions` | Acclimation → `AUTOREFERENCE()` → Alternating **Light ↔ Dark** phases (`ldStart`, `ldCycles`, `ldPhaseSec`, `timeBinSec`). |
 | **Light-Off Startle** | `light_off_startle` | Light acclimation → Optional pre-pulse baseline (`preBaselineSec`) → `numPulses` brief dark pulses (`pulseDurSec`, supports sub-bin durations `< TIME_BIN`) separated by light recovery intervals (`itiSec`). |
-| **Light-On Flash** | `light_on_pulse` | Dark acclimation → Optional dark baseline (`preBaselineSec`) → `numPulses` bright light flashes (`pulseDurSec`, supports sub-bin durations) separated by dark intervals (`itiSec`). |
+| **Light-On Flash** | `light_on_pulse` | Dark acclimation → Optional dark baseline (`preBaselineSec`) → `numPulses` bright light flashes (`pulseDurSec` down to `0.05 s`, optional `2 / 5 / 10 Hz` `strobeHz` bursts) separated by dark intervals (`itiSec`). |
 | **Vibration Startle** | `vibration_startle` | Light or dark acclimation (`vibAmbient`) → Optional baseline → `numPulses` stepper-motor taps via `ZCOMMAND` (`U0` Full, `U1` Half, `U2` Quarter, `U3` Eighth step) with ITI recovery (`itiSec`). |
-| **Long-Term Cycle** | `circadian` | Multi-hour / multi-day `L:D` cycles (`lightHours`, `darkHours`, `numDays`, `circBinSec`) with automatic mid-hour `AUTOREFERENCE()` re-referencing to prevent tracking drift over multi-day runs. |
-| **Multi-Track Timeline** | `multi_phase` | Interactive 11-track AE/Premiere-style NLE editor with independent **Overhead (`TOP`)** (`White` Top Ch 4, `Blue 470` Top Ch 1, `Green 530` Top Ch 3, `Red 625` Top Ch 5, `UV 365` Top Ch 0) and toggleable **`Bottom LEDs (Ch 8-13)` (`BOT`)** (`White` Bot Ch 12, `Blue 470` Bot Ch 9, `Green 530` Bot Ch 11, `Red 625` Bot Ch 13, `UV 365` Bot Ch 8) plus **`Temp °C`** (`Therm`), a compact **`Load Preset...`** menu (`Preset: White BG + Opto`, `Preset: Bot White + Top Opto`, `Preset: RGB Overlap`, `Preset: Seq Sweep`), `Clear`, and synced playhead/ruler scrubbing (`mpTimelineSec`, `mpCycles`, `timeBinSec`). Overlapping clips compile via sweep-line discretization into contiguous Zanscript slices (`S1..SK`) with flicker-free independent top/bottom PWM transitions and baseline temperature restore. |
+| **Acoustic Startle** | `acoustic_startle` | Light or dark acclimation (`audioAmbient`) → Optional pre-pulse baseline (`preBaselineSec`) → `numPulses` built-in sound-card cues (`LOAD(AUDIO_FILE, ...)` via `"tone"`, `"mono"`, or custom `.wav` asset `audioCustomFile`) separated by ITI recovery (`itiSec`). |
+| **Prepulse Inhibition (PPI)** | `ppi` | Light or dark acclimation (`ppiAmbient`) → Optional baseline → `ppiPairs` trial blocks alternating or grouping `PULSE_ALONE` and `PPI_TRIAL` (`ppiPattern`): weak stepper prepulse (`ppiPrepulse`) + inter-stimulus interval (`ppiIsiMs` ms) + strong pulse (`ppiPulse`) via `ZCOMMAND` with ITI recovery (`itiSec`). |
+| **Long-Term Cycle** | `circadian` | Multi-hour / multi-day `L:D` cycles (`lightHours`, `darkHours`, `numDays`, `circBinSec`) with optional **Z3 Dawn/Dusk PWM ramp** (`circRampMin`, Gamma 2.2 or Linear `circRampCurve`) and automatic mid-hour `AUTOREFERENCE()` re-referencing to prevent tracking drift over multi-day runs. |
+| **Multi-Track Timeline** | `multi_phase` | Interactive **13-track** AE/Premiere-style NLE editor combining independent **Overhead (`TOP`)** (`White` Top Ch 4, `Blue 470` Top Ch 1, `Green 530` Top Ch 3, `Red 625` Top Ch 5, `UV 365` Top Ch 0) and toggleable **`Bottom LEDs (Ch 8-13)` (`BOT`)** (`White` Bot Ch 12, `Blue 470` Bot Ch 9, `Green 530` Bot Ch 11, `Red 625` Bot Ch 13, `UV 365` Bot Ch 8) LED tracks—supporting **custom 12-bit PWM curves** (Linear, Gamma 2.2, Ease-Out, S-Curve, Sine Pulse, Custom Keyframes, 4–24 steps) and **`2 / 5 / 10 Hz` strobe bursts**—plus **`Temp °C`** (`Therm`), **`Vib Tap`** (`Motor U0-U3`), and **`Audio`** (`Sound Card`) tracks, a compact **`Load Preset...`** menu, `Clear`, and synced playhead/ruler scrubbing (`mpTimelineSec`, `mpCycles`, `timeBinSec`). Overlapping clips compile via sweep-line discretization into contiguous Zanscript slices (`S1..SK`) with flicker-free independent top/bottom PWM transitions and baseline temperature restore. |
 | **Temperature Step / Ramp** | `temp_ramp` | Acclimation at `rampStartTemp` → Stepped thermal plateaus from `rampStartTemp` to `rampEndTemp` in `rampStepTemp` increments (`rampHoldSec` per step), automatically restoring `rampStartTemp` when finished. |
 
 ---
@@ -227,6 +242,36 @@ Single-channel illumination protocols (`baseline`, `ld_transitions`, `light_off_
 
 ---
 
+## Companion CSV Analyzer (Closed-Loop QC & Export)
+
+Switch between **Script Builder** and **CSV Analyzer** at any time using the top-bar pill switcher (`zantiks_script_generator.html` ↔ `zantiks_csv_analyzer.html`). Both pages share a unified **`1380 px`** suite layout (`scrollbar-gutter: stable`, zero horizontal shift on switch) and the same calm step-by-step wizard shell—complete with a sticky **Back / Next** bar, URL hash routes (`#data`–`#export`), and a persistent **Dataset Summary** right sidebar displaying live **Active Wells**, **Duration**, **Groups**, and **QC Flagged** stats with clickable rows to jump to any step. Like the Script Builder, the CSV Analyzer runs 100% locally in your browser over `https://` or `file://` with zero external libraries or cloud uploads.
+
+### 1. Data (`#data`) — Closed-Loop CSV & Context Import
+- **Multi-File Dropzone**: Drag-and-drop or browse for Zantiks Summary CSVs (`DIST_*`, `MSD_*`, `ZD_*_Z#`, `ZC_*_Z#`, `ZT_*_Z#`), companion `_ZCHANGE` zone-transition event logs, `_XY` coordinate files, saved plate maps, and Builder `experiment.json` / `.zip` bundles. Automatically handles UTF-8 BOM, CRLF/LF, pre-header Zantiks system metadata lines, trailing commas, single-arena Petri dishes, 6–96-well plates, and multi-zone official/3D-printed mazes (`Z1–Z8`).
+- **Automatic Builder Context & Dataset Overview**: Click **Use Latest Builder Config** to pull your auto-saved Script Builder design from `localStorage` (or drop a Builder `.zip` / `experiment.json`) to attach plate/maze geometry, protocol phase schedules, and target thermostat temperature, summarized immediately in the **Loaded Dataset Overview** card.
+- **Built-in Demo Datasets**: Explore the entire 5-step workflow immediately via three one-click demo cards (also switchable from the top bar while staying on your current step): **L/D 24-Well** (3 dose groups + empty well `D5` & spike-glitch well `D6`), **PPI 24-Well** (`PULSE_ALONE` vs. `PPI_TRIAL` startle attenuation), and **Y-Maze 15** (`Z1–Z4` Summary + companion `_ZCHANGE` event log).
+
+### 2. QC (`#qc`) — 10-Second Quality Control & Diagnostics
+- **4-Card QC KPI Strip**: Summarizes **Active Wells**, **Empty / Dead** wells (`totalDist < 0.1 mm` or zero active bins), **Spike Glitches** (reflection/tracking jump outliers) with one-click **Exclude Flagged** / **Include All**, and **Chamber Temp (`TEMP_C`)** min–max range.
+- **Plate / Maze QC Heatmap**: Large true-scale interactive SVG coloring every well/arena by the selected metric while marking empty wells, spike glitches, and excluded wells; click any well to inspect details or `Shift+click` to toggle exclusion.
+- **Chamber Temperature (`TEMP_C`) & QC Diagnostics Table**: Pure-SVG `TEMP_C` trace plotted against the Builder target thermostat reference line (with **Download SVG**), paired with a filterable/sortable **QC Diagnostics & Anomaly Table** offering 1-click exclude checkboxes.
+
+### 3. Groups (`#groups`) — Treatment Group Painter & Plate Map
+- **Interactive Plate / Maze Painter**: Spacious side-by-side true-scale SVG where you click or drag across wells to paint treatment groups while excluded wells remain clearly dimmed and crossed out.
+- **Group Manager**: Manage group color swatches, add/rename/remove groups, switch to the **Toggle Exclude Brush**, auto-assign grids with **Fill by Column** or **Fill by Row**, and reuse plate layouts across replicates via **Save Map (`.json`)** and **Load Map (`.json`)**.
+
+### 4. Plots (`#plots`) — 3-Tab Pure-SVG Charting Studio
+- **01 · Trace — Time Series (Mean ± SEM)**: Group mean traces with toggleable `± SEM` ribbons, automatic `Phases` background shading, `Stimuli` onset markers, metric selector (`Distance`, `MSD`, `Z1 %`, `Z2 %`), bin-smoothing (`1x`, `5x`, `10x`, `30x`), hover tooltips, and **Download SVG**.
+- **02 · Protocol Stats — Phase & Group Comparison**: Grouped Mean ± SEM bars overlaid with jittered individual-well scatter dots across **Phase Totals**, **VMR** (Visual Motor Response: Dark vs. Light & dark-onset burst), **Thigmotaxis / Zone Preference** (`Z1–Zk %` & Preference Index `(Z2 - Z1) / (Z1 + Z2)`), **Startle & `% PPI`** (`(1 - meanPPI / meanPulseAlone) × 100`), and **Y-Maze `SAB %`**, with **Download SVG**.
+- **03 · Transitions — Zone Events (`_ZCHANGE`)**: Zone-to-zone transition heatmap matrix, per-arena transition counts & 3-arm **Spontaneous Alternation (`SAB %`)**, and **Download SVG**.
+
+### 5. Export (`#export`) — 2-Column Export Hub & Per-Well Summary Table
+- **GraphPad Prism Grouped Table**: Choose any protocol/summary metric and download **Prism Grouped CSV** or click **Copy Prism Table** for direct side-by-side paste into GraphPad Prism Column tables (excluded wells automatically omitted).
+- **Analysis Tables & Reproducible Code**: Download **Tidy Long CSV** (normalized well × time-bin rows for R / `seaborn`), **Well Summary CSV** (per-well Distance, MSD, phase totals, Zone %, VMR, `% PPI`, `SAB %`, and QC flags), or a runnable **Python Script (`.py`)** (`pandas` + `matplotlib`) pre-wired with your active groups and exclusions.
+- **Per-Well Summary Table**: Audit every well below the Export Hub with Group and Status (`All`, `Active`, `Excluded`, `QC Flagged`) filters and inline exclusion checkboxes.
+
+---
+
 ## Plate Calibration & `zantiks_plate_config.js`
 
 Different MWP units or plate manufacturers can exhibit slight positional shifts relative to factory coordinates. Zanscript-Builder provides two-tier calibration persistence:
@@ -249,7 +294,7 @@ Different MWP units or plate manufacturers can exhibit slight positional shifts 
 
 The app is plain HTML, CSS and JavaScript with no build step: edit the files in `css/` and `js/` and reload the page.
 
-Automated tests make sure changes don't silently alter the generated scripts. Each file in `tests/scenarios/` is an experiment saved by the app (14 of them, covering every protocol, both hardware revisions and several plates); the tests load each one and compare the four `.zs` scripts and `README_STEPS.txt` byte-for-byte with `tests/golden/`. They also check that every page loads without errors, that open → save and `.zip` round trips are lossless, and that auto-save survives a reload.
+Automated tests make sure changes don't silently alter the generated scripts. Each file in `tests/scenarios/` is an experiment saved by the app (14 of them, covering every protocol, both hardware revisions and several plates); the tests load each one and compare the four `.zs` scripts and `README_STEPS.txt` byte-for-byte with `tests/golden/`. They also check that every page loads without errors, that open → save and `.zip` round trips are lossless, that auto-save survives a reload, and that the 5-step `zantiks_csv_analyzer.html` wizard loads cleanly over `file://`, matches Script Builder's `1380 px` layout parity (`0 px` shift), parses CSV edge cases, computes demo QC/protocol metrics, imports Builder `.zip` / `localStorage` context, and produces valid CSV/Prism/Python exports.
 
 ```bash
 npm install                          # once: installs Playwright (test tool only)

@@ -1072,6 +1072,765 @@ try {
         ok ? "" : JSON.stringify(curveCheck));
       await page.close();
     }
+
+    // ---------------------------------------------------------------- 7. CSV Analyzer companion page
+    const analyzerUrl = pathToFileURL(path.join(root, "zantiks_csv_analyzer.html")).href;
+
+    async function openFreshAnalyzer({ clearStorage = true } = {}) {
+      const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
+      page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+      await page.goto(analyzerUrl);
+      if (clearStorage) {
+        await page.evaluate(() => localStorage.clear());
+        await page.reload();
+      }
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_CORE && window.ZANTIKS_ANALYZER_UI);
+      return { page, errors };
+    }
+
+    // 7a. Offline file:// load, .suite-nav navigation, 5-step wizard (stepper/hash/sidebar/empty states), zero errors & zero input[placeholder]
+    {
+      const { page, errors } = await openFreshPage("#study");
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const builderState = await page.evaluate(() => ({
+        placeholders: document.querySelectorAll("input[placeholder]").length,
+        navCount: document.querySelectorAll(".suite-nav .suite-nav-link").length,
+        activeHref: document.querySelector(".suite-nav .suite-nav-link.active")?.getAttribute("href"),
+        noOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth
+      }));
+
+      await page.click('.suite-nav a[href="zantiks_csv_analyzer.html"]');
+      await page.waitForFunction(() => location.pathname.endsWith("zantiks_csv_analyzer.html") && window.ZANTIKS_ANALYZER_UI && window.ZANTIKS_ANALYZER_CORE);
+      const analyzerState = await page.evaluate(() => ({
+        placeholders: document.querySelectorAll("input[placeholder]").length,
+        navCount: document.querySelectorAll(".suite-nav .suite-nav-link").length,
+        activeHref: document.querySelector(".suite-nav .suite-nav-link.active")?.getAttribute("href"),
+        stepCount: document.querySelectorAll("#analyzerStepper .stepper-item").length,
+        activeStep: document.querySelector(".wizard-page.active")?.dataset.page,
+        progress: document.getElementById("wizProgress")?.textContent.trim(),
+        noOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth
+      }));
+
+      // Step through wizard via Next, Stepper, Right Sidebar & URL hash; verify empty state on Steps 2-5 with no CSV loaded
+      await page.click("#wizNextBtn");
+      const qcEmptyOk = await page.evaluate(() => {
+        const pg = document.querySelector('.wizard-page.active[data-page="qc"]');
+        return Boolean(pg && getComputedStyle(pg.querySelector("[data-requires-csv-empty]")).display !== "none" && location.hash === "#qc");
+      });
+      await page.click('.summary-row[data-goto="plots"]');
+      const plotsSidebarOk = await page.evaluate(() =>
+        document.querySelector(".wizard-page.active")?.dataset.page === "plots" &&
+        document.querySelector('.summary-row.current')?.dataset.goto === "plots" &&
+        location.hash === "#plots"
+      );
+      await page.click('#analyzerStepper [data-goto="export"]');
+      const exportStepOk = await page.evaluate(() =>
+        document.querySelector(".wizard-page.active")?.dataset.page === "export" &&
+        document.getElementById("wizProgress")?.textContent.trim() === "5 / 5"
+      );
+      await page.click('.wizard-page[data-page="export"] [data-goto="data"]');
+      const backToDataOk = await page.evaluate(() => document.querySelector(".wizard-page.active")?.dataset.page === "data");
+
+      await page.click('.suite-nav a[href="zantiks_script_generator.html"]');
+      await page.waitForFunction(() => location.pathname.endsWith("zantiks_script_generator.html") && window.refreshAll && window.refreshAll._latestBundle);
+      const returnedToBuilder = await page.evaluate(() =>
+        document.querySelector(".suite-nav .suite-nav-link.active")?.getAttribute("href") === "zantiks_script_generator.html"
+      );
+
+      const ok =
+        errors.length === 0 &&
+        builderState.placeholders === 0 &&
+        builderState.navCount === 2 &&
+        builderState.activeHref === "zantiks_script_generator.html" &&
+        builderState.noOverflow &&
+        analyzerState.placeholders === 0 &&
+        analyzerState.navCount === 2 &&
+        analyzerState.activeHref === "zantiks_csv_analyzer.html" &&
+        analyzerState.stepCount === 5 &&
+        analyzerState.activeStep === "data" &&
+        analyzerState.progress === "1 / 5" &&
+        analyzerState.noOverflow &&
+        qcEmptyOk &&
+        plotsSidebarOk &&
+        exportStepOk &&
+        backToDataOk &&
+        returnedToBuilder;
+      report(ok, "CSV Analyzer 5-step wizard loads over file:// with zero errors, navigates via stepper/sidebar/hash/.suite-nav, and has zero input[placeholder]",
+        ok ? "" : JSON.stringify({ errors, builderState, analyzerState, qcEmptyOk, plotsSidebarOk, exportStepOk, backToDataOk, returnedToBuilder }));
+      await page.close();
+    }
+
+    // 7b. Demo ld_24w across all 5 steps: Overview, QC (D5 empty & D6 spike + Exclude Flagged + Temp), Groups, Plots (3 tabs), VMR & Zone Pref
+    {
+      const { page, errors } = await openFreshAnalyzer();
+      await page.click('#step1DemoCards [data-demo="ld_24w"]');
+      const step1OverviewOk = await page.evaluate(() =>
+        document.querySelector(".wizard-page.active")?.dataset.page === "data" &&
+        getComputedStyle(document.getElementById("loadedOverviewGrid")).display !== "none"
+      );
+
+      // Step 2: QC
+      await page.click('#analyzerStepper [data-goto="qc"]');
+      const beforeExcl = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const a = st.analysis;
+        const p = st.summaryParsed;
+        const ctrl = a.groups.find((g) => g.group === "Control");
+        const d10Series = a.timeSeries.series.find((s) => s.group === "Drug 10uM");
+        const d10Max = Math.max(...d10Series.values.map((v) => v.mean || 0));
+        const a1 = a.wellsById.A1;
+        const expectedPi = (a1.zones.z2Pct - a1.zones.z1Pct) / (a1.zones.z1Pct + a1.zones.z2Pct);
+        return {
+          totalWells: a.kpis.totalWells,
+          activeWells: a.kpis.activeWells,
+          emptyCount: a.kpis.emptyCount,
+          spikeCount: a.kpis.spikeCount,
+          flaggedCount: a.kpis.flaggedCount,
+          d5Empty: Boolean(p.qc.D5 && p.qc.D5.isEmpty),
+          d6Spike: Boolean(p.qc.D6 && p.qc.D6.isSpikeGlitch && p.qc.D6.spikeCount >= 1),
+          tempOk: a.kpis.targetTempC === 28 && a.kpis.tempMin > 25 && a.kpis.tempMax < 31,
+          vmrOk: Boolean(a.capabilities.hasVmr && ctrl && ctrl.vmr.darkMean.mean > ctrl.vmr.lightMean.mean && ctrl.vmr.darkMinusLight.mean > 0 && ctrl.vmr.darkOnsetBurst.mean > 0),
+          zoneOk: Boolean(
+            a.capabilities.hasZones &&
+            a.capabilities.maxZone === 2 &&
+            Math.abs((a1.zones.z1Pct + a1.zones.z2Pct) - 100) < 0.25 &&
+            Math.abs(a1.zones.preferenceIndex - expectedPi) < 0.02 &&
+            ctrl.zones.z1Pct.mean > 55
+          ),
+          d10Max,
+          qcPlateHits: document.querySelectorAll("#qcPlateSvg .az-well-hit").length,
+          tempPaths: document.querySelectorAll("#tempChartSvg path").length,
+          anomalyRows: document.querySelectorAll("#qcAnomalyBody tr").length
+        };
+      });
+
+      await page.click("#excludeFlaggedBtn");
+      const afterExcl = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const a = st.analysis;
+        const d10 = a.groups.find((g) => g.group === "Drug 10uM");
+        const d10Series = a.timeSeries.series.find((s) => s.group === "Drug 10uM");
+        const d10Max = Math.max(...d10Series.values.map((v) => v.mean || 0));
+        return {
+          activeWells: a.kpis.activeWells,
+          excludedWells: a.kpis.excludedWells,
+          kpiText: document.getElementById("kpiActiveWells").textContent.trim(),
+          sidebarStat: document.getElementById("statActiveWells").textContent.trim(),
+          d10N: d10 ? d10.n : -1,
+          d10Max
+        };
+      });
+
+      // Step 3: Groups (check brush SVG & zero placeholders)
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      const groupsStepCheck = await page.evaluate(() => ({
+        brushHits: document.querySelectorAll("#brushPlateSvg .az-well-hit").length,
+        placeholders: document.querySelectorAll("input[placeholder]").length
+      }));
+
+      // Step 4: Plots (all 3 tabs + metric switching + bin smoothing)
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      const tsInitialPaths = await page.evaluate(() => document.querySelectorAll("#tsChartSvg path").length);
+      await page.selectOption("#tsMetricSel", "msd");
+      await page.selectOption("#tsSmoothSel", "5");
+      const tsSmoothedPaths = await page.evaluate(() => document.querySelectorAll("#tsChartSvg path").length);
+      await page.selectOption("#tsMetricSel", "z2_pct");
+      const tsZonePaths = await page.evaluate(() => document.querySelectorAll("#tsChartSvg path").length);
+
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      const compDefault = await page.evaluate(() => ({
+        rects: document.querySelectorAll("#compChartSvg rect").length,
+        dots: document.querySelectorAll("#compChartSvg .az-scatter-dot").length
+      }));
+      await page.selectOption("#compViewSel", "vmr");
+      const compVmrDots = await page.evaluate(() => document.querySelectorAll("#compChartSvg .az-scatter-dot").length);
+      await page.selectOption("#compViewSel", "zone_pref");
+      const compZoneDots = await page.evaluate(() => document.querySelectorAll("#compChartSvg .az-scatter-dot").length);
+
+      await page.click('#chartTabsBar [data-chart-tab="zchange"]');
+      const zchangeHintVisible = await page.evaluate(() =>
+        getComputedStyle(document.getElementById("zchangeEmptyHint")).display !== "none" &&
+        getComputedStyle(document.getElementById("zchangeContent")).display === "none"
+      );
+
+      const ok =
+        errors.length === 0 &&
+        step1OverviewOk &&
+        beforeExcl.totalWells === 24 &&
+        beforeExcl.activeWells === 24 &&
+        beforeExcl.emptyCount === 1 &&
+        beforeExcl.spikeCount === 1 &&
+        beforeExcl.flaggedCount === 2 &&
+        beforeExcl.d5Empty &&
+        beforeExcl.d6Spike &&
+        beforeExcl.tempOk &&
+        beforeExcl.vmrOk &&
+        beforeExcl.zoneOk &&
+        beforeExcl.qcPlateHits === 24 &&
+        beforeExcl.tempPaths >= 1 &&
+        beforeExcl.anomalyRows === 2 &&
+        afterExcl.activeWells === 22 &&
+        afterExcl.excludedWells === 2 &&
+        afterExcl.kpiText === "22 / 24" &&
+        afterExcl.sidebarStat === "22 / 24" &&
+        afterExcl.d10N === 6 &&
+        afterExcl.d10Max < beforeExcl.d10Max * 0.5 &&
+        groupsStepCheck.brushHits === 24 &&
+        groupsStepCheck.placeholders === 0 &&
+        tsInitialPaths >= 3 &&
+        tsSmoothedPaths >= 3 &&
+        tsZonePaths >= 3 &&
+        compDefault.rects >= 6 &&
+        compDefault.dots >= 22 &&
+        compVmrDots >= 22 &&
+        compZoneDots >= 22 &&
+        zchangeHintVisible;
+      report(ok, "Analyzer ld_24w demo detects D5 empty & D6 spike, computes VMR & Zone Pref, excludes flagged wells, and renders all wizard steps & plot tabs",
+        ok ? "" : JSON.stringify({ errors, step1OverviewOk, beforeExcl, afterExcl, groupsStepCheck, tsInitialPaths, tsSmoothedPaths, tsZonePaths, compDefault, compVmrDots, compZoneDots, zchangeHintVisible }));
+      await page.close();
+    }
+
+    // 7c. Demo ppi_24w: topbar demo switch stays on active step, exact % PPI & group separation, SVG comparison chart
+    {
+      const { page, errors } = await openFreshAnalyzer();
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.selectOption("#demoPresetSelect", "ppi_24w");
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+
+      const ppiCheck = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        const ctrl = a.groups.find((g) => g.group === "Control");
+        const low = a.groups.find((g) => g.group === "Low Dose");
+        const mk = a.groups.find((g) => g.group === "MK-801");
+        const a1 = a.wellsById.A1;
+        const expectedA1Ppi = (1 - a1.startle.ppiTrialMean / a1.startle.pulseAloneMean) * 100;
+        return {
+          stayedOnPlots: document.querySelector(".wizard-page.active")?.dataset.page === "plots",
+          hasPpi: a.capabilities.hasPpi,
+          zeroFalseFlags: a.kpis.flaggedCount === 0,
+          hasPhases: a.phases.includes("PULSE_ALONE") && a.phases.includes("PPI_TRIAL"),
+          stimMarkers: a.timeSeries.stimulusMarkers.length,
+          formulaExact: Math.abs(a1.startle.ppiPct - expectedA1Ppi) < 0.15,
+          ctrlPpi: ctrl?.startle?.ppiPct?.mean,
+          lowPpi: low?.startle?.ppiPct?.mean,
+          mkPpi: mk?.startle?.ppiPct?.mean,
+          qcPlateHits: document.querySelectorAll("#qcPlateSvg .az-well-hit").length,
+          tsPaths: document.querySelectorAll("#tsChartSvg path").length,
+          compRects: document.querySelectorAll("#compChartSvg rect").length,
+          compDots: document.querySelectorAll("#compChartSvg .az-scatter-dot").length,
+          summaryCards: document.querySelectorAll("#compSummaryStrip .az-stat-mini").length
+        };
+      });
+
+      const ok =
+        errors.length === 0 &&
+        ppiCheck.stayedOnPlots &&
+        ppiCheck.hasPpi &&
+        ppiCheck.zeroFalseFlags &&
+        ppiCheck.hasPhases &&
+        ppiCheck.stimMarkers > 0 &&
+        ppiCheck.formulaExact &&
+        ppiCheck.ctrlPpi > 60 &&
+        ppiCheck.lowPpi > 30 && ppiCheck.lowPpi < ppiCheck.ctrlPpi &&
+        ppiCheck.mkPpi < ppiCheck.lowPpi && ppiCheck.mkPpi < 30 &&
+        ppiCheck.qcPlateHits === 24 &&
+        ppiCheck.tsPaths >= 3 &&
+        ppiCheck.compRects >= 3 &&
+        ppiCheck.compDots === 24 &&
+        ppiCheck.summaryCards === 3;
+      report(ok, "Analyzer ppi_24w demo stays on Plots step, computes exact % PPI (Control > Low Dose > MK-801) and renders SVG charts",
+        ok ? "" : JSON.stringify({ errors, ppiCheck }));
+      await page.close();
+    }
+
+    // 7d. Demo ymaze_15: 15-Arena Y-Maze (Z1..Z4) + _ZCHANGE transition matrix & SAB %
+    {
+      const { page, errors } = await openFreshAnalyzer();
+      await page.selectOption("#demoPresetSelect", "ymaze_15");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="zchange"]');
+
+      const ymCheck = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        const ctrl = a.groups.find((g) => g.group === "Control");
+        const scop = a.groups.find((g) => g.group === "Scopolamine");
+        const resc = a.groups.find((g) => g.group === "Rescue");
+        const mat = a.zchangeSummary?.includedTransitionMatrix || [];
+        const matSum = mat.flat().reduce((s, v) => s + (v || 0), 0);
+        return {
+          hasSummaryChip: Boolean(document.querySelector('[data-rm-file="summary"]')),
+          hasZchangeChip: Boolean(document.querySelector('[data-rm-file="zchange"]')),
+          isMaze: Boolean(a.layout && a.layout.isMaze),
+          wellCount: a.layout ? a.layout.wells.length : 0,
+          mazeShapes: a.layout && a.layout.mazeShapes ? a.layout.mazeShapes.length : 0,
+          maxZone: a.capabilities.maxZone,
+          hasZchange: a.capabilities.hasZchange,
+          hasSab: a.capabilities.hasSab,
+          qcPlateHits: document.querySelectorAll("#qcPlateSvg .az-well-hit").length,
+          brushPlateHits: document.querySelectorAll("#brushPlateSvg .az-well-hit").length,
+          ctrlSab: ctrl?.zchange?.sabPct?.mean,
+          scopSab: scop?.zchange?.sabPct?.mean,
+          rescSab: resc?.zchange?.sabPct?.mean,
+          matCells: document.querySelectorAll("#zchangeMatrixSvg rect").length,
+          matSum,
+          arenaBars: document.querySelectorAll("#zchangeArenaSvg .az-zc-bar").length,
+          contentVisible: getComputedStyle(document.getElementById("zchangeContent")).display !== "none"
+        };
+      });
+
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      const sabCompDots = await page.evaluate(() => document.querySelectorAll("#compChartSvg .az-scatter-dot").length);
+      await page.selectOption("#compViewSel", "zone_pref");
+      const zonePrefDots = await page.evaluate(() => document.querySelectorAll("#compChartSvg .az-scatter-dot").length);
+
+      const ok =
+        errors.length === 0 &&
+        ymCheck.hasSummaryChip &&
+        ymCheck.hasZchangeChip &&
+        ymCheck.isMaze &&
+        ymCheck.wellCount === 15 &&
+        ymCheck.mazeShapes === 60 &&
+        ymCheck.maxZone === 4 &&
+        ymCheck.hasZchange &&
+        ymCheck.hasSab &&
+        ymCheck.qcPlateHits === 15 &&
+        ymCheck.brushPlateHits === 15 &&
+        ymCheck.ctrlSab > 55 &&
+        ymCheck.rescSab > 55 &&
+        ymCheck.scopSab < 45 &&
+        ymCheck.matCells === 16 &&
+        ymCheck.matSum > 0 &&
+        ymCheck.arenaBars === 15 &&
+        ymCheck.contentVisible &&
+        sabCompDots === 15 &&
+        zonePrefDots === 60;
+      report(ok, "Analyzer ymaze_15 demo renders 15-arena Y-Maze SVG, 4x4 _ZCHANGE transition matrix & accurate group SAB %",
+        ok ? "" : JSON.stringify({ errors, ymCheck, sabCompDots, zonePrefDots }));
+      await page.close();
+    }
+
+    // 7e. Real-world CSV edge cases: UTF-8 BOM, CRLF, pre-header system metadata, trailing commas, Petri (DIST_A1), 96-well wide, multi-zone maze (Z1..Z4 + _ZCHANGE)
+    {
+      const { page, errors } = await openFreshAnalyzer();
+
+      // 1) UTF-8 BOM + CRLF + pre-header metadata + RFC-4180 quotes + trailing commas + single-arena Petri (DIST_A1)
+      const petriCsv =
+        "\uFEFF" +
+        '"Zantiks MWP, System Export",v3.2\r\n' +
+        "Script: 04_qu_pd.zs,Unit: MWP-01\r\n" +
+        "\r\n" +
+        "RUNTIME,UNIT_ID,TEMP_C,PHASE,TIME_BIN,DIST_A1,MSD_A1,,,\r\n" +
+        '10.0,"MWP,01",22.1,LIGHT,1,12.4,45.0,,,\r\n' +
+        '20.0,"MWP,01",22.2,LIGHT,2,14.8,51.2,,,\r\n' +
+        '30.0,"MWP,01",22.1,LIGHT,3,11.6,40.5,,,\r\n' +
+        '40.0,"MWP,01",22.0,DARK,4,24.2,82.1,,,\r\n' +
+        '50.0,"MWP,01",22.0,DARK,5,21.5,75.0,,,\r\n' +
+        '60.0,"MWP,01",22.1,DARK,6,19.8,70.4,,,\r\n';
+      await page.setInputFiles("#analyzerFileInput", {
+        name: "petri_bom_crlf.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(petriCsv, "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "petri_bom_crlf.csv");
+      const petriRes = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          kind: st.summaryParsed.kind,
+          wells: st.summaryParsed.wells,
+          preHeaderCount: st.summaryParsed.preHeaderLines.length,
+          rowCount: st.summaryParsed.rowCount,
+          layoutId: st.analysis.layout.id,
+          qcPlateHits: document.querySelectorAll("#qcPlateSvg .az-well-hit").length,
+          tsPaths: document.querySelectorAll("#tsChartSvg path").length,
+          unitIdParsed: st.summaryParsed.rows[0].unitId
+        };
+      });
+
+      // 2) 96-well wide CSV (A1..H12) with intentional empty well (H11) & spike well (H12)
+      const wells96 = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 1; c <= 12; c++) wells96.push(String.fromCharCode(65 + r) + c);
+      }
+      const wideHeader = ["RUNTIME", "TEMP_C", "PHASE", "TIME_BIN", ...wells96.map((w) => "DIST_" + w), ...wells96.map((w) => "MSD_" + w)].join(",");
+      const wideLines = [wideHeader];
+      for (let i = 0; i < 12; i++) {
+        const dists = wells96.map((w, wi) => {
+          if (w === "H11") return "0.00";
+          if (w === "H12" && i === 5) return "460.00";
+          return (8 + ((wi + i) % 5) * 1.1).toFixed(2);
+        });
+        const msds = wells96.map((w) => (w === "H11" ? "0.0" : "28.5"));
+        wideLines.push([(i + 1) * 10, "28.0", i < 6 ? "LIGHT" : "DARK", i + 1, ...dists, ...msds].join(","));
+      }
+      await page.setInputFiles("#analyzerFileInput", {
+        name: "plate_96w_wide.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(wideLines.join("\n") + "\n", "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "plate_96w_wide.csv");
+      const wide96Res = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          wellCount: st.summaryParsed.wells.length,
+          firstWell: st.summaryParsed.wells[0],
+          lastWell: st.summaryParsed.wells[95],
+          layoutId: st.analysis.layout.id,
+          qcPlateHits: document.querySelectorAll("#qcPlateSvg .az-well-hit").length,
+          h11Empty: Boolean(st.summaryParsed.qc.H11 && st.summaryParsed.qc.H11.isEmpty),
+          h12Spike: Boolean(st.summaryParsed.qc.H12 && st.summaryParsed.qc.H12.isSpikeGlitch),
+          emptyCount: st.analysis.kpis.emptyCount,
+          spikeCount: st.analysis.kpis.spikeCount
+        };
+      });
+
+      // 3) Multi-zone 4-arena maze CSV (Z1..Z4) + companion sparse _ZCHANGE CSV with exact known SAB %
+      const mWells = ["A1", "A2", "A3", "A4"];
+      const mCols = ["RUNTIME", "TEMP_C", "PHASE", "TIME_BIN"];
+      for (const w of mWells) mCols.push("DIST_" + w);
+      for (const w of mWells) for (let z = 1; z <= 4; z++) mCols.push(`ZD_${w}_Z${z}`);
+      for (const w of mWells) for (let z = 1; z <= 4; z++) mCols.push(`ZC_${w}_Z${z}`);
+      for (const w of mWells) for (let z = 1; z <= 4; z++) mCols.push(`ZT_${w}_Z${z}`);
+      const mLines = [mCols.join(",")];
+      for (let i = 0; i < 6; i++) {
+        const row = [(i + 1) * 10, "22.0", "BASELINE", i + 1];
+        for (let wi = 0; wi < 4; wi++) row.push((15 + wi).toFixed(2));
+        for (let wi = 0; wi < 4; wi++) row.push("4.0", "4.0", "4.0", "3.0");
+        for (let wi = 0; wi < 4; wi++) row.push("2", "2", "2", "3");
+        for (let wi = 0; wi < 4; wi++) row.push("2.5", "2.5", "2.5", "2.5");
+        mLines.push(row.join(","));
+      }
+      // Sparse Zantiks _ZCHANGE format: A1 arm sequence [1,2,3,1] -> 2/2 alternations (100% SAB); A2 [1,2,1,2] -> 0/2 (0% SAB)
+      const zcLines = [
+        "TIME,,,ARENA,ACTION,ZONE",
+        "1.0,,,A1,ENTER,1", "2.0,,,A1,EXIT,1", "2.1,,,A1,ENTER,4", "3.0,,,A1,EXIT,4",
+        "3.1,,,A1,ENTER,2", "4.0,,,A1,EXIT,2", "4.1,,,A1,ENTER,4", "5.0,,,A1,EXIT,4",
+        "5.1,,,A1,ENTER,3", "6.0,,,A1,EXIT,3", "6.1,,,A1,ENTER,4", "7.0,,,A1,EXIT,4",
+        "7.1,,,A1,ENTER,1",
+        "1.0,,,A2,ENTER,1", "2.0,,,A2,ENTER,4", "3.0,,,A2,ENTER,2", "4.0,,,A2,ENTER,4",
+        "5.0,,,A2,ENTER,1", "6.0,,,A2,ENTER,4", "7.0,,,A2,ENTER,2"
+      ];
+      await page.setInputFiles("#analyzerFileInput", [
+        { name: "maze4_z1_z4.csv", mimeType: "text/csv", buffer: Buffer.from(mLines.join("\n") + "\n", "utf8") },
+        { name: "maze4_z1_z4_ZCHANGE.csv", mimeType: "text/csv", buffer: Buffer.from(zcLines.join("\n") + "\n", "utf8") }
+      ]);
+      await page.waitForFunction(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return st.summaryParsed?.filename === "maze4_z1_z4.csv" && st.zchangeParsed?.filename === "maze4_z1_z4_ZCHANGE.csv";
+      });
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="zchange"]');
+      const mazeRes = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          maxZone: st.summaryParsed.maxZone,
+          wells: st.summaryParsed.wells,
+          zchangeKind: st.zchangeParsed.kind,
+          a1Sab: st.analysis.wellsById.A1?.zchange?.sabPct,
+          a2Sab: st.analysis.wellsById.A2?.zchange?.sabPct,
+          matCells: document.querySelectorAll("#zchangeMatrixSvg rect").length
+        };
+      });
+
+      const ok =
+        errors.length === 0 &&
+        petriRes.kind === "summary" &&
+        JSON.stringify(petriRes.wells) === '["A1"]' &&
+        petriRes.preHeaderCount >= 2 &&
+        petriRes.rowCount === 6 &&
+        petriRes.layoutId === "petri" &&
+        petriRes.qcPlateHits === 1 &&
+        petriRes.tsPaths >= 1 &&
+        petriRes.unitIdParsed === "MWP,01" &&
+        wide96Res.wellCount === 96 &&
+        wide96Res.firstWell === "A1" &&
+        wide96Res.lastWell === "H12" &&
+        wide96Res.layoutId === "96well" &&
+        wide96Res.qcPlateHits === 96 &&
+        wide96Res.h11Empty &&
+        wide96Res.h12Spike &&
+        wide96Res.emptyCount === 1 &&
+        wide96Res.spikeCount === 1 &&
+        mazeRes.maxZone === 4 &&
+        JSON.stringify(mazeRes.wells) === '["A1","A2","A3","A4"]' &&
+        mazeRes.zchangeKind === "zchange" &&
+        mazeRes.a1Sab === 100 &&
+        mazeRes.a2Sab === 0 &&
+        mazeRes.matCells === 16;
+      report(ok, "Analyzer parses BOM/CRLF/pre-header/trailing-comma Petri CSV, 96-well wide CSV, and 4-zone maze + sparse _ZCHANGE CSV",
+        ok ? "" : JSON.stringify({ errors, petriRes, wide96Res, mazeRes }));
+      await page.close();
+    }
+
+    // 7f. End-to-end Builder -> Analyzer closed loop: localStorage autosave handoff AND Builder .zip bundle import
+    {
+      const { page, errors } = await openFreshPage("#study");
+      await page.setViewportSize({ width: 1280, height: 900 });
+
+      // Configure distinctive experiment in Script Builder
+      await page.evaluate(() => {
+        document.getElementById("userName").value = "Jane Doe";
+        document.getElementById("expPrefix").value = "closedloop";
+        state.organism = "zebrafish";
+        state.plateId = "48well";
+        state.stimId = "ppi";
+        document.getElementById("thermostatTemp").value = "28.5";
+        document.getElementById("chk_thermostat").checked = true;
+        refreshAll();
+      });
+      await page.waitForTimeout(550); // wait for debounced autosave to localStorage
+
+      // Download a real Builder .zip bundle via the UI button ("Download All 4 Scripts (.zip)")
+      const [zipDownload] = await Promise.all([
+        page.waitForEvent("download"),
+        page.click("#downloadZipBtn")
+      ]);
+      const zipBuffer = fs.readFileSync(await zipDownload.path());
+      const zipFilename = zipDownload.suggestedFilename();
+
+      // Navigate to Analyzer via .suite-nav and click "Use Latest Builder Config"
+      await page.click('.suite-nav a[href="zantiks_csv_analyzer.html"]');
+      await page.waitForFunction(() => location.pathname.endsWith("zantiks_csv_analyzer.html") && window.ZANTIKS_ANALYZER_UI);
+      await page.click("#useBuilderConfigBtn");
+
+      const localCtxCheck = await page.evaluate(() => {
+        const ctx = window.ZANTIKS_ANALYZER_UI.getState().context;
+        const badge = document.getElementById("contextBadge");
+        const txt = document.getElementById("contextBadgeText").textContent;
+        return {
+          valid: Boolean(ctx && ctx.valid),
+          source: ctx?.source,
+          plateId: ctx?.plateId,
+          stimId: ctx?.stimId,
+          targetTempC: ctx?.targetTempC,
+          studyTag: ctx?.studyTag,
+          badgeLoaded: badge.classList.contains("is-loaded"),
+          badgeHasDetails: txt.includes("48-Well") && txt.includes("28.5") && txt.includes("#closedloop")
+        };
+      });
+
+      // Clear workspace and load the Builder-generated .zip bundle directly into Analyzer
+      await page.click("#clearAllBtn");
+      const clearedCtx = await page.evaluate(() => window.ZANTIKS_ANALYZER_UI.getState().context === null);
+
+      await page.setInputFiles("#analyzerFileInput", {
+        name: zipFilename || "doe_closedloop_48w.zip",
+        mimeType: "application/zip",
+        buffer: zipBuffer
+      });
+      await page.waitForFunction(() => Boolean(window.ZANTIKS_ANALYZER_UI.getState().context?.source === "zip"));
+
+      const zipCtxCheck = await page.evaluate(() => {
+        const ctx = window.ZANTIKS_ANALYZER_UI.getState().context;
+        const badge = document.getElementById("contextBadge");
+        const txt = document.getElementById("contextBadgeText").textContent;
+        return {
+          valid: Boolean(ctx && ctx.valid),
+          source: ctx?.source,
+          plateId: ctx?.plateId,
+          stimId: ctx?.stimId,
+          targetTempC: ctx?.targetTempC,
+          studyTag: ctx?.studyTag,
+          badgeLoaded: badge.classList.contains("is-loaded"),
+          badgeHasDetails: txt.includes("48-Well") && txt.includes("28.5") && txt.includes("#closedloop")
+        };
+      });
+
+      const ok =
+        errors.length === 0 &&
+        localCtxCheck.valid &&
+        localCtxCheck.source === "localStorage" &&
+        localCtxCheck.plateId === "48well" &&
+        localCtxCheck.stimId === "ppi" &&
+        localCtxCheck.targetTempC === 28.5 &&
+        localCtxCheck.studyTag === "closedloop" &&
+        localCtxCheck.badgeLoaded &&
+        localCtxCheck.badgeHasDetails &&
+        clearedCtx &&
+        zipCtxCheck.valid &&
+        zipCtxCheck.source === "zip" &&
+        zipCtxCheck.plateId === "48well" &&
+        zipCtxCheck.stimId === "ppi" &&
+        zipCtxCheck.targetTempC === 28.5 &&
+        zipCtxCheck.studyTag === "closedloop" &&
+        zipCtxCheck.badgeLoaded &&
+        zipCtxCheck.badgeHasDetails;
+      report(ok, "Closed-loop Builder -> Analyzer handoff works via both localStorage ('Use Latest Builder Config') and Builder .zip bundle import",
+        ok ? "" : JSON.stringify({ errors, localCtxCheck, clearedCtx, zipCtxCheck }));
+      await page.close();
+    }
+
+    // 7g. Step 3 Group Brush painting, Step 5 well exclusion updating group stats, and all 4 exports (Tidy Long, Well Summary, Prism Grouped, Python .py)
+    {
+      const { page, errors } = await openFreshAnalyzer();
+      await page.selectOption("#demoPresetSelect", "ld_24w");
+
+      // Step 3: Groups -> add & rename a group to "Vehicle", then paint A1 & A2 on #brushPlateSvg via real pointer clicks
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click("#addGroupBtn");
+      await page.fill("#activeGroupNameInput", "Vehicle");
+      await page.press("#activeGroupNameInput", "Enter");
+
+      const clickWell = async (wellId) => {
+        const box = await page.locator(`#brushPlateSvg [data-well="${wellId}"]`).boundingBox();
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      };
+      await clickWell("A1");
+      await clickWell("A2");
+
+      const afterPaint = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const veh = st.analysis.groups.find((g) => g.group === "Vehicle");
+        const ctrl = st.analysis.groups.find((g) => g.group === "Control");
+        return {
+          a1Group: st.groups.A1,
+          a2Group: st.groups.A2,
+          vehN: veh ? veh.n : 0,
+          vehMean: veh ? veh.totalDist.mean : null,
+          ctrlN: ctrl ? ctrl.n : 0,
+          a2Dist: st.analysis.wellsById.A2.totalDist
+        };
+      });
+
+      // Step 5: Export -> exclude A1 via per-well table checkbox and verify Vehicle stats update immediately
+      await page.click('#analyzerStepper [data-goto="export"]');
+      await page.click('#wellSummaryTable [data-row-excl="A1"]');
+      const afterExclA1 = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const veh = st.analysis.groups.find((g) => g.group === "Vehicle");
+        return {
+          a1Excluded: st.excludedWells.has("A1"),
+          vehN: veh ? veh.n : 0,
+          vehMean: veh ? veh.totalDist.mean : null,
+          a2Dist: st.analysis.wellsById.A2.totalDist
+        };
+      });
+
+      // Trigger all 4 UI download buttons on Step 5 and read downloaded file contents
+      const captureDownloadText = async (selector) => {
+        const [download] = await Promise.all([
+          page.waitForEvent("download"),
+          page.click(selector)
+        ]);
+        const dlPath = await download.path();
+        return {
+          filename: download.suggestedFilename(),
+          text: fs.readFileSync(dlPath, "utf8")
+        };
+      };
+
+      const tidyDl = await captureDownloadText("#exportTidyBtn");
+      const summaryDl = await captureDownloadText("#exportSummaryBtn");
+      const prismDl = await captureDownloadText("#exportPrismBtn");
+      const pyDl = await captureDownloadText("#exportPythonBtn");
+
+      const tidyLines = tidyDl.text.trim().split("\n");
+      const summaryLines = summaryDl.text.trim().split("\n");
+      const prismLines = prismDl.text.trim().split("\n");
+      const prismHeaders = prismLines[0].split(",");
+      const vehColIdx = prismHeaders.indexOf("Vehicle");
+      const vehPrismVals = prismLines.slice(1).map((l) => l.split(",")[vehColIdx]).filter((v) => v && v.trim() !== "");
+
+      const exportsOk = {
+        tidyValid: tidyDl.filename.endsWith("_tidy_long.csv") &&
+          tidyLines[0].includes("runtime_s") && tidyLines[0].includes("well,group,excluded,qc_status,dist_mm") &&
+          tidyLines.length === 120 * 24 + 1 &&
+          tidyDl.text.includes(",A1,Vehicle,TRUE,") &&
+          tidyDl.text.includes(",A2,Vehicle,FALSE,"),
+        summaryValid: summaryDl.filename.endsWith("_well_summary.csv") &&
+          summaryLines[0].includes("well,group,excluded,qc_status") &&
+          summaryLines[0].includes("vmr_dark_minus_light") &&
+          summaryLines[0].includes("zone_preference_index") &&
+          summaryLines.length === 25 &&
+          summaryDl.text.includes("A1,Vehicle,TRUE,"),
+        prismValid: prismDl.filename.endsWith(".csv") &&
+          vehColIdx >= 0 &&
+          prismHeaders.includes("Control") &&
+          vehPrismVals.length === 1 &&
+          Math.abs(Number(vehPrismVals[0]) - afterExclA1.a2Dist) < 0.1,
+        pyValid: pyDl.filename.endsWith("_analysis.py") &&
+          pyDl.text.includes("import pandas as pd") &&
+          pyDl.text.includes("WELL_GROUPS = {") &&
+          pyDl.text.includes('"Vehicle"') &&
+          pyDl.text.includes('EXCLUDED_WELLS = {"A1"}') &&
+          pyDl.text.includes("def main()")
+      };
+
+      const ok =
+        errors.length === 0 &&
+        afterPaint.a1Group === "Vehicle" &&
+        afterPaint.a2Group === "Vehicle" &&
+        afterPaint.vehN === 2 &&
+        afterPaint.ctrlN === 6 &&
+        afterExclA1.a1Excluded &&
+        afterExclA1.vehN === 1 &&
+        Math.abs(afterExclA1.vehMean - afterExclA1.a2Dist) < 0.05 &&
+        Math.abs(afterExclA1.vehMean - afterPaint.vehMean) > 1 &&
+        Object.values(exportsOk).every(Boolean);
+      report(ok, "Step 3 interactive group painting, Step 5 well exclusion stats update, and Tidy/Summary/Prism/Python exports all work cleanly",
+        ok ? "" : JSON.stringify({ errors, afterPaint, afterExclA1, exportsOk }));
+      await page.close();
+    }
+
+    // 7h. Unified 1380px wizard shell width, sidebar & scrollbar-gutter parity at 1600x900 across Script Builder and CSV Analyzer
+    {
+      const { page, errors } = await openFreshPage("#study");
+      await page.setViewportSize({ width: 1600, height: 900 });
+      const readLayoutBox = () => page.evaluate(() => {
+        const tb = document.querySelector(".topbar-inner").getBoundingClientRect();
+        const main = document.querySelector("main.wizard").getBoundingClientRect();
+        const side = document.querySelector("aside.run-summary").getBoundingClientRect();
+        return {
+          topbarLeft: Math.round(tb.left * 10) / 10,
+          topbarWidth: Math.round(tb.width * 10) / 10,
+          mainLeft: Math.round(main.left * 10) / 10,
+          mainWidth: Math.round(main.width * 10) / 10,
+          sideLeft: Math.round(side.left * 10) / 10,
+          sideWidth: Math.round(side.width * 10) / 10,
+          pageMax: getComputedStyle(document.documentElement).getPropertyValue("--page-max").trim(),
+          gutter: getComputedStyle(document.documentElement).scrollbarGutter,
+          noOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth
+        };
+      });
+
+      const builderBox = await readLayoutBox();
+
+      await page.click('.suite-nav a[href="zantiks_csv_analyzer.html"]');
+      await page.waitForFunction(() => location.pathname.endsWith("zantiks_csv_analyzer.html") && window.ZANTIKS_ANALYZER_UI);
+      const analyzerEmptyBox = await readLayoutBox();
+
+      await page.selectOption("#demoPresetSelect", "ld_24w");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      const analyzerLoadedBox = await readLayoutBox();
+
+      const eq = (a, b) => Math.abs(a - b) < 0.5;
+      const ok =
+        errors.length === 0 &&
+        builderBox.pageMax === "1380px" &&
+        analyzerLoadedBox.pageMax === "1380px" &&
+        builderBox.gutter === "stable" &&
+        analyzerLoadedBox.gutter === "stable" &&
+        eq(builderBox.mainWidth, 1380) &&
+        eq(builderBox.mainWidth, analyzerEmptyBox.mainWidth) &&
+        eq(builderBox.mainWidth, analyzerLoadedBox.mainWidth) &&
+        eq(builderBox.mainLeft, analyzerEmptyBox.mainLeft) &&
+        eq(builderBox.mainLeft, analyzerLoadedBox.mainLeft) &&
+        eq(builderBox.sideWidth, analyzerEmptyBox.sideWidth) &&
+        eq(builderBox.sideWidth, analyzerLoadedBox.sideWidth) &&
+        eq(builderBox.sideLeft, analyzerEmptyBox.sideLeft) &&
+        eq(builderBox.sideLeft, analyzerLoadedBox.sideLeft) &&
+        eq(builderBox.topbarWidth, analyzerEmptyBox.topbarWidth) &&
+        eq(builderBox.topbarWidth, analyzerLoadedBox.topbarWidth) &&
+        eq(builderBox.topbarLeft, analyzerEmptyBox.topbarLeft) &&
+        eq(builderBox.topbarLeft, analyzerLoadedBox.topbarLeft) &&
+        builderBox.noOverflow &&
+        analyzerEmptyBox.noOverflow &&
+        analyzerLoadedBox.noOverflow;
+      report(ok, "Script Builder and CSV Analyzer share identical 1380px wizard shell, topbar & sidebar alignment at 1600x900 with zero shift",
+        ok ? "" : JSON.stringify({ errors, builderBox, analyzerEmptyBox, analyzerLoadedBox }));
+      await page.close();
+    }
   }
 } finally {
   await browser.close();
