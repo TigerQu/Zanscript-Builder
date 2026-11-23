@@ -275,6 +275,8 @@ function renderStimParams() {
           Uses official MWP stepper PPI command: <code>ZCOMMAND("${sp.ppiPrepulse || "U3"} D1190 M1 M-1 M1 M-1 P${Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300)} ${sp.ppiPulse || "U0"} D1190 M1 M-1 M1 M-1")</code>. Alternating mode logs <code>PULSE_ALONE</code> and <code>PPI_TRIAL</code> rows so % PPI can be computed directly.
         </div>`;
   } else if (id === "circadian") {
+    const circRampMinVal = parseInt(sp.circRampMin, 10) || 0;
+    const circCurveVal = sp.circRampCurve === "linear" ? "linear" : "gamma";
     box.innerHTML = `
         <div class="form-grid-3">
           <div class="field">
@@ -295,7 +297,14 @@ function renderStimParams() {
           </div>
           <div class="field">
             <label>Dawn / Dusk PWM Ramp (min)</label>
-            <input type="number" min="0" max="30" step="5" data-sp="circRampMin" value="${sp.circRampMin || 0}">
+            <input type="number" min="0" max="30" step="5" data-sp="circRampMin" value="${circRampMinVal}">
+          </div>
+          <div class="field">
+            <label>Dawn / Dusk Curve</label>
+            <select data-sp="circRampCurve" id="circRampCurveSel" ${circRampMinVal <= 0 ? "disabled" : ""}>
+              <option value="gamma" ${circCurveVal === "gamma" ? "selected" : ""}>Gamma 2.2 (Log-Perceived)</option>
+              <option value="linear" ${circCurveVal === "linear" ? "selected" : ""}>Linear</option>
+            </select>
           </div>
         </div>`;
   } else if (id === "multi_phase") {
@@ -367,7 +376,9 @@ function renderStimParams() {
               <option value="bg_opto">Preset: White BG + Opto</option>
               <option value="bot_bg_top_opto">Preset: Bot White + Top Opto</option>
               <option value="multi_modal">Preset: Multi-Modal (Light + Vib + Audio)</option>
-              <option value="dawn_dusk">Preset: Dawn / Dusk Smooth Ramp</option>
+              <option value="dawn_dusk">Preset: Dawn / Dusk Smooth Ramp (Gamma)</option>
+              <option value="sine_wave">Preset: Sine Breathing Wave</option>
+              <option value="custom_curve">Preset: Custom Keyframe Envelope</option>
               <option value="opto_strobe">Preset: Opto Strobe (10 Hz)</option>
               <option value="rgb_overlap">Preset: RGB Overlap</option>
               <option value="sequential">Preset: Seq Sweep</option>
@@ -604,7 +615,9 @@ function renderStimParams() {
       let extraRowHtml = "";
       const isLight = tr.kind === "light";
       const curRep = (isVib || isAudio) && Number(sel.repeatSec) > 0 ? Math.max(bin, Math.round(sel.repeatSec)) : 0;
-      const hasRamp = isLight && Number.isFinite(sel.endVal) && Math.round(sel.endVal) !== Math.round(sel.val);
+      const hasRamp = isLight && isClipCurved(sel);
+      const curCurve = isLight ? normalizeLightCurveId(sel.curve) : "linear";
+      const curSteps = isLight ? normalizeRampSteps(sel.rampSteps) : 8;
       const curStrobe = isLight && [2, 5, 10].includes(parseInt(sel.strobeHz, 10)) ? parseInt(sel.strobeHz, 10) : 0;
 
       const inspSub = isVib
@@ -680,8 +693,44 @@ function renderStimParams() {
               </div>
             </div>`;
         if (isLight) {
-          const endValShown = hasRamp ? Math.round(sel.endVal) : (sel.val >= 50 ? 0 : 100);
+          const endValShown = hasRamp
+            ? (curCurve === "custom" && Array.isArray(sel.keyframes) && sel.keyframes.length >= 2
+                ? Math.round(sel.keyframes[sel.keyframes.length - 1].y)
+                : Math.round(sel.endVal))
+            : (sel.val >= 50 ? 0 : 100);
           const endDisabled = (!hasRamp || !hwIsZ3) ? "disabled" : "";
+          const endLabelTxt = curCurve === "sine"
+            ? "Peak Brightness (%) &middot; Sine Pulse"
+            : "End Brightness (%) &middot; Smooth PWM Ramp";
+          const curveOpts = LIGHT_CURVE_TYPES.map(ct =>
+            `<option value="${ct.id}" ${ct.id === curCurve ? "selected" : ""}>${ct.label}</option>`
+          ).join("");
+          const stepOpts = LIGHT_RAMP_STEP_OPTIONS.map(n =>
+            `<option value="${n}" ${n === curSteps ? "selected" : ""}>${n} steps${n === 8 ? " (Default)" : ""}</option>`
+          ).join("");
+          const curveRowHtml = (hasRamp && hwIsZ3) ? `
+            <div class="nle-insp-extra-row" id="nleCurveRow">
+              <div class="nle-curve-left">
+                <div class="nle-insp-field">
+                  <label for="nleInspCurveSel">PWM Curve Shape</label>
+                  <select id="nleInspCurveSel">${curveOpts}</select>
+                </div>
+                <div class="nle-curve-subrow">
+                  <div class="nle-insp-field">
+                    <label for="nleInspStepsSel">PWM Steps</label>
+                    <select id="nleInspStepsSel">${stepOpts}</select>
+                  </div>
+                  ${curCurve === "custom" ? '<button type="button" class="btn btn-xs" id="nleCurveResetBtn" title="Reset custom keyframes">Reset</button>' : ""}
+                </div>
+              </div>
+              <div class="nle-curve-box">
+                <div class="nle-curve-head">
+                  <label>PWM Curve Preview</label>
+                  <span class="nle-curve-readout" id="nleCurveReadout">${curSteps} steps &middot; ${curCurve === "custom" ? "Drag points · Click add · Dbl-click del" : "Click curve to edit keyframes"}</span>
+                </div>
+                <svg id="nleCurveSvg" class="nle-curve-svg" viewBox="0 0 460 104"></svg>
+              </div>
+            </div>` : "";
           extraRowHtml = `
             <div class="nle-insp-extra-row">
               <div class="nle-insp-field">
@@ -696,14 +745,14 @@ function renderStimParams() {
               <div class="nle-insp-field nle-insp-field-wide">
                 <label class="nle-insp-inline-toggle">
                   <input type="checkbox" id="nleInspRampChk" ${hasRamp ? "checked" : ""} ${!hwIsZ3 ? "disabled" : ""}>
-                  End Brightness (%) &middot; Smooth PWM Ramp
+                  ${endLabelTxt}
                 </label>
                 <div class="nle-insp-slider">
                   <input type="range" id="nleInspEndRange" min="0" max="100" step="1" value="${endValShown}" ${endDisabled} aria-label="End Brightness (%)">
                   <input type="number" id="nleInspEndVal" min="0" max="100" step="1" value="${endValShown}" ${endDisabled}>
                 </div>
               </div>
-            </div>`;
+            </div>${curveRowHtml}`;
         }
       }
 
@@ -745,8 +794,88 @@ function renderStimParams() {
       const rampChk = document.getElementById("nleInspRampChk");
       const endRangeInp = document.getElementById("nleInspEndRange");
       const endValInp = document.getElementById("nleInspEndVal");
+      const curveSel = document.getElementById("nleInspCurveSel");
+      const stepsSel = document.getElementById("nleInspStepsSel");
+      const curveResetBtn = document.getElementById("nleCurveResetBtn");
+      const curveSvg = document.getElementById("nleCurveSvg");
+      const curveReadout = document.getElementById("nleCurveReadout");
       const strobeSel = document.getElementById("nleInspStrobeSel");
       const dBtn = document.getElementById("nleDelClipBtn");
+
+      const CURVE_PAD = { l: 34, r: 12, t: 10, b: 18, w: 460, h: 104 };
+      const getCurveMetrics = () => {
+        const w = (curveSvg && curveSvg.clientWidth > 120) ? Math.round(curveSvg.clientWidth) : CURVE_PAD.w;
+        const h = CURVE_PAD.h;
+        const pw = Math.max(120, w - CURVE_PAD.l - CURVE_PAD.r);
+        const ph = h - CURVE_PAD.t - CURVE_PAD.b;
+        return { w, h, pw, ph };
+      };
+
+      const redrawCurveEditor = (statusText) => {
+        if (!curveSvg || !isLight) return;
+        const { w: svgW, h: svgH, pw: plotW, ph: plotH } = getCurveMetrics();
+        curveSvg.setAttribute("viewBox", `0 0 ${svgW} ${svgH}`);
+        const tToX = (t) => CURVE_PAD.l + Math.max(0, Math.min(1, t)) * plotW;
+        const yToPy = (y) => CURVE_PAD.t + (1 - Math.max(0, Math.min(100, y)) / 100) * plotH;
+        const cId = normalizeLightCurveId(sel.curve);
+        const effDur = Math.max(bin, sel.endSec - sel.startSec);
+        const maxSteps = Math.max(2, Math.round(effDur / bin));
+        const stCount = Math.min(normalizeRampSteps(sel.rampSteps), maxSteps);
+
+        let svgHtml = "";
+        // Horizontal gridlines & % axis labels
+        for (const pct of [100, 50, 0]) {
+          const py = yToPy(pct);
+          svgHtml += `<line x1="${CURVE_PAD.l}" y1="${py.toFixed(1)}" x2="${CURVE_PAD.l + plotW}" y2="${py.toFixed(1)}" stroke="#e2e8f0" stroke-width="1" ${pct === 50 ? 'stroke-dasharray="3,3"' : ""}/>`;
+          svgHtml += `<text x="${CURVE_PAD.l - 5}" y="${(py + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" font-family="ui-monospace,monospace" fill="#64748b">${pct}%</text>`;
+        }
+        // Bottom time axis labels
+        const midLbl = `${Number((effDur / 2).toFixed(1))}s`;
+        svgHtml += `<text x="${CURVE_PAD.l}" y="${svgH - 4}" text-anchor="start" font-size="9.5" font-family="ui-monospace,monospace" fill="#64748b">0s</text>`;
+        svgHtml += `<text x="${(CURVE_PAD.l + plotW / 2).toFixed(1)}" y="${svgH - 4}" text-anchor="middle" font-size="9.5" font-family="ui-monospace,monospace" fill="#64748b">${midLbl}</text>`;
+        svgHtml += `<text x="${CURVE_PAD.l + plotW}" y="${svgH - 4}" text-anchor="end" font-size="9.5" font-family="ui-monospace,monospace" fill="#64748b">${effDur}s</text>`;
+
+        // Discrete Zanscript PWM step staircase bars
+        for (let k = 0; k < stCount; k++) {
+          const t0 = k / stCount;
+          const t1 = (k + 1) / stCount;
+          const pct = evaluateLightCurvePct(sel, (t0 + t1) / 2);
+          const bx = tToX(t0);
+          const bw = tToX(t1) - bx;
+          const by = yToPy(pct);
+          const bh = Math.max(0, yToPy(0) - by);
+          svgHtml += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${tr.bg}" fill-opacity="0.72" stroke="${tr.border}" stroke-opacity="0.26" stroke-width="0.7"/>`;
+        }
+
+        // Smooth continuous reference curve
+        const sampleN = 48;
+        const pts = [];
+        for (let i = 0; i <= sampleN; i++) {
+          const tt = i / sampleN;
+          const yy = evaluateLightCurvePct(sel, tt);
+          pts.push(`${tToX(tt).toFixed(1)},${yToPy(yy).toFixed(1)}`);
+        }
+        svgHtml += `<polyline points="${pts.join(" ")}" fill="none" stroke="${tr.border}" stroke-width="2" stroke-linejoin="round" pointer-events="none"/>`;
+
+        // Interactive keyframe handles when Custom Keyframes mode is active
+        if (cId === "custom" && Array.isArray(sel.keyframes)) {
+          sel.keyframes.forEach((kf, idx) => {
+            const isEdge = idx === 0 || idx === sel.keyframes.length - 1;
+            const cx = tToX(kf.t);
+            const cy = yToPy(kf.y);
+            svgHtml += `<circle class="nle-kf-pt${isEdge ? " is-edge" : ""}" data-kf-idx="${idx}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4.8" fill="#ffffff" stroke="${tr.border}" stroke-width="2"/>`;
+          });
+        }
+
+        curveSvg.innerHTML = svgHtml;
+        if (curveReadout) {
+          curveReadout.textContent = statusText || (
+            cId === "custom"
+              ? `${stCount} steps · ${(sel.keyframes || []).length} pts (drag / click / dbl-click)`
+              : `${stCount} steps · Click curve to draw keyframes`
+          );
+        }
+      };
 
       const applyStartEnd = (normalize) => {
         const bounds = getSameTrackNeighborBounds(sel);
@@ -826,10 +955,151 @@ function renderStimParams() {
             sel.endVal = ev === Math.round(sel.val) ? (sel.val >= 50 ? 0 : 100) : ev;
           } else {
             delete sel.endVal;
+            delete sel.curve;
+            delete sel.rampSteps;
+            delete sel.keyframes;
             if (sel.val < 5) sel.val = 5;
           }
           syncNleDom(true, false);
           flushRefresh();
+        });
+      }
+      if (curveSel) {
+        curveSel.addEventListener("change", () => {
+          const nextC = normalizeLightCurveId(curveSel.value);
+          if (nextC === "custom") {
+            sel.keyframes = sampleClipCurveToKeyframes(sel, 5);
+            sel.curve = "custom";
+            sel.val = sel.keyframes[0].y;
+            sel.endVal = sel.keyframes[sel.keyframes.length - 1].y;
+          } else {
+            delete sel.keyframes;
+            if (nextC === "linear") delete sel.curve;
+            else sel.curve = nextC;
+            if (Math.round(sel.endVal) === Math.round(sel.val)) {
+              sel.endVal = sel.val >= 50 ? 0 : 100;
+            }
+          }
+          syncNleDom(true, false);
+          flushRefresh();
+        });
+      }
+      if (stepsSel) {
+        stepsSel.addEventListener("change", () => {
+          const st = normalizeRampSteps(stepsSel.value);
+          if (st === 8) delete sel.rampSteps;
+          else sel.rampSteps = st;
+          redrawCurveEditor();
+          syncNleDom(false, false);
+          flushRefresh();
+        });
+      }
+      if (curveResetBtn) {
+        curveResetBtn.addEventListener("click", () => {
+          const sY = Math.min(100, Math.max(0, Math.round(sel.val)));
+          const eY = Number.isFinite(sel.endVal) ? Math.min(100, Math.max(0, Math.round(sel.endVal))) : 100;
+          sel.keyframes = [{ t: 0, y: sY }, { t: 0.5, y: Math.round((sY + eY) / 2) }, { t: 1, y: eY }];
+          redrawCurveEditor();
+          syncNleDom(false, false);
+          flushRefresh();
+        });
+      }
+      if (curveSvg) {
+        redrawCurveEditor();
+        const clientToCurve = (clientX, clientY) => {
+          const { w: svgW, h: svgH, pw: plotW, ph: plotH } = getCurveMetrics();
+          const rect = curveSvg.getBoundingClientRect();
+          const sx = ((clientX - rect.left) / Math.max(1, rect.width)) * svgW;
+          const sy = ((clientY - rect.top) / Math.max(1, rect.height)) * svgH;
+          const t = Math.min(1, Math.max(0, (sx - CURVE_PAD.l) / plotW));
+          const y = Math.min(100, Math.max(0, Math.round((1 - (sy - CURVE_PAD.t) / plotH) * 100)));
+          return { t: Number(t.toFixed(3)), y };
+        };
+
+        curveSvg.addEventListener("dblclick", (e) => {
+          const ptEl = e.target && e.target.closest ? e.target.closest("[data-kf-idx]") : null;
+          if (!ptEl || sel.curve !== "custom" || !Array.isArray(sel.keyframes)) return;
+          const idx = parseInt(ptEl.getAttribute("data-kf-idx"), 10);
+          if (idx > 0 && idx < sel.keyframes.length - 1) {
+            sel.keyframes.splice(idx, 1);
+            redrawCurveEditor();
+            syncNleDom(false, false);
+            flushRefresh();
+          }
+        });
+
+        curveSvg.addEventListener("mousedown", (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          const ptEl = e.target && e.target.closest ? e.target.closest("[data-kf-idx]") : null;
+          let activeIdx = -1;
+          let switchedToCustom = false;
+
+          if (sel.curve !== "custom") {
+            // Clicking directly on a preset curve converts to custom keyframes and inserts/selects a point
+            sel.keyframes = sampleClipCurveToKeyframes(sel, 5);
+            sel.curve = "custom";
+            switchedToCustom = true;
+          }
+          if (ptEl && !switchedToCustom) {
+            activeIdx = parseInt(ptEl.getAttribute("data-kf-idx"), 10);
+          } else {
+            const pt = clientToCurve(e.clientX, e.clientY);
+            // If clicking very near an existing point, grab it; else insert a new interior keyframe
+            const nearIdx = sel.keyframes.findIndex(k => Math.abs(k.t - pt.t) < 0.045 && Math.abs(k.y - pt.y) < 12);
+            if (nearIdx >= 0) {
+              activeIdx = nearIdx;
+            } else if (sel.keyframes.length < 10 && pt.t > 0.03 && pt.t < 0.97) {
+              sel.keyframes.push({ t: pt.t, y: pt.y });
+              sel.keyframes.sort((a, b) => a.t - b.t);
+              activeIdx = sel.keyframes.findIndex(k => k.t === pt.t && k.y === pt.y);
+            } else {
+              activeIdx = pt.t <= 0.03 ? 0 : sel.keyframes.length - 1;
+              sel.keyframes[activeIdx].y = pt.y;
+            }
+          }
+          if (activeIdx < 0) return;
+          if (switchedToCustom && curveSel) curveSel.value = "custom";
+
+          const effDur = Math.max(bin, sel.endSec - sel.startSec);
+          const updateAt = (clientX, clientY) => {
+            const pt = clientToCurve(clientX, clientY);
+            const kfs = sel.keyframes;
+            if (activeIdx === 0) {
+              kfs[0].y = pt.y;
+              sel.val = pt.y;
+              if (rInp) rInp.value = pt.y;
+              if (vInp) vInp.value = pt.y;
+            } else if (activeIdx === kfs.length - 1) {
+              kfs[activeIdx].y = pt.y;
+              sel.endVal = pt.y;
+              if (endRangeInp) endRangeInp.value = pt.y;
+              if (endValInp) endValInp.value = pt.y;
+            } else {
+              const minT = Number((kfs[activeIdx - 1].t + 0.025).toFixed(3));
+              const maxT = Number((kfs[activeIdx + 1].t - 0.025).toFixed(3));
+              kfs[activeIdx].t = Math.min(maxT, Math.max(minT, pt.t));
+              kfs[activeIdx].y = pt.y;
+            }
+            const curKf = kfs[activeIdx];
+            const secAt = Number((curKf.t * effDur).toFixed(1));
+            const pwmAt = Math.round((curKf.y / 100) * 4095);
+            redrawCurveEditor(`t=${secAt}s · ${curKf.y}% (PWM ${pwmAt})`);
+            syncNleDom(false, false);
+            scheduleRefresh();
+          };
+          updateAt(e.clientX, e.clientY);
+
+          const onKfMove = (me) => updateAt(me.clientX, me.clientY);
+          const onKfUp = () => {
+            window.removeEventListener("mousemove", onKfMove);
+            window.removeEventListener("mouseup", onKfUp);
+            if (switchedToCustom) syncNleDom(true, false);
+            else redrawCurveEditor();
+            flushRefresh();
+          };
+          window.addEventListener("mousemove", onKfMove);
+          window.addEventListener("mouseup", onKfUp);
         });
       }
       if (endValInp) {
@@ -838,8 +1108,12 @@ function renderStimParams() {
           if (!Number.isFinite(raw)) return;
           const ev = Math.min(100, Math.max(0, Math.round(raw)));
           sel.endVal = ev;
+          if (sel.curve === "custom" && Array.isArray(sel.keyframes) && sel.keyframes.length >= 2) {
+            sel.keyframes[sel.keyframes.length - 1].y = ev;
+          }
           if (fromRange) endValInp.value = ev;
           if (!fromRange && endRangeInp) endRangeInp.value = ev;
+          redrawCurveEditor();
           syncNleDom(false, false);
           scheduleRefresh();
         };
@@ -851,8 +1125,12 @@ function renderStimParams() {
         endValInp.addEventListener("change", () => {
           const ev = Math.min(100, Math.max(0, Math.round(parseFloat(endValInp.value) || 0)));
           sel.endVal = ev;
+          if (sel.curve === "custom" && Array.isArray(sel.keyframes) && sel.keyframes.length >= 2) {
+            sel.keyframes[sel.keyframes.length - 1].y = ev;
+          }
           endValInp.value = ev;
           if (endRangeInp) endRangeInp.value = ev;
+          redrawCurveEditor();
           syncNleDom(false, false);
           flushRefresh();
         });
@@ -870,12 +1148,16 @@ function renderStimParams() {
         const applyVal = (rawVal, fromRange) => {
           const raw = parseFloat(rawVal);
           if (!Number.isFinite(raw)) return;
-          const allowZero = isLight && Number.isFinite(sel.endVal);
+          const allowZero = isLight && isClipCurved(sel);
           sel.val = isTemp
             ? Math.min(40, Math.max(10, Number(raw.toFixed(1))))
             : Math.min(100, Math.max(allowZero ? 0 : 5, Math.round(raw)));
+          if (isLight && sel.curve === "custom" && Array.isArray(sel.keyframes) && sel.keyframes.length >= 2) {
+            sel.keyframes[0].y = sel.val;
+          }
           if (fromRange && vInp) vInp.value = sel.val;
           if (!fromRange && rInp) rInp.value = sel.val;
+          redrawCurveEditor();
           syncNleDom(false, false);
           scheduleRefresh();
         };
@@ -907,11 +1189,37 @@ function renderStimParams() {
         const rep = Number(c.repeatSec) > 0 ? ` ↻${c.repeatSec}s` : "";
         main = `${sanitizeAudioAsset(c.val)}${rep}`;
       } else {
-        const hasR = hwIsZ3 && Number.isFinite(c.endVal) && Math.round(c.endVal) !== Math.round(c.val);
+        const hasR = hwIsZ3 && isClipCurved(c);
         const st = [2, 5, 10].includes(parseInt(c.strobeHz, 10)) ? ` ${c.strobeHz}Hz` : "";
-        main = hwIsZ3 ? (hasR ? `${c.val}→${Math.round(c.endVal)}%${st}` : `${c.val}%${st}`) : `ON${st}`;
+        if (!hwIsZ3) {
+          main = `ON${st}`;
+        } else if (hasR) {
+          const cId = normalizeLightCurveId(c.curve);
+          if (cId === "sine") main = `∿ ${c.val}↔${Math.round(c.endVal)}%${st}`;
+          else if (cId === "custom") main = `Curve (${(c.keyframes || []).length}pt)${st}`;
+          else {
+            const cTag = cId === "gamma" ? " γ" : (cId === "scurve" ? " S" : (cId === "log" ? " ◜" : ""));
+            main = `${c.val}→${Math.round(c.endVal)}%${cTag}${st}`;
+          }
+        } else {
+          main = `${c.val}%${st}`;
+        }
       }
       return ratio >= 0.18 ? `${main} (${effStart}-${effEnd}s)` : main;
+    }
+
+    function buildInlineClipCurveMarkup(c, tr) {
+      const sampleN = 28;
+      const linePts = [];
+      for (let i = 0; i <= sampleN; i++) {
+        const t = i / sampleN;
+        const pct = evaluateLightCurvePct(c, t);
+        const x = (t * 100).toFixed(1);
+        const y = (30 - (pct / 100) * 28 - 1).toFixed(1);
+        linePts.push(`${x},${y}`);
+      }
+      const polyPts = `0,30 ${linePts.join(" ")} 100,30`;
+      return `<polygon points="${polyPts}" fill="${tr.bg}" fill-opacity="0.92"/><polyline points="${linePts.join(" ")}" fill="none" stroke="${tr.border}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`;
     }
 
     let cachedGridPct = null;
@@ -967,19 +1275,18 @@ function renderStimParams() {
             el.style.background = tr.bg;
             el.style.borderColor = tr.border;
             el.style.color = tr.text;
-            el.innerHTML = `<div class="nle-handle nle-handle-l" data-handle="l"></div><span class="nle-clip-label"></span><div class="nle-handle nle-handle-r" data-handle="r"></div>`;
+            el.innerHTML = `<svg class="nle-clip-curve" viewBox="0 0 100 30" preserveAspectRatio="none"></svg><div class="nle-handle nle-handle-l" data-handle="l"></div><span class="nle-clip-label"></span><div class="nle-handle nle-handle-r" data-handle="r"></div>`;
             lane.appendChild(el);
           }
           el.style.left = leftPct + "%";
           el.style.width = widthPct + "%";
-          if (tr.kind === "light" && Number.isFinite(c.endVal) && Math.round(c.endVal) !== Math.round(c.val)) {
-            const rampUp = c.endVal > c.val;
-            el.style.background = rampUp
-              ? `linear-gradient(90deg, #ffffff 0%, ${tr.bg} 100%)`
-              : `linear-gradient(90deg, ${tr.bg} 0%, #ffffff 100%)`;
-          } else {
-            el.style.background = tr.bg;
+          const clipCurved = hwIsZ3 && tr.kind === "light" && isClipCurved(c);
+          el.classList.toggle("has-curve", clipCurved);
+          const curveEl = el.querySelector(".nle-clip-curve");
+          if (curveEl) {
+            curveEl.innerHTML = clipCurved ? buildInlineClipCurveMarkup(c, tr) : "";
           }
+          el.style.background = clipCurved ? "#ffffff" : tr.bg;
           el.style.borderStyle = (tr.kind === "light" && [2, 5, 10].includes(parseInt(c.strobeHz, 10))) ? "dashed" : "solid";
           el.classList.toggle("selected", c.id === state.selectedClipId);
           const lblEl = el.querySelector(".nle-clip-label");
@@ -1123,9 +1430,32 @@ function renderStimParams() {
       } else if (pType === "dawn_dusk") {
         state.showUnderTracks = false;
         state.timelineClips = [
-          { id: ++_nextClipId, track: "WHITE", startSec: 0,   endSec: 60,  val: 0,   endVal: 100 },
+          { id: ++_nextClipId, track: "WHITE", startSec: 0,   endSec: 60,  val: 0,   endVal: 100, curve: "gamma", rampSteps: 12 },
           { id: ++_nextClipId, track: "WHITE", startSec: 60,  endSec: 120, val: 100 },
-          { id: ++_nextClipId, track: "WHITE", startSec: 120, endSec: 180, val: 100, endVal: 0 }
+          { id: ++_nextClipId, track: "WHITE", startSec: 120, endSec: 180, val: 100, endVal: 0,   curve: "gamma", rampSteps: 12 }
+        ];
+      } else if (pType === "sine_wave") {
+        state.showUnderTracks = false;
+        state.timelineClips = [
+          { id: ++_nextClipId, track: "WHITE", startSec: 0,   endSec: 60,  val: 5, endVal: 100, curve: "sine", rampSteps: 12 },
+          { id: ++_nextClipId, track: "WHITE", startSec: 60,  endSec: 120, val: 5, endVal: 100, curve: "sine", rampSteps: 12 },
+          { id: ++_nextClipId, track: "WHITE", startSec: 120, endSec: 180, val: 5, endVal: 100, curve: "sine", rampSteps: 12 }
+        ];
+      } else if (pType === "custom_curve") {
+        state.showUnderTracks = false;
+        state.timelineClips = [
+          {
+            id: ++_nextClipId, track: "BLUE", startSec: 0, endSec: 180, val: 0, endVal: 15,
+            curve: "custom", rampSteps: 16,
+            keyframes: [
+              { t: 0, y: 0 },
+              { t: 0.25, y: 90 },
+              { t: 0.55, y: 90 },
+              { t: 0.72, y: 25 },
+              { t: 0.85, y: 70 },
+              { t: 1, y: 15 }
+            ]
+          }
         ];
       } else if (pType === "opto_strobe") {
         state.showUnderTracks = false;
@@ -1386,6 +1716,10 @@ function renderStimParams() {
         const cw = document.getElementById("acousticCustomWrap");
         if (cw) cw.style.display = el.value === "custom" ? "" : "none";
       }
+      if (state.stimId === "circadian" && spKey === "circRampMin") {
+        const cSel = document.getElementById("circRampCurveSel");
+        if (cSel) cSel.disabled = (parseInt(el.value, 10) || 0) <= 0;
+      }
       if (state.stimId === "ppi") {
         const noteEl = box.querySelector(".proto-note");
         if (noteEl) {
@@ -1405,6 +1739,10 @@ function renderStimParams() {
       if (state.stimId === "acoustic_startle" && spKey === "audioFile") {
         const cw = document.getElementById("acousticCustomWrap");
         if (cw) cw.style.display = el.value === "custom" ? "" : "none";
+      }
+      if (state.stimId === "circadian" && spKey === "circRampMin") {
+        const cSel = document.getElementById("circRampCurveSel");
+        if (cSel) cSel.disabled = (parseInt(el.value, 10) || 0) <= 0;
       }
       if (state.stimId === "ppi") {
         const noteEl = box.querySelector(".proto-note");

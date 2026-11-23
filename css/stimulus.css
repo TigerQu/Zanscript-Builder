@@ -534,7 +534,22 @@
   z-index: 4;
 }
 
+.nle-clip.has-curve {
+  background: #ffffff !important;
+}
+
+.nle-clip-curve {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
 .nle-clip-label {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
@@ -542,6 +557,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
+}
+
+.nle-clip.has-curve .nle-clip-label {
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.92), 0 0 2px rgba(255, 255, 255, 0.95);
 }
 
 .nle-handle {
@@ -1219,6 +1238,77 @@
 .nle-insp-repeat-num {
   flex: 0 0 84px !important;
   width: 84px !important;
+}
+
+.nle-curve-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nle-curve-subrow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.nle-curve-subrow .nle-insp-field {
+  flex: 1 1 auto;
+}
+
+.nle-curve-subrow .btn {
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.nle-curve-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nle-curve-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nle-curve-head label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.nle-curve-readout {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.nle-curve-svg {
+  display: block;
+  width: 100%;
+  height: 104px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+.nle-kf-pt {
+  cursor: move;
+  transition: r 0.08s;
+}
+
+.nle-kf-pt.is-edge {
+  cursor: ns-resize;
+}
+
+.nle-kf-pt:hover {
+  r: 6;
 }
 
 /* Top view of the plate */

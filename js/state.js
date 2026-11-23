@@ -33,6 +33,127 @@ function cloneDefaultTimelineClips() {
   ];
 }
 
+const LIGHT_CURVE_TYPES = [
+  { id: "linear", label: "Linear" },
+  { id: "gamma",  label: "Gamma 2.2 (Dawn / Log-Perceived)" },
+  { id: "log",    label: "Ease-Out (Fast Start)" },
+  { id: "scurve", label: "S-Curve (Smoothstep)" },
+  { id: "sine",   label: "Sine Pulse (Start → Peak → Start)" },
+  { id: "custom", label: "Custom Keyframes (Draw)" }
+];
+
+const LIGHT_RAMP_STEP_OPTIONS = [4, 6, 8, 12, 16, 24];
+
+function normalizeLightCurveId(raw) {
+  const id = String(raw || "").toLowerCase();
+  return LIGHT_CURVE_TYPES.some(t => t.id === id) ? id : "linear";
+}
+
+function normalizeRampSteps(raw) {
+  const n = parseInt(raw, 10);
+  return LIGHT_RAMP_STEP_OPTIONS.includes(n) ? n : 8;
+}
+
+function sanitizeCurveKeyframes(rawKfs, fallbackStart, fallbackEnd) {
+  const sY = Math.min(100, Math.max(0, Number.isFinite(fallbackStart) ? Math.round(fallbackStart) : 0));
+  const eY = Math.min(100, Math.max(0, Number.isFinite(fallbackEnd) ? Math.round(fallbackEnd) : 100));
+  if (!Array.isArray(rawKfs) || rawKfs.length < 2) {
+    return [{ t: 0, y: sY }, { t: 0.5, y: Math.round((sY + eY) / 2) }, { t: 1, y: eY }];
+  }
+  const cleaned = [];
+  for (const pt of rawKfs.slice(0, 12)) {
+    if (!pt || typeof pt !== "object") continue;
+    const t = parseFloat(pt.t);
+    const y = parseFloat(pt.y);
+    if (!Number.isFinite(t) || !Number.isFinite(y)) continue;
+    cleaned.push({
+      t: Math.min(1, Math.max(0, Number(t.toFixed(3)))),
+      y: Math.min(100, Math.max(0, Math.round(y)))
+    });
+  }
+  if (cleaned.length < 2) {
+    return [{ t: 0, y: sY }, { t: 1, y: eY }];
+  }
+  cleaned.sort((a, b) => a.t - b.t);
+  cleaned[0].t = 0;
+  cleaned[cleaned.length - 1].t = 1;
+  // Deduplicate overly close interior points
+  const dedup = [cleaned[0]];
+  for (let i = 1; i < cleaned.length - 1; i++) {
+    if (cleaned[i].t - dedup[dedup.length - 1].t >= 0.02 && 1 - cleaned[i].t >= 0.02 && dedup.length < 9) {
+      dedup.push(cleaned[i]);
+    }
+  }
+  dedup.push(cleaned[cleaned.length - 1]);
+  return dedup;
+}
+
+function isClipCurved(clip) {
+  if (!clip) return false;
+  const trId = String(clip.track || "");
+  if (trId === "TEMP" || trId === "VIB" || trId === "AUDIO") return false;
+  const curve = normalizeLightCurveId(clip.curve);
+  if (curve === "custom" && Array.isArray(clip.keyframes) && clip.keyframes.length >= 2) return true;
+  const endRaw = parseFloat(clip.endVal);
+  const valRaw = parseFloat(clip.val);
+  return Number.isFinite(endRaw) && Math.round(endRaw) !== Math.round(Number.isFinite(valRaw) ? valRaw : 0);
+}
+
+function evaluateLightCurvePct(clip, tRaw) {
+  const t = Math.min(1, Math.max(0, Number.isFinite(tRaw) ? tRaw : 0));
+  const startY = Math.min(100, Math.max(0, Number.isFinite(parseFloat(clip.val)) ? Math.round(parseFloat(clip.val)) : 0));
+  const endY = Number.isFinite(parseFloat(clip.endVal))
+    ? Math.min(100, Math.max(0, Math.round(parseFloat(clip.endVal))))
+    : startY;
+  const curve = normalizeLightCurveId(clip.curve);
+
+  if (curve === "custom" && Array.isArray(clip.keyframes) && clip.keyframes.length >= 2) {
+    const kfs = clip.keyframes;
+    if (t <= kfs[0].t) return Math.round(kfs[0].y);
+    if (t >= kfs[kfs.length - 1].t) return Math.round(kfs[kfs.length - 1].y);
+    for (let i = 0; i < kfs.length - 1; i++) {
+      const a = kfs[i], b = kfs[i + 1];
+      if (t >= a.t && t <= b.t) {
+        const span = b.t - a.t;
+        const frac = span > 0.0001 ? (t - a.t) / span : 0;
+        return Math.min(100, Math.max(0, Math.round(a.y + (b.y - a.y) * frac)));
+      }
+    }
+    return Math.round(kfs[kfs.length - 1].y);
+  }
+
+  if (curve === "sine") {
+    const f = 0.5 * (1 - Math.cos(2 * Math.PI * t));
+    return Math.min(100, Math.max(0, Math.round(startY + (endY - startY) * f)));
+  }
+
+  if (curve === "gamma") {
+    // True perceptual linear ramp in gamma-2.2 space (fine steps near dark for BOTH dawn and dusk)
+    const l0 = Math.pow(startY / 100, 1 / 2.2);
+    const l1 = Math.pow(endY / 100, 1 / 2.2);
+    const lt = Math.max(0, l0 + (l1 - l0) * t);
+    return Math.min(100, Math.max(0, Math.round(Math.pow(lt, 2.2) * 100)));
+  }
+
+  let f = t;
+  if (curve === "log") {
+    f = 1 - Math.pow(1 - t, 2.2);
+  } else if (curve === "scurve") {
+    f = t * t * (3 - 2 * t);
+  }
+  return Math.min(100, Math.max(0, Math.round(startY + (endY - startY) * f)));
+}
+
+function sampleClipCurveToKeyframes(clip, count) {
+  const n = Math.min(7, Math.max(3, count || 5));
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const t = Number((i / (n - 1)).toFixed(3));
+    pts.push({ t, y: evaluateLightCurvePct(clip, t) });
+  }
+  return pts;
+}
+
 function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp) {
   const bin = Math.max(1, parseFloat(binRaw) || 1);
   const totalBins = Math.max(1, Math.round((Math.max(bin, parseFloat(timelineSecRaw) || 180)) / bin));
@@ -64,12 +185,18 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
         }
       }
       const isLightTrack = trId !== "TEMP" && trId !== "VIB" && trId !== "AUDIO";
+      const curve = isLightTrack ? normalizeLightCurveId(c.curve) : "linear";
       const endValRaw = parseFloat(c.endVal);
-      const hasRamp = isLightTrack && Number.isFinite(endValRaw) && Math.round(endValRaw) !== Math.round(val);
-      const endVal = hasRamp ? Math.min(100, Math.max(0, Math.round(endValRaw))) : null;
+      const hasCustomKfs = isLightTrack && curve === "custom" && Array.isArray(c.keyframes) && c.keyframes.length >= 2;
+      const keyframes = hasCustomKfs ? sanitizeCurveKeyframes(c.keyframes, val, endValRaw) : null;
+      const hasRamp = isLightTrack && (hasCustomKfs || (Number.isFinite(endValRaw) && Math.round(endValRaw) !== Math.round(val)));
+      const endVal = hasRamp
+        ? (hasCustomKfs ? keyframes[keyframes.length - 1].y : Math.min(100, Math.max(0, Math.round(endValRaw))))
+        : null;
+      const rampSteps = hasRamp ? normalizeRampSteps(c.rampSteps) : 8;
       const strobeRaw = parseInt(c.strobeHz, 10);
       const strobeHz = isLightTrack && [2, 5, 10].includes(strobeRaw) ? strobeRaw : 0;
-      norm.push({ track: trId, sBin, eBin, val, repeatSec, triggerBins, hasRamp, endVal, strobeHz });
+      norm.push({ track: trId, sBin, eBin, val, repeatSec, triggerBins, hasRamp, endVal, curve, rampSteps, keyframes, strobeHz });
     }
   }
 
@@ -87,7 +214,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
         ptSet.add(Math.min(c.eBin, tb + 1));
       }
     } else if (c.hasRamp) {
-      const steps = Math.min(8, Math.max(2, c.eBin - c.sBin));
+      const steps = Math.min(c.rampSteps || 8, Math.max(2, c.eBin - c.sBin));
       for (let k = 0; k <= steps; k++) {
         ptSet.add(Math.round(c.sBin + (c.eBin - c.sBin) * (k / steps)));
       }
@@ -111,8 +238,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     const resolveLightPct = (hit) => {
       if (hit.hasRamp) {
         const frac = Math.max(0, Math.min(1, (midBin - hit.sBin) / Math.max(1, hit.eBin - hit.sBin)));
-        const startPct = Math.min(100, Math.max(0, Number.isFinite(hit.val) ? Math.round(hit.val) : 0));
-        return Math.min(100, Math.max(0, Math.round(startPct + (hit.endVal - startPct) * frac)));
+        return evaluateLightCurvePct(hit, frac);
       }
       return Math.min(100, Math.max(5, Math.round(hit.val || 100)));
     };
@@ -297,7 +423,8 @@ const OPTIONAL_STIM_PARAM_DEFAULTS = {
   ppiPattern: "alternating",
   ppiAmbient: "DARK",
   strobeHz: 0,
-  circRampMin: 0
+  circRampMin: 0,
+  circRampCurve: "gamma"
 };
 
 function cloneDefaultStimParams() {

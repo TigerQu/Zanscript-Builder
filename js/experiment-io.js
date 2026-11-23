@@ -77,7 +77,19 @@ function buildExperimentPayload() {
     timelineClips: state.timelineClips.map(c => {
       const out = { track: c.track, startSec: c.startSec, endSec: c.endSec, val: c.val };
       if ((c.track === "VIB" || c.track === "AUDIO") && Number(c.repeatSec) > 0) out.repeatSec = Number(c.repeatSec);
-      if (Number.isFinite(c.endVal) && Math.round(c.endVal) !== Math.round(c.val)) out.endVal = Math.round(c.endVal);
+      const isCurved = isClipCurved(c);
+      if (isCurved) {
+        const cId = normalizeLightCurveId(c.curve);
+        if (Number.isFinite(c.endVal) && (cId === "custom" || Math.round(c.endVal) !== Math.round(c.val))) {
+          out.endVal = Math.round(c.endVal);
+        }
+        if (cId !== "linear") out.curve = cId;
+        const st = normalizeRampSteps(c.rampSteps);
+        if (st !== 8) out.rampSteps = st;
+        if (cId === "custom" && Array.isArray(c.keyframes) && c.keyframes.length >= 2) {
+          out.keyframes = c.keyframes.map(pt => ({ t: pt.t, y: pt.y }));
+        }
+      }
       if ([2, 5, 10].includes(parseInt(c.strobeHz, 10))) out.strobeHz = parseInt(c.strobeHz, 10);
       return out;
     }),
@@ -155,15 +167,30 @@ function sanitizeTimelineClips(rawClips) {
       const rep = parseFloat(c.repeatSec);
       if (Number.isFinite(rep) && rep > 0) extra.repeatSec = Math.min(3600, Math.max(1, Math.round(rep)));
     } else {
+      const cId = normalizeLightCurveId(c.curve);
+      const hasCustomKfs = cId === "custom" && Array.isArray(c.keyframes) && c.keyframes.length >= 2;
       const rawEnd = parseFloat(c.endVal);
-      const hasRamp = Number.isFinite(rawEnd);
+      const hasRamp = hasCustomKfs || Number.isFinite(rawEnd);
       const rawVal = parseFloat(c.val);
       val = Number.isFinite(rawVal)
         ? Math.min(100, Math.max(hasRamp ? 0 : 5, Math.round(rawVal)))
         : (hasRamp ? 0 : 100);
-      if (hasRamp) {
+      if (hasCustomKfs) {
+        const kfs = sanitizeCurveKeyframes(c.keyframes, val, rawEnd);
+        val = kfs[0].y;
+        extra.endVal = kfs[kfs.length - 1].y;
+        extra.curve = "custom";
+        extra.keyframes = kfs;
+        const st = normalizeRampSteps(c.rampSteps);
+        if (st !== 8) extra.rampSteps = st;
+      } else if (Number.isFinite(rawEnd)) {
         const clampedEnd = Math.min(100, Math.max(0, Math.round(rawEnd)));
-        if (clampedEnd !== val) extra.endVal = clampedEnd;
+        if (clampedEnd !== val) {
+          extra.endVal = clampedEnd;
+          if (cId !== "linear") extra.curve = cId;
+          const st = normalizeRampSteps(c.rampSteps);
+          if (st !== 8) extra.rampSteps = st;
+        }
       }
       const st = parseInt(c.strobeHz, 10);
       if ([2, 5, 10].includes(st)) extra.strobeHz = st;

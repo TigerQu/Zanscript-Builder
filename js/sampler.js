@@ -314,10 +314,13 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
       const dayIdx = Math.min(days - 1, Math.floor(rel / dayDur));
       const inDay = rel - dayIdx * dayDur;
       if (hasDawnDusk) {
+        const isGammaCirc = sp.circRampCurve !== "linear";
+        const dawnFracs = isGammaCirc ? [0.02, 0.08, 0.22, 0.44, 0.72, 1.0] : [0.15, 0.30, 0.50, 0.65, 0.85, 1.0];
+        const duskFracs = isGammaCirc ? [0.72, 0.44, 0.22, 0.08, 0.02, 0.0] : [0.85, 0.65, 0.50, 0.30, 0.15, 0.0];
         const lightDur = lightHrs * hourDur;
         if (inDay < rampDur) {
           const st = Math.min(5, Math.floor(inDay / rampStepDur));
-          const pct = Math.max(1, Math.round(globalPct * [0.15, 0.30, 0.50, 0.65, 0.85, 1.0][st]));
+          const pct = Math.max(1, Math.round(globalPct * dawnFracs[st]));
           setChannelPct(pct);
           phaseName = `DAY ${dayIdx + 1} DAWN (${pct}%)`;
         } else if (inDay < rampDur + lightDur) {
@@ -326,7 +329,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
           phaseName = `DAY ${dayIdx + 1} ${activeLightTag} HR ${hr + 1}`;
         } else if (inDay < 2 * rampDur + lightDur) {
           const st = Math.min(5, Math.floor((inDay - rampDur - lightDur) / rampStepDur));
-          const pct = Math.round(globalPct * [0.85, 0.65, 0.50, 0.30, 0.15, 0.0][st]);
+          const pct = Math.round(globalPct * duskFracs[st]);
           setChannelPct(pct);
           phaseName = `DAY ${dayIdx + 1} DUSK (${pct}%)`;
         } else {

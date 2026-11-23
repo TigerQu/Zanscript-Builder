@@ -1017,6 +1017,61 @@ try {
         ok ? "" : JSON.stringify(mazeCheck));
       await page.close();
     }
+
+    // 6n. Custom PWM Curves (Gamma 2.2, Sine Pulse, Custom Keyframes + Steps, Inline Clip Envelopes, Circadian Gamma)
+    {
+      const { page } = await openFreshPage("#stimulus");
+      const curveCheck = await page.evaluate(() => {
+        // 1) Gamma 2.2 Dawn vs Linear midpoint check (both Dawn 0->100 and Dusk 100->0 stay concave-up)
+        const linMid = evaluateLightCurvePct({ val: 0, endVal: 100, curve: "linear" }, 0.5);
+        const gamDawnMid = evaluateLightCurvePct({ val: 0, endVal: 100, curve: "gamma" }, 0.5);
+        const gamDuskMid = evaluateLightCurvePct({ val: 100, endVal: 0, curve: "gamma" }, 0.5);
+        const sineStart = evaluateLightCurvePct({ val: 5, endVal: 100, curve: "sine" }, 0);
+        const sineMid = evaluateLightCurvePct({ val: 5, endVal: 100, curve: "sine" }, 0.5);
+        const sineEnd = evaluateLightCurvePct({ val: 5, endVal: 100, curve: "sine" }, 1);
+
+        // 2) Load Custom Keyframe Envelope preset in Multi-Track Timeline
+        state.stimId = "multi_phase";
+        renderStimGrid();
+        renderStimParams();
+        const presetSel = document.getElementById("nlePresetSel");
+        presetSel.value = "custom_curve";
+        presetSel.dispatchEvent(new Event("change"));
+
+        const code = refreshAll._latestBundle[4].code;
+        const clipHasInlineCurve = document.querySelectorAll(".nle-clip.has-curve .nle-clip-curve polyline").length >= 1;
+        const kfHandlesCount = document.querySelectorAll("#nleCurveSvg .nle-kf-pt").length;
+        const comp = compileMultiTrackSlices(state.timelineClips, state.stimParams.mpTimelineSec, state.stimParams.timeBinSec, 22);
+
+        // Round-trip save & reopen preserves curve, rampSteps, and keyframes
+        const saved = buildExperimentPayload();
+        applyExperimentData(saved);
+        const roundTripOk = JSON.stringify(buildExperimentPayload().experiment) === JSON.stringify(saved.experiment);
+
+        // 3) Circadian Gamma vs Linear Dawn/Dusk PWM levels
+        state.stimId = "circadian";
+        state.stimParams.circRampMin = 15;
+        state.stimParams.circRampCurve = "gamma";
+        refreshAll();
+        const circGammaCode = refreshAll._latestBundle[4].code;
+        state.stimParams.circRampCurve = "linear";
+        refreshAll();
+        const circLinearCode = refreshAll._latestBundle[4].code;
+
+        return {
+          gammaPerceptualMath: linMid === 50 && gamDawnMid < 26 && gamDuskMid < 26 && Math.abs(gamDawnMid - gamDuskMid) <= 1,
+          sinePulseMath: sineStart === 5 && sineMid === 100 && sineEnd === 5,
+          customCurveUi: clipHasInlineCurve && kfHandlesCount === 6 && comp.slices.length === 12,
+          customCurveCode: code.includes("DEFINE S12_BINS") && !code.includes("DEFINE S13_BINS"),
+          roundTripOk,
+          circGammaVsLinear: circGammaCode.includes("SET(X_LED_DRIVE,4,82)") && circLinearCode.includes("SET(X_LED_DRIVE,4,614)")
+        };
+      });
+      const ok = Object.values(curveCheck).every(Boolean);
+      report(ok, "Custom PWM curves (Gamma 2.2, Sine, Custom Keyframes, Steps, inline envelopes & Circadian Gamma) work and round-trip",
+        ok ? "" : JSON.stringify(curveCheck));
+      await page.close();
+    }
   }
 } finally {
   await browser.close();

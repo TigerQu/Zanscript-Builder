@@ -1660,9 +1660,12 @@ function generateStep4(cfg) {
         lns.push("", "COMPLETE");
         return lns.join("\n");
       };
+      const isGammaCirc = sp.circRampCurve !== "linear";
+      const dawnFracs = isGammaCirc ? [0.02, 0.08, 0.22, 0.44, 0.72, 1.0] : [0.15, 0.30, 0.50, 0.65, 0.85, 1.0];
+      const duskFracs = isGammaCirc ? [0.72, 0.44, 0.22, 0.08, 0.02, 0.0] : [0.85, 0.65, 0.50, 0.30, 0.15, 0.0];
       extraActions.push(
-        buildRampAction("DAWN_RAMP", "DAWN RAMP     ", "SAMPLE_DAWN", [0.15, 0.30, 0.50, 0.65, 0.85, 1.0]),
-        buildRampAction("DUSK_RAMP", "DUSK RAMP     ", "SAMPLE_DUSK", [0.85, 0.65, 0.50, 0.30, 0.15, 0.0]),
+        buildRampAction("DAWN_RAMP", "DAWN RAMP     ", "SAMPLE_DAWN", dawnFracs),
+        buildRampAction("DUSK_RAMP", "DUSK RAMP     ", "SAMPLE_DUSK", duskFracs),
         buildSampleAction("SAMPLE_DAWN", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DAWN|@100|@101|COUNTER1", dataExprs, useStream2),
         buildSampleAction("SAMPLE_DUSK", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DUSK|@100|@101|COUNTER1", dataExprs, useStream2)
       );
