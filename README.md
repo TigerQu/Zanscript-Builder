@@ -13,21 +13,26 @@
 ## Visual Walkthrough
 
 ### 1. Step-by-Step Experiment Configuration
-Walk through Study, Organism, Plate, Stimulus, and Data & Video pages while the **Run Summary** sidebar tracks total runtime, well count, and CSV outputs in real time:
+Walk through Study, Organism, Stimulus, and Data & Video pages while the **Run Summary** sidebar tracks runtime, wells, and CSV outputs in real time—complete with organism presets, multi-track lighting previews, and composable CSV / Dual-Stream video options:
 
 ![Step-by-step wizard workflow](assets/demo_wizard_workflow.gif)
 
-### 2. True-Scale Plate Preview & Millimeter Calibration
-Preview round, square, and Petri dish geometries at true millimeter scale, fine-tune well offsets inline with one-click **Auto 50% Inner Zone**, or manage unit-wide calibration profiles in **Plate Config**:
+### 2. True-Scale Plate Calibration, Split-Half Zones & MWP Mazes
+Preview round, square, and Petri dish geometries at true millimeter scale, fine-tune offsets inline with **Auto 50% Inner Zone** or **Split-Half 50/50 Zones**, switch to **Official MWP Mazes** (`4-Unit Y-Maze`) or the interactive **Custom 3D-Printed Maze Editor** (`127.8 × 85.5 mm`), and manage unit-wide profiles in **Plate Config**:
 
 ![Plate geometry preview and calibration](assets/demo_plate_calibration.gif)
 
-### 3. Coordinated 4-Script Preview & One-Click `.zip` Export
-Inspect syntax-highlighted Zanscripts and CSV column schemas for all four workflow steps, copy Zantiks-safe service names, or download the complete run bundle as a `.zip`:
+### 3. 13-Track Multi-Track Timeline, Custom PWM Curves & Sequence Preview
+Configure standard startle/PPI assays or open the **13-track Multi-Track Timeline** with independent Overhead (`TOP`) and `Bottom LEDs (Ch 8-13)` (`BOT`) banks, draw interactive **`Custom Keyframes`** PWM curves with live clip envelopes, combine **`2 / 5 / 10 Hz` strobe bursts** with **`Temp °C`**, **`Vib Tap`**, and **`Audio`** tracks, and watch simultaneous `TOP` + `BOT` light washes and hardware readouts in the live dual-view **Sequence Preview** (`Chamber · side view` + `Plate · top view`):
+
+![Multi-Track Timeline, PWM curves, and Sequence Preview](assets/demo_stimulus_timeline.gif)
+
+### 4. Pre-flight Checks, 4-Script Preview & One-Click `.zip` Export
+Review **Pre-flight Checks**, inspect syntax-highlighted Zanscripts and CSV column schemas across **Step 1 – Step 4** tabs, copy Zantiks-safe 20-slot service names via **Copy Slot Name**, or download the complete run bundle (including `experiment.json` and `README_STEPS.txt`) as a `.zip`:
 
 ![Script tabs and ZIP bundle export](assets/demo_script_export.gif)
 
-### 4. Companion 5-Step CSV Analyzer & Closed-Loop QC
+### 5. Companion 5-Step CSV Analyzer & Closed-Loop QC
 Switch seamlessly from **Script Builder** to **CSV Analyzer** in the top bar and walk through **Data → QC → Groups → Plots → Export** with 1-click anomaly exclusion, interactive plate-map painting, pure-SVG charts, and GraphPad Prism / Python exports:
 
 ![5-step CSV Analyzer workflow](assets/demo_csv_analyzer.gif)
@@ -80,10 +85,10 @@ Zanscript-Builder/
 │   ├── analyzer-core.js            #   CSV parser, QC engine, protocol metrics, demos & exporters
 │   └── analyzer-ui.js              #   5-step CSV Analyzer wizard, plate painter, SVG charts & UI wiring
 ├── zantiks_plate_config.js         # External plate geometry calibration profile (mm)
-├── tests/                          # Automated tests: Builder golden scripts + CSV Analyzer checks
+├── tests/                          # Automated Playwright tests (73 checks: 14 golden scenarios + Analyzer)
 ├── package.json                    # Test tooling only (the app needs no install or build)
 ├── .github/workflows/tests.yml     # Runs the tests on every push and pull request
-├── assets/                         # Walkthrough GIFs for documentation
+├── assets/                         # 5 walkthrough GIFs for documentation
 ├── LICENSE                         # GNU AGPLv3 License
 └── README.md                       # Documentation & hardware verification matrix
 ```
@@ -101,12 +106,12 @@ Zanscript-Builder/
      git clone https://github.com/TigerQu/Zanscript-Builder.git
      ```
 2. **Walk through the six pages** with **Next** / **Back** (or click any step in the top bar to jump straight to it):
-   1. **Study** – Researcher name & study tag (optional; appends ASCII-safe tags to generated filenames and folders), MWP hardware revision (`MWP Z3` or `MWP Z2 / Z2S`), **Stimulus Light Wavelength** (`White`, `Blue`, `Green`, `Red`, `UV`), **Z3 Light Brightness (%)**, and **Z3 LED Position / Mount** (`Overhead Only (Top Ch 0-5)`, `Underneath Only (Bottom Ch 8-13)`, or `Both Overhead + Underneath`).
+   1. **Study** – Researcher name & study tag (optional; appends ASCII-safe tags to generated filenames and folders), MWP hardware revision (`MWP Z3` or `MWP Z2 / Z2S`), **Stimulus Light Wavelength** (`White`, `Blue`, `Green`, `Red`, `UV`), **Z3 Light Brightness (%)**, **Z3 LED Position / Mount** (`Overhead Only (Top Ch 0-5)`, `Underneath Only (Bottom Ch 8-13)`, or `Both Overhead + Underneath`), and **Z3 RGB Channel Map** (`DOCS` `Ch 1:B, 3:G, 5:R` vs. `GRB_SHIFT` `Ch 1:G, 3:R, 5:B` hardware batch pinout).
    2. **Organism** – Pick an organism preset, then fine-tune `TARGET_SIZE`, thresholds, `AUTOREF_TIMEOUT` and thermostat settings.
-   3. **Plate** – Select the plate format (and adjust millimeter offsets if needed).
+   3. **Plate** – Select a standard plate/dish format (and fine-tune millimeter offsets or choose Concentric / Top-Bottom / Left-Right **Split-Half 50/50 Zones**), pick one of the **4 Official Zantiks MWP Mazes**, or design a multi-zone layout in the **Custom 3D-Printed Maze Editor**.
    4. **Stimulus** – Choose from 10 protocols (9 standard assays including **Acoustic Startle** and **Prepulse Inhibition (PPI)**, or open **Advanced** for the **13-track Multi-Track Timeline** combining independent Overhead `TOP` and `Bottom LEDs (Ch 8-13)` (`BOT`) LEDs with custom PWM curves and strobe bursts, `Temp °C`, `Vib Tap`, and `Audio`), then scrub or play through the entire assay in **Sequence Preview** (**Chamber · side view** & **Plate · top view**, `1x`–`60x` speed, synced playhead, and live `X_LED_DRIVE` PWM / `ZCOMMAND` / `AUDIO_FILE` / `THERMOSTAT` readout).
-   5. **Data & Video** – Choose CSV metrics, recording frame rate and overlays.
-   6. **Export** – Review and download the generated scripts.
+   5. **Data & Video** – Combine binned CSV metrics (`DIST_*`, `MSD_*`, `Z1–Z8` Zone Summaries), event-level **`_ZCHANGE` Zone Entry/Exit Logs**, and per-frame `_XY` coordinates alongside timelapse, `30 fps`, or **Dual-Stream `30 fps + 1 fps`** video, **`PICTURE(...)` start/end stills**, configurable track traces (`X_TRACKTIME`), and 4 **Heatmap Palettes (`COLOURMAP` `0–3`)**.
+   6. **Export** – Review **Pre-flight Checks** (with one-click jump-to-fix links), inspect Step 1–4 scripts and CSV schemas, copy slot names, and download `.zs` files or the complete `.zip` bundle.
    - The **Run Summary** sidebar shows every choice, the total runtime and CSV size at all times; click a row to jump back and edit it.
 3. **Export your scripts** on the **Export** page:
    - Click **Download All 4 Scripts (.zip)** (also available in the top bar on every page) to get the complete experiment folder and `README_STEPS.txt`, **or**
@@ -162,15 +167,17 @@ Each configuration produces four coordinated Zanscript files designed to be exec
 | Step | Script / Slot Filename Pattern | Physical Setup | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Step 1** | `01_[lastname_]cal.zs` | Black 96-well Zantiks calibration plate | Runs `Calibration(0)` once to establish camera millimeter scale. Skip if the unit is already calibrated and undisturbed. |
-| **Step 2** | `02_<lastname\|mwp>_<plateShort>.zs` | **Empty** experimental plate | Draws well arenas and 50/50 outer/inner zones onto Live View and saves `<arenaBmp>.bmp` and `<zoneBmp>.bmp` into the unit's `Assets` folder (`6w`, `12w`, `24w`, `24c`, `24sq`, `48w`, `96w`, `96sq`, `pd`). |
+| **Step 2** | `02_<lastname\|mwp>_<plateShort>.zs` | **Empty** experimental plate or maze | Draws well arenas and Concentric / Split-Half (`dz*`, `ldz*`, `lrz*`) or multi-zone maze (`z_*` / `zCustom`) masks onto Live View and saves `<arenaBmp>.bmp` and `<zoneBmp>.bmp` into the unit's `Assets` folder (`6w`, `12w`, `24w`, `24c`, `24sq`, `48w`, `96w`, `96sq`, `pd`, plus official mazes `ym4`, `ym2`, `ch12`, `soc10` and custom maze `cmz`). |
 | **Step 3** | `03_<lastname\|mwp>_<plateShort>.zs` | Experimental plate **with organisms** | *(Optional)* 1–2 min pre-check sweeping `TARGET_SIZE` and `DETECTOR_THRESHOLD` (2 to 10) on video; tags output CSV via `LOGFILE(0, "..._track_check_...")`. |
-| **Step 4** | `04_<prefix>_<plateShort>.zs` | Experimental plate **with organisms** | Short, stable slot name (e.g. `04_qu_24w`) for Zantiks' 20 service slots; automatically tags exported summary CSV (`LOGFILE(0, ...)`), XY CSV (`LOGFILE(1, ...)`), video (`VIDEO(...)`), and `.zip` folder with full protocol & timing details. |
+| **Step 4** | `04_<prefix>_<plateShort>.zs` | Experimental plate **with organisms** | Short, stable slot name (e.g. `04_qu_24w`) for Zantiks' 20 service slots; automatically tags exported Summary CSV (`LOG_STREAM 0`, or `LOG_STREAM 2` when `_ZCHANGE` claims stream `0`), optional `_XY` CSV (`LOG_STREAM 1`), video (`VIDEO_STREAM 0`/`1`), still photos (`PICTURE`), and `.zip` folder with full protocol & timing details. |
 
 ---
 
-## Supported Plate & Dish Formats
+## Supported Plate, Dish & Maze Formats
 
 All geometric parameters are specified in millimeters (`mm`) and can be customized per MWP unit:
+
+### Standard Multi-Well Plates & Dishes
 
 | Plate ID | Format | Grid (Wells) | Shape | Arena Asset | Dual-Zone Asset | Default Radius / Side (`r`) | Default Inner Zone (`rDz`) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -183,6 +190,20 @@ All geometric parameters are specified in millimeters (`mm`) and can be customiz
 | `96well` | 96-Well (Standard) | `8 x 12` (`A1–H12`) | Round (`DISC`) | `a96.bmp` | `dz96.bmp` | `3.50 mm` | `2.47 mm` |
 | `96square` | 96-Well Square | `8 x 12` (`A1–H12`) | Square (`SQUARE`) | `a96_sq.bmp` | `dz96_sq.bmp` | `7.50 mm` (side) | `4.50 mm` (side) |
 | `petri` | Petri Dish (90 mm) | `1 x 1` (`A1`) | Round (`DISC`) | `aPD.bmp` | `dzPD.bmp` | `44.00 mm` | `31.80 mm` |
+
+> *Split-Half 50/50 Zone Assets:* Switching **Step 2 Zone Split Mode** to **Top / Bottom 50/50 Split** saves `ldz*.bmp` (e.g. `ldz24.bmp`), and **Left / Right 50/50 Split** saves `lrz*.bmp` (e.g. `lrz24.bmp`), leaving Concentric `dz*.bmp` assets intact.
+
+### Official MWP Mazes & Custom 3D-Printed Maze Editor
+
+| Maze ID | Format | Short Tag | Arenas × Zones | Arena Asset | Zone Asset | Layout & Reference |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `ymaze4` | **4-Unit Y-Maze** | `ym4` | `4 arenas × 4 zones` (`Z1–Z4`) | `a_4y.bmp` | `z_4y.bmp` | 4 three-arm Y-mazes (3 arms + central triangle hub); official `g4Y.zs` coordinates |
+| `ymaze2` | **2-Unit Y-Maze** | `ym2` | `2 arenas × 4 zones` (`Z1–Z4`) | `a_2y.bmp` | `z_2y.bmp` | 2 large three-arm Y-mazes (`35 × 12 mm` arms); official `g2YMazeplate.zs` coordinates |
+| `choice12` | **12-Choice Chamber** | `ch12` | `12 arenas × 3 zones` (`Z1–Z3`) | `a12_choice.bmp` | `z12_choice.bmp` | 2 × 6 paired preference discs linked by a central bridge (`Z2`); official `g12_choice_chambers.zs` |
+| `social10` | **10-Lane Social** | `soc10` | `10 arenas × 5 zones` (`Z1–Z5`) | `aSocial.bmp` | `zSocial.bmp` | 10 vertical lanes subdivided into 5 proximity zones; official `gMWP_social.zs` |
+| `custom_maze` | **Custom 3D Maze** | `cmz` | Up to `48 arenas × Z1–Z8` | `aCustom.bmp` *(editable)* | `zCustom.bmp` *(editable)* | Interactive `127.8 × 85.5 mm` SBS canvas editor for arbitrary 3D-printed inserts |
+
+- **Custom 3D-Printed Maze Editor**: Design multi-zone inserts directly on a true-scale `127.8 × 85.5 mm` SBS canvas (`10 mm` grid) using 5 starter templates (**2-Unit T-Maze**, **2-Unit Plus-Maze**, **4-Unit 3-Chamber Social**, **Single Large Y-Maze**, or **Blank Plate**), add/drag/rotate `RECTANGLE`, `DISC`, `SQUARE`, and `TRIANGLE` shapes (`ShapeAngle`), upload an empty-maze overhead photo (`PICTURE` or CAD export) with adjustable opacity to trace physical walls, array Arena 1 across quadrants with one-click **`Tile 2×2`**, toggle **Color by Zone / Arena**, and export Step 2 `SET(DrawArena/DrawZone)` asset builders plus `Z1–Z8` multi-zone Step 4 CSV logging.
 
 ---
 
@@ -222,23 +243,33 @@ Single-channel illumination protocols (`baseline`, `ld_transitions`, `light_off_
 
 ## Recorded Data, Video & Overlays
 
-### CSV Outputs
-1. **Primary Summary CSV** (one row per `TIME_BIN`):
+### Zone Layouts
+- **Concentric 50/50 Outer / Inner (`dz*.bmp`)**: Equal-area outer wall ring (`Z1`) vs. inner center zone (`Z2`) for standard thigmotaxis assays.
+- **Split-Half 50/50 (`ldz*.bmp` Top/Bottom, `lrz*.bmp` Left/Right)**: Splits round wells (`X_SECTOR_ANGLE 180.0`) or square wells into equal halves for light/dark or side-preference assays.
+- **Multi-Zone Mazes (`Z1–Z8`)**: Official maze masks (`z_4y.bmp`, `z_2y.bmp`, `z12_choice.bmp`, `zSocial.bmp`) and Custom 3D Maze masks (`zCustom.bmp`) log per-zone distance, entries, and time across all active zones (`Z1..Zk`).
+
+### CSV Outputs (Clean Multi-Stream Separation)
+1. **Primary Binned Summary CSV (`<run_slug>`)** (one row per `TIME_BIN`; written to `LOG_STREAM 0` by default, or automatically moved to `LOG_STREAM 2` when `_ZCHANGE` is enabled so event rows never interleave with time-bin rows):
    - **Metadata Columns**:
      - Baseline: `RUNTIME | UNIT_ID | TEMP_C | PHASE | TIME_BIN`
      - Trial/Cycle Assays: `RUNTIME | UNIT_ID | TEMP_C | PHASE | TRIAL | TIME_BIN`
      - Long-Term / Circadian: `RUNTIME | UNIT_ID | TEMP_C | PHASE | DAY | HOUR | TIME_BIN`
-   - **Selectable Metric Columns** (appended per well `A1`…):
+   - **Selectable Metric Columns** (appended per well/arena `A1`…):
      - **Arena Distance (`ARENA_DISTANCES`)**: `DIST_A1`, `DIST_A2`, … (centroid distance traveled in `mm` per time bin).
      - **Pixel Activity / Motility (`MSD_MODE` / `ARENA_ACTIVITY`)**: `MSD_A1`, `MSD_A2`, … (mean pixel change per well; ideal for in-place twitching or thrashing).
-     - **Inner / Outer Zones (`ZONE_DISTANCES`, `ZONE_COUNTERS`, `ZONE_TIMERS`)**: `ZD_<well>_Z1/Z2`, `ZC_<well>_Z1/Z2`, `ZT_<well>_Z1/Z2` (`Z1` = outer wall ring, `Z2` = inner center zone).
-2. **Optional Raw XY Stream CSV (`<run_slug>_XY`)**:
-   - Enabled via **Raw XY Coordinates (`LOG_STREAM 1`)** (`SET(LOG_PERFRAME,ON)`).
-   - Writes frame-by-frame millimeter coordinates (`RUNTIME | X_A1 | Y_A1 | ...`) to a separate CSV file.
+     - **Zone Summary (`ZONE_DISTANCES`, `ZONE_COUNTERS`, `ZONE_TIMERS`)**: `ZD_<well>_Z1..Zk`, `ZC_<well>_Z1..Zk`, `ZT_<well>_Z1..Zk` (dual-zone concentric/split-half for plates, or `Z1–Z8` for mazes).
+2. **Zone Entry / Exit Event Log (`<run_slug>_ZCHANGE`)**:
+   - Enabled via **Zone Entry / Exit Event Log** (`LOAD(ZONECHANGES,"ON")`), which automatically loads the zone bitmap, writes timestamped transitions (`TIME | | | ARENA | ACTION | ZONE`) to `LOG_STREAM 0`, and routes the binned Summary CSV to `LOG_STREAM 2`.
+   - Imports directly into the companion **CSV Analyzer** (Step 4 · **Zone Events**) for zone-to-zone transition matrices and 3-arm **Spontaneous Alternation (`SAB %`)**.
+3. **Optional Raw XY Stream CSV (`<run_slug>_XY`)**:
+   - Enabled via **Raw XY Coordinates (`LOG_STREAM 1`)** (`SET(LOG_PERFRAME,ON)`, `SET(LOG_STREAM_PERFRAME,1)`).
+   - Writes frame-by-frame millimeter coordinates (`RUNTIME | X_A1 | Y_A1 | ...`) to a dedicated CSV file.
 
-### Video & Visual Overlays
-- **Video Modes**: `1 fps` timelapse (`VIDEOSKIP(29)`, recommended), `0.2 fps` long-run timelapse (`VIDEOSKIP(149)`), full `30 fps` video (`VIDEOSKIP(0)`), or disabled.
-- **Overlays**: Live trajectory traces (`X_DRAWTRACKS` / `X_TRACKTIME`) and end-of-experiment spatial heatmap generation (`COLOURMAP` / `MAKEMAP`).
+### Video Modes, Visual Overlays & Still Photos
+- **Video Modes**: `1 fps` timelapse (`VIDEOSKIP(29)`, recommended), `0.2 fps` long-run timelapse (`VIDEOSKIP(149)`), full `30 fps` video (`VIDEOSKIP(0)`), **Dual-Stream `30 fps + 1 fps` (`VIDEO_STREAM 0 & 1`)** recording `<run_slug>_30fps` and `<run_slug>_1fps` simultaneously, or disabled.
+- **Track Traces**: Live trajectory overlays (`SET(X_DRAWTRACKS,1)`) with configurable **Track Trace Length (`X_TRACKTIME`, `1–600 s`, default `15 s`)**.
+- **End-of-Run Spatial Heatmaps**: Generates `SET(MAKEMAP,20)` using one of 4 selectable **Heatmap Palettes (`COLOURMAP` `0–3`)**: `0 · Zantiks Default`, `1 · Inferno`, `2 · Plasma`, or `3 · Viridis`.
+- **Start / End Still Photos (`PICTURE(...)`)**: Captures `<run_slug>_start` and `<run_slug>_end` reference images before and after recording.
 
 ---
 
@@ -294,7 +325,7 @@ Different MWP units or plate manufacturers can exhibit slight positional shifts 
 
 The app is plain HTML, CSS and JavaScript with no build step: edit the files in `css/` and `js/` and reload the page.
 
-Automated tests make sure changes don't silently alter the generated scripts. Each file in `tests/scenarios/` is an experiment saved by the app (14 of them, covering every protocol, both hardware revisions and several plates); the tests load each one and compare the four `.zs` scripts and `README_STEPS.txt` byte-for-byte with `tests/golden/`. They also check that every page loads without errors, that open → save and `.zip` round trips are lossless, that auto-save survives a reload, and that the 5-step `zantiks_csv_analyzer.html` wizard loads cleanly over `file://`, matches Script Builder's `1380 px` layout parity (`0 px` shift), parses CSV edge cases, computes demo QC/protocol metrics, imports Builder `.zip` / `localStorage` context, and produces valid CSV/Prism/Python exports.
+Automated tests (`73` Playwright checks across `65` Script Builder tests and `8` CSV Analyzer suites) make sure changes never silently alter generated scripts or break the UI. Each file in `tests/scenarios/` is an experiment saved by the app (`14` scenarios covering every protocol, both hardware revisions, and multiple plates); the tests load each one and compare all four `.zs` scripts and `README_STEPS.txt` byte-for-byte with `tests/golden/`. They also verify that every Builder page loads without errors, open → save and `.zip` round trips are lossless, auto-save and `#resetBtn` behave cleanly across reloads, Pre-flight Checks, Z3 port gates / RGB channel maps, official & custom 3D mazes, PWM curves, and multi-stream outputs stay in sync, and that the 5-step `zantiks_csv_analyzer.html` wizard loads cleanly over `file://`, matches Script Builder's `1380 px` layout parity (`0 px` shift), parses CSV edge cases, computes demo QC/protocol metrics, imports Builder `.zip` / `localStorage` context, and produces valid CSV/Prism/Python exports.
 
 ```bash
 npm install                          # once: installs Playwright (test tool only)
