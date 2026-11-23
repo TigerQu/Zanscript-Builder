@@ -57,6 +57,7 @@ async function saveConfigJsFile() {
 
 function bindEvents() {
   bindSimulatorEvents();
+  if (typeof bindCustomMazeEditorEvents === "function") bindCustomMazeEditorEvents();
 
   // Researcher Full Name -> Auto-extract Last Name
   const userNameEl = document.getElementById("userName");
@@ -148,7 +149,7 @@ function bindEvents() {
 
   // General Assay / Hardware Inputs
   [
-    "videoMode", "chk_tracks", "chk_heatmap", "chk_picture", "zoneMode", "expPrefix", "hwVersion", "ledColor",
+    "videoMode", "chk_tracks", "chk_heatmap", "chk_picture", "trackTimeSec", "heatmapPalette", "zoneMode", "expPrefix", "hwVersion", "ledColor",
     "targetSize", "detThreshold", "msdThreshold", "autorefTimeout",
     "thermostatTemp", "chk_thermostat", "ledBrightness", "ledMount", "z3RgbMap"
   ].forEach(id => {
@@ -332,6 +333,7 @@ function bindEvents() {
     syncCheckStyles();
     renderOrganismChips();
     renderPlateGrid();
+    if (typeof renderCustomMazeEditor === "function") renderCustomMazeEditor();
     renderStimGrid();
     renderStimParams();
     refreshAll();

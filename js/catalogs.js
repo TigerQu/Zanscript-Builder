@@ -142,8 +142,46 @@ const FACTORY_PLATES = {
     rows: 1, cols: 1, shape: "DISC",
     xOffset: 67, yOffset: 43, colStep: 19.3, rowStep: 19.3, r: 44, rDz: 31.8,
     arenaBmp: "aPD", zoneBmp: "dzPD", drawDelay: 0.4
+  },
+  "ymaze4": {
+    id: "ymaze4", shortCode: "ym4", name: "4-Unit Y-Maze", meta: "4 arenas · 4 zones",
+    rows: 2, cols: 2, shape: "MAZE", isMaze: true, defaultZones: 4,
+    xOffset: 0, yOffset: 0, colStep: 1, rowStep: 1, r: 1, rDz: 1,
+    arenaBmp: "a_4y", zoneBmp: "z_4y", drawDelay: 0.1
+  },
+  "ymaze2": {
+    id: "ymaze2", shortCode: "ym2", name: "2-Unit Y-Maze", meta: "2 arenas · 4 zones",
+    rows: 1, cols: 2, shape: "MAZE", isMaze: true, defaultZones: 4,
+    xOffset: 0, yOffset: 0, colStep: 1, rowStep: 1, r: 1, rDz: 1,
+    arenaBmp: "a_2y", zoneBmp: "z_2y", drawDelay: 0.2
+  },
+  "choice12": {
+    id: "choice12", shortCode: "ch12", name: "12-Choice Chamber", meta: "12 arenas · 3 zones",
+    rows: 2, cols: 6, shape: "MAZE", isMaze: true, defaultZones: 3,
+    xOffset: 0, yOffset: 0, colStep: 1, rowStep: 1, r: 1, rDz: 1,
+    arenaBmp: "a12_choice", zoneBmp: "z12_choice", drawDelay: 0.2
+  },
+  "social10": {
+    id: "social10", shortCode: "soc10", name: "10-Lane Social", meta: "10 arenas · 5 zones",
+    rows: 1, cols: 10, shape: "MAZE", isMaze: true, defaultZones: 5,
+    xOffset: 0, yOffset: 0, colStep: 1, rowStep: 1, r: 1, rDz: 1,
+    arenaBmp: "aSocial", zoneBmp: "zSocial", drawDelay: 0.2
+  },
+  "custom_maze": {
+    id: "custom_maze", shortCode: "cmz", name: "Custom 3D Maze", meta: "Visual mm editor",
+    rows: 1, cols: 1, shape: "MAZE", isMaze: true, isCustomMaze: true, defaultZones: 4,
+    xOffset: 0, yOffset: 0, colStep: 1, rowStep: 1, r: 1, rDz: 1,
+    arenaBmp: "aCustom", zoneBmp: "zCustom", drawDelay: 0.2
   }
 };
+
+function getStandardPlateKeys() {
+  return Object.keys(FACTORY_PLATES).filter(k => !FACTORY_PLATES[k].isMaze);
+}
+
+function getMazePlateKeys() {
+  return Object.keys(FACTORY_PLATES).filter(k => Boolean(FACTORY_PLATES[k].isMaze));
+}
 
 const GEO_FIELDS = ["xOffset", "yOffset", "colStep", "rowStep", "r", "rDz"];
 

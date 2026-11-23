@@ -41,8 +41,10 @@ function buildAssayDataSlug(cfg) {
     detail = `light_off_${pulses}x${numSlug(dur)}s${colOpt}`;
   } else if (cfg.stimId === "light_on_pulse") {
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
-    const dur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
-    detail = `light_on_${pulses}x${numSlug(dur)}s${colOpt}`;
+    const dur = Math.max(0.05, parseFloat(sp.pulseDurSec) || 1);
+    const strobeHz = [2, 5, 10].includes(parseInt(sp.strobeHz, 10)) ? parseInt(sp.strobeHz, 10) : 0;
+    const strobeOpt = strobeHz > 0 ? `_${strobeHz}hz` : "";
+    detail = `light_on_${pulses}x${numSlug(dur)}s${strobeOpt}${colOpt}`;
   } else if (cfg.stimId === "vibration_startle") {
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const vib = String(sp.vibIntensity || "U3").toLowerCase();
@@ -60,7 +62,9 @@ function buildAssayDataSlug(cfg) {
     const lHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
     const dHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
     const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    detail = `circadian_${lHrs}l${dHrs}d_${days}d${colOpt}`;
+    const rampMin = cfg.hw === "Z3" ? Math.min(30, Math.max(0, parseInt(sp.circRampMin, 10) || 0)) : 0;
+    const rampOpt = (rampMin > 0 && lHrs > 0 && dHrs > 0) ? `_ramp${rampMin}m` : "";
+    detail = `circadian_${lHrs}l${dHrs}d_${days}d${rampOpt}${colOpt}`;
   } else if (cfg.stimId === "multi_phase") {
     const cycles = Math.max(1, parseInt(sp.mpCycles, 10) || 1);
     const comp = compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp);
@@ -292,11 +296,97 @@ function generateStep2(cfg) {
   const p = cfg.plate;
   const g = cfg.geo;
   const zMode = cfg.zoneMode || "concentric";
+  const arenaBmp = cfg.arenaBmp || p.arenaBmp;
   const zoneBmp = cfg.zoneBmp || p.zoneBmp;
+  const userLine = buildResearcherComment(cfg);
+
+  if (cfg.isMaze) {
+    const shapes = cfg.mazeShapes || [];
+    const headerLines = [`# Step 2: Maze Arena & Zone Asset Builder (${p.name})`];
+    if (userLine) headerLines.push(userLine);
+    headerLines.push(
+      `# Place an EMPTY ${p.name} into the MWP stand before running.`,
+      `# Generates "${arenaBmp}.bmp" (${cfg.numWells} arena(s)) and "${zoneBmp}.bmp" (${cfg.numZones} zone(s)) in Assets.`,
+      "# Coordinates are in mm on the 127.8 x 85.5 mm SBS plate footprint."
+    );
+
+    const emitShapeLines = (mode) => {
+      if (shapes.length === 0) {
+        return ["    # No maze shapes defined yet. Add shapes in the Custom 3D Maze editor."];
+      }
+      const out = [];
+      let prevAngle = null;
+      for (let i = 0; i < shapes.length; i++) {
+        const s = shapes[i];
+        const drawCmd = mode === "arena" ? `SET(DrawArena,${s.arena})` : `SET(DrawZone,${s.zone})`;
+        let typeCmd;
+        if (s.type === "DISC") typeCmd = `ShapeType(DISC,${s.w})`;
+        else if (s.type === "SQUARE") typeCmd = `ShapeType(SQUARE,${s.w})`;
+        else if (s.type === "TRIANGLE") typeCmd = `ShapeType(TRIANGLE,${s.w})`;
+        else typeCmd = `ShapeType(RECTANGLE,${s.w},${s.h})`;
+        const ang = s.type === "DISC" ? 0 : (s.angle || 0);
+        out.push(`    ${drawCmd}`);
+        out.push(`    ${typeCmd}`);
+        if (ang !== prevAngle) {
+          out.push(`    ShapeAngle(${ang.toFixed(1)})`);
+          prevAngle = ang;
+        }
+        out.push(`    ShapeDraw(${s.x},${s.y})`);
+        out.push('    SaveDrawing("TEMP")');
+        out.push("    WAIT(DRAWDELAY)");
+        if (i < shapes.length - 1) out.push("");
+      }
+      return out;
+    };
+
+    const code = [
+      ...headerLines,
+      "",
+      "DEFINE SHOWTIME 2",
+      `DEFINE DRAWDELAY ${p.drawDelay}`,
+      "",
+      "ACTION MAIN",
+      "",
+      "    INVOKE(BUILD_ARENAS,1)",
+      "    WAIT(SHOWTIME)",
+      "",
+      "    INVOKE(BUILD_ZONES,1)",
+      "    WAIT(SHOWTIME)",
+      "",
+      "COMPLETE",
+      "",
+      "ACTION BUILD_ARENAS",
+      "",
+      "    ResetDrawing()",
+      ...emitShapeLines("arena"),
+      `    SaveDrawing("${arenaBmp}")`,
+      "",
+      "COMPLETE",
+      "",
+      "ACTION BUILD_ZONES",
+      "",
+      "    ResetDrawing()",
+      ...emitShapeLines("zone"),
+      `    SaveDrawing("${zoneBmp}")`,
+      "",
+      "COMPLETE",
+      ""
+    ].join("\n");
+
+    const pShort = p.shortCode || p.id;
+    const fname = `02_${cfg.lastName || "mwp"}_${pShort}.zs`;
+
+    return {
+      filename: fname,
+      instruction: `<strong>Physical setup:</strong> Insert an <strong>empty ${p.name}</strong> and run once while watching Live View. Saves <code>${arenaBmp}.bmp</code> and <code>${zoneBmp}.bmp</code> into Assets.`,
+      schemaText: `Assets created: ${arenaBmp}.bmp (${cfg.numWells} arena${cfg.numWells === 1 ? "" : "s"}) + ${zoneBmp}.bmp (${cfg.numZones} zone${cfg.numZones === 1 ? "" : "s"}, ${shapes.length} shape${shapes.length === 1 ? "" : "s"}).`,
+      code
+    };
+  }
+
   const isSplit = zMode === "half_tb" || zMode === "half_lr";
   const sizeLabel = p.shape === "SQUARE" ? "LENGTH" : "RADIUS";
   const sizeDzLabel = p.shape === "SQUARE" ? "LENGTH_DZ" : "RADIUS_DZ";
-  const userLine = buildResearcherComment(cfg);
 
   const zoneModeDesc = zMode === "half_tb"
     ? "50/50 top/bottom split zones (Light-Dark Preference)"
@@ -582,7 +672,7 @@ function generateStep3(cfg) {
     "",
     "    SET(COUNTER1,COUNTER_ZERO)",
     `    INVOKE(${startDark ? "LIGHTS_OFF" : "LIGHTS_ON"},1)`,
-    `    LOAD(ARENAS,"${p.arenaBmp}.bmp")`,
+    `    LOAD(ARENAS,"${cfg.arenaBmp || p.arenaBmp}.bmp")`,
     "",
     `    LOGFILE(0,"${sanitizeSlug(`${cfg.runPrefix}_track_check_${p.shortCode || p.id}`, 48)}")`,
     headerBlock,
@@ -673,20 +763,22 @@ function generateStep4(cfg) {
     for (const w of cfg.wells) wellHeaders.push(`MSD_${w}`);
     dataExprs.push("ARENA_ACTIVITY:*");
   }
+  const numZones = Math.min(8, Math.max(1, cfg.numZones || 2));
+  const zoneRange = numZones === 1 ? "Z1" : `Z1-${numZones}`;
   if (cfg.useZones) {
     for (const w of cfg.wells) {
-      wellHeaders.push(`ZD_${w}_Z1`, `ZD_${w}_Z2`);
+      for (let z = 1; z <= numZones; z++) wellHeaders.push(`ZD_${w}_Z${z}`);
     }
     for (const w of cfg.wells) {
-      wellHeaders.push(`ZC_${w}_Z1`, `ZC_${w}_Z2`);
+      for (let z = 1; z <= numZones; z++) wellHeaders.push(`ZC_${w}_Z${z}`);
     }
     for (const w of cfg.wells) {
-      wellHeaders.push(`ZT_${w}_Z1`, `ZT_${w}_Z2`);
+      for (let z = 1; z <= numZones; z++) wellHeaders.push(`ZT_${w}_Z${z}`);
     }
     dataExprs.push(
-      `ZONE_DISTANCES:${arenaRange} Z1-2`,
-      `ZONE_COUNTERS:${arenaRange} Z1-2`,
-      `ZONE_TIMERS:${arenaRange} Z1-2`
+      `ZONE_DISTANCES:${arenaRange} ${zoneRange}`,
+      `ZONE_COUNTERS:${arenaRange} ${zoneRange}`,
+      `ZONE_TIMERS:${arenaRange} ${zoneRange}`
     );
   }
 
@@ -698,6 +790,7 @@ function generateStep4(cfg) {
   const isCircadian = cfg.stimId === "circadian";
   const hasTrials = ["ld_transitions", "light_off_startle", "light_on_pulse", "vibration_startle", "acoustic_startle", "ppi", "multi_phase", "temp_ramp"].includes(cfg.stimId);
   const activeLightTag = (cfg.ledColorObj && cfg.ledColorObj.tag) ? cfg.ledColorObj.tag : "LIGHT";
+  const arenaBmp = cfg.arenaBmp || p.arenaBmp;
   const zoneBmp = cfg.zoneBmp || p.zoneBmp;
   const needZoneBmp = Boolean(cfg.useZones || cfg.useZoneChanges);
   const useStream2 = Boolean(cfg.useZoneChanges);
@@ -938,9 +1031,10 @@ function generateStep4(cfg) {
     const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
     const preBins = Math.round(preSec / bin);
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
-    const pulseDur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
+    const pulseDur = Math.max(0.05, parseFloat(sp.pulseDurSec) || 1);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiBins = Math.max(1, Math.round(itiSec / bin));
+    const strobeHz = [2, 5, 10].includes(parseInt(sp.strobeHz, 10)) ? parseInt(sp.strobeHz, 10) : 0;
 
     const subBinPulse = pulseDur < bin;
     const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
@@ -953,7 +1047,26 @@ function generateStep4(cfg) {
       `DEFINE NUM_PULSES ${pulses}`,
       `DEFINE ITI_BINS ${itiBins}`
     );
-    if (subBinPulse) {
+    if (strobeHz > 0) {
+      const strobeHalfSec = Number((0.5 / strobeHz).toFixed(3));
+      if (subBinPulse) {
+        const strobeCycles = Math.max(1, Math.round(pulseDur * strobeHz));
+        const actualBurstSec = Number((strobeCycles * 2 * strobeHalfSec).toFixed(3));
+        const remWait = Math.max(0, Number((bin - actualBurstSec).toFixed(3)));
+        topDefines.push(
+          `DEFINE STROBE_HALF_SEC ${strobeHalfSec}  # ${strobeHz} Hz strobe (50% duty)`,
+          `DEFINE STROBE_CYCLES ${strobeCycles}`,
+          `DEFINE POST_PULSE_WAIT ${remWait}`
+        );
+      } else {
+        const strobeCyclesPerBin = Math.max(1, Math.round(bin * strobeHz));
+        topDefines.push(
+          `DEFINE PULSE_BINS ${pulseBins}`,
+          `DEFINE STROBE_HALF_SEC ${strobeHalfSec}  # ${strobeHz} Hz strobe (50% duty)`,
+          `DEFINE STROBE_CYCLES_PER_BIN ${strobeCyclesPerBin}`
+        );
+      }
+    } else if (subBinPulse) {
       topDefines.push(
         `DEFINE PULSE_DURATION ${pulseDur}`,
         `DEFINE POST_PULSE_WAIT ${postPulseWait}`
@@ -978,7 +1091,89 @@ function generateStep4(cfg) {
     }
     mainSchedule.push("    INVOKE(FLASH_TRIAL,NUM_PULSES)");
 
-    if (subBinPulse) {
+    if (strobeHz > 0) {
+      const strobeCycleAction = [
+        "ACTION STROBE_CYCLE",
+        "",
+        "    INVOKE(LIGHTS_ON,1)",
+        "    WAIT(STROBE_HALF_SEC)",
+        "    INVOKE(LIGHTS_OFF,1)",
+        "    WAIT(STROBE_HALF_SEC)",
+        "",
+        "COMPLETE"
+      ].join("\n");
+
+      if (subBinPulse) {
+        const strobeCycles = Math.max(1, Math.round(pulseDur * strobeHz));
+        const strobeHalfSec = Number((0.5 / strobeHz).toFixed(3));
+        const remWait = Math.max(0, Number((bin - strobeCycles * 2 * strobeHalfSec).toFixed(3)));
+        extraActions.push(
+          [
+            "ACTION FLASH_TRIAL",
+            "",
+            "    SET(COUNTER2,COUNTER_INC)",
+            "    INVOKE(LIGHT_FLASH_BIN,1)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK ITI")}")`,
+            "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+            "",
+            "COMPLETE",
+            "",
+            "ACTION LIGHT_FLASH_BIN",
+            "",
+            "    SET(COUNTER1,COUNTER_INC)",
+            '    LOGDATA(DATA_SNAPSHOT,"begin")',
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(activeLightTag + " " + strobeHz + "HZ")}")`,
+            "    INVOKE(STROBE_CYCLE,STROBE_CYCLES)",
+            ...(remWait > 0 ? ["    WAIT(POST_PULSE_WAIT)"] : []),
+            '    LOGDATA(DATA_SNAPSHOT,"end")',
+            '    LOGDATA(DATA_SELECT,"begin")',
+            '    LOGDATA(DATA_DELTA,"end")',
+            "",
+            ...wrapSummaryLog([
+              `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_${strobeHz}HZ|COUNTER2|COUNTER1")`,
+              ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+              "    LOGRUN()"
+            ]),
+            "",
+            "COMPLETE"
+          ].join("\n"),
+          strobeCycleAction
+        );
+      } else {
+        extraActions.push(
+          [
+            "ACTION FLASH_TRIAL",
+            "",
+            "    SET(COUNTER2,COUNTER_INC)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(activeLightTag + " " + strobeHz + "HZ")}")`,
+            "    INVOKE(SAMPLE_FLASH,PULSE_BINS)",
+            "    INVOKE(LIGHTS_OFF,1)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK ITI")}")`,
+            "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+            "",
+            "COMPLETE",
+            "",
+            "ACTION SAMPLE_FLASH",
+            "",
+            "    SET(COUNTER1,COUNTER_INC)",
+            '    LOGDATA(DATA_SNAPSHOT,"begin")',
+            "    INVOKE(STROBE_CYCLE,STROBE_CYCLES_PER_BIN)",
+            '    LOGDATA(DATA_SNAPSHOT,"end")',
+            '    LOGDATA(DATA_SELECT,"begin")',
+            '    LOGDATA(DATA_DELTA,"end")',
+            "",
+            ...wrapSummaryLog([
+              `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_${strobeHz}HZ|COUNTER2|COUNTER1")`,
+              ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+              "    LOGRUN()"
+            ]),
+            "",
+            "COMPLETE"
+          ].join("\n"),
+          strobeCycleAction
+        );
+      }
+    } else if (subBinPulse) {
       extraActions.push(
         [
           "ACTION FLASH_TRIAL",
@@ -1331,6 +1526,9 @@ function generateStep4(cfg) {
     const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
     const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
     const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
+    const rampMin = cfg.hw === "Z3" ? Math.min(30, Math.max(0, parseInt(sp.circRampMin, 10) || 0)) : 0;
+    const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0;
+    const rampStepBins = hasDawnDusk ? Math.max(1, Math.round((rampMin * 60) / (6 * bin))) : 0;
     const autoref = 300;
     const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
     const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
@@ -1340,7 +1538,12 @@ function generateStep4(cfg) {
       `DEFINE HALF_HOUR_BINS ${halfBins}  # 2 x ${halfBins} x ${bin}s + ${autoref}s autoref = ~1 hour`,
       `DEFINE LIGHT_HOURS ${lightHrs}`,
       `DEFINE DARK_HOURS ${darkHrs}`,
-      `DEFINE NUM_DAYS ${days}`,
+      `DEFINE NUM_DAYS ${days}`
+    );
+    if (hasDawnDusk) {
+      topDefines.push(`DEFINE RAMP_STEP_BINS ${rampStepBins}  # 6 PWM steps x ${rampStepBins} x ${bin}s = ~${rampMin} min Dawn/Dusk`);
+    }
+    topDefines.push(
       "DEFINE DAY_VAR 100",
       "DEFINE HOUR_VAR 101",
       "DEFINE PHASE_VAR 102"
@@ -1361,6 +1564,12 @@ function generateStep4(cfg) {
       "    @DAY_VAR = @DAY_VAR + 1"
     ];
     if (lightHrs > 0) {
+      if (hasDawnDusk) {
+        dayLines.push(
+          "    @HOUR_VAR = 0",
+          "    INVOKE(DAWN_RAMP,1)"
+        );
+      }
       dayLines.push(
         "    @HOUR_VAR = 1",
         "    @PHASE_VAR = 1",
@@ -1369,6 +1578,12 @@ function generateStep4(cfg) {
       );
     }
     if (darkHrs > 0) {
+      if (hasDawnDusk) {
+        dayLines.push(
+          "    @HOUR_VAR = 0",
+          "    INVOKE(DUSK_RAMP,1)"
+        );
+      }
       dayLines.push(
         "    @HOUR_VAR = 1",
         "    @PHASE_VAR = 0",
@@ -1420,9 +1635,43 @@ function generateStep4(cfg) {
       ].join("\n")
     );
 
+    if (hasDawnDusk) {
+      const col = cfg.ledColorObj || LED_COLORS.WHITE;
+      const buildCircPwmLines = (frac) => {
+        const pwm = Math.round(cfg.ledDriveVal * frac);
+        const lns = [
+          cfg.useTopLight ? `    SET(X_LED_DRIVE,${col.z3Over},${pwm})` : `    SET(X_LED_DRIVE,${col.z3Over},0)`
+        ];
+        if (cfg.useUnderLight) {
+          lns.push(`    SET(X_LED_DRIVE,${col.z3Under},${pwm})`);
+        }
+        lns.push(...buildZ3PortGateLines(col.id, cfg.useTopLight, cfg.useUnderLight, pwm > 0));
+        return lns;
+      };
+      const buildRampAction = (actName, overlayLabel, sampleAct, fracs) => {
+        const lns = [
+          `ACTION ${actName}`,
+          "",
+          `    LOAD(OVERLAY_TEXT,"1,1:DAY @100 ${overlayLabel}")`
+        ];
+        for (const frac of fracs) {
+          lns.push(...buildCircPwmLines(frac), `    INVOKE(${sampleAct},RAMP_STEP_BINS)`);
+        }
+        lns.push("", "COMPLETE");
+        return lns.join("\n");
+      };
+      extraActions.push(
+        buildRampAction("DAWN_RAMP", "DAWN RAMP     ", "SAMPLE_DAWN", [0.15, 0.30, 0.50, 0.65, 0.85, 1.0]),
+        buildRampAction("DUSK_RAMP", "DUSK RAMP     ", "SAMPLE_DUSK", [0.85, 0.65, 0.50, 0.30, 0.15, 0.0]),
+        buildSampleAction("SAMPLE_DAWN", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DAWN|@100|@101|COUNTER1", dataExprs, useStream2),
+        buildSampleAction("SAMPLE_DUSK", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:DUSK|@100|@101|COUNTER1", dataExprs, useStream2)
+      );
+    }
+
     const hrsTotal = days * (lightHrs + darkHrs);
-    totalRuntimeSec = autoref + hrsTotal * (2 * halfBins * bin + autoref);
-    totalRows = hrsTotal * 2 * halfBins;
+    const rampExtraBins = hasDawnDusk ? days * 12 * rampStepBins : 0;
+    totalRuntimeSec = autoref + hrsTotal * (2 * halfBins * bin + autoref) + rampExtraBins * bin;
+    totalRows = hrsTotal * 2 * halfBins + rampExtraBins;
 
   } else if (cfg.stimId === "multi_phase") {
     const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
@@ -1438,6 +1687,14 @@ function generateStep4(cfg) {
     );
     for (const sl of comp.slices) {
       topDefines.push(`DEFINE S${sl.idx}_BINS ${sl.bins}  # ${sl.startSec}s-${sl.endSec}s (${sl.csvTag})`);
+      if (sl.strobeHz > 0) {
+        const halfSec = Number((0.5 / sl.strobeHz).toFixed(3));
+        const cyclesPerBin = Math.max(1, Math.round(bin * sl.strobeHz));
+        topDefines.push(
+          `DEFINE S${sl.idx}_STROBE_HALF ${halfSec}  # ${sl.strobeHz} Hz strobe`,
+          `DEFINE S${sl.idx}_STROBE_CYCLES ${cyclesPerBin}`
+        );
+      }
     }
 
     if (comp.hasAnyTempClip) {
@@ -1478,10 +1735,13 @@ function generateStep4(cfg) {
     extraActions.push(seqLines.join("\n"));
 
     for (const sl of comp.slices) {
+      const isStrobeSlice = sl.strobeHz > 0;
+      const steadyTop = isStrobeSlice ? sl.topLights.filter(l => !l.strobeHz) : sl.topLights;
+      const steadyBot = isStrobeSlice ? sl.bottomLights.filter(l => !l.strobeHz) : sl.bottomLights;
       const runLines = [
         `ACTION RUN_S${sl.idx}`,
         "",
-        ...buildSliceLightLines(cfg, sl.topLights, sl.bottomLights, manageBottom)
+        ...buildSliceLightLines(cfg, steadyTop, steadyBot, manageBottom)
       ];
       if (sl.effectiveTemp !== null) {
         runLines.push(`    SET(THERMOSTAT,${sl.effectiveTemp})`);
@@ -1499,10 +1759,42 @@ function generateStep4(cfg) {
         "COMPLETE"
       );
 
-      extraActions.push(
-        runLines.join("\n"),
-        buildSampleAction(`SAMPLE_S${sl.idx}`, `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${sl.csvTag}|COUNTER2|COUNTER1`, dataExprs, useStream2)
-      );
+      if (isStrobeSlice) {
+        const sampleStrobeAction = [
+          `ACTION SAMPLE_S${sl.idx}`,
+          "",
+          "    SET(COUNTER1,COUNTER_INC)",
+          '    LOGDATA(DATA_SNAPSHOT,"begin")',
+          `    INVOKE(STROBE_S${sl.idx},S${sl.idx}_STROBE_CYCLES)`,
+          '    LOGDATA(DATA_SNAPSHOT,"end")',
+          '    LOGDATA(DATA_SELECT,"begin")',
+          '    LOGDATA(DATA_DELTA,"end")',
+          "",
+          ...wrapSummaryLog([
+            `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${sl.csvTag}|COUNTER2|COUNTER1")`,
+            ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+            "    LOGRUN()"
+          ]),
+          "",
+          "COMPLETE"
+        ].join("\n");
+        const strobeHelperAction = [
+          `ACTION STROBE_S${sl.idx}`,
+          "",
+          ...buildSliceLightLines(cfg, sl.topLights, sl.bottomLights, manageBottom),
+          `    WAIT(S${sl.idx}_STROBE_HALF)`,
+          ...buildSliceLightLines(cfg, steadyTop, steadyBot, manageBottom),
+          `    WAIT(S${sl.idx}_STROBE_HALF)`,
+          "",
+          "COMPLETE"
+        ].join("\n");
+        extraActions.push(runLines.join("\n"), sampleStrobeAction, strobeHelperAction);
+      } else {
+        extraActions.push(
+          runLines.join("\n"),
+          buildSampleAction(`SAMPLE_S${sl.idx}`, `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${sl.csvTag}|COUNTER2|COUNTER1`, dataExprs, useStream2)
+        );
+      }
     }
 
     totalRuntimeSec = acclim + cfg.autorefTimeout + cycles * comp.totalBins * bin;
@@ -1568,7 +1860,7 @@ function generateStep4(cfg) {
   ];
   if (userLine) out.push(userLine);
   out.push(
-    `# Required asset(s) in unit Assets folder: "${p.arenaBmp}.bmp"${needZoneBmp ? ` and "${zoneBmp}.bmp"` : ""}`,
+    `# Required asset(s) in unit Assets folder: "${arenaBmp}.bmp"${needZoneBmp ? ` and "${zoneBmp}.bmp"` : ""}`,
     "",
     ...topDefines
   );
@@ -1641,10 +1933,10 @@ function generateStep4(cfg) {
     out.push("    SET(COUNTER2,COUNTER_ZERO)");
   }
   if (cfg.useHeatmap) {
-    out.push("    SET(COLOURMAP,0)");
+    out.push(`    SET(COLOURMAP,${cfg.heatmapPalette})`);
   }
 
-  out.push(`    LOAD(ARENAS,"${p.arenaBmp}.bmp")`);
+  out.push(`    LOAD(ARENAS,"${arenaBmp}.bmp")`);
   if (needZoneBmp) {
     out.push(`    LOAD(ZONES,"${zoneBmp}.bmp")`);
   }
@@ -1683,7 +1975,7 @@ function generateStep4(cfg) {
   if (cfg.useTracks) {
     recStartLines.push(
       "    SET(X_DRAWTRACKS,1)",
-      "    SET(X_TRACKTIME,15)"
+      `    SET(X_TRACKTIME,${cfg.trackTimeSec})`
     );
   }
   if (cfg.videoMode === "dual") {
@@ -1810,7 +2102,7 @@ function generateStep4(cfg) {
     metricSummaryParts.push(`MSD_${firstWell}..MSD_${lastWell}`);
   }
   if (cfg.useZones) {
-    metricSummaryParts.push(`ZD/ZC/ZT_${firstWell}_Z1..Z2`);
+    metricSummaryParts.push(`ZD/ZC/ZT_${firstWell}_Z1..Z${numZones}`);
   }
   let schemaDesc = `Summary CSV (${runSlug}): ${metaHeaders.join(" | ")} | ${metricSummaryParts.join(" | ")}`;
   if (cfg.useXy) {
@@ -1825,7 +2117,7 @@ function generateStep4(cfg) {
   return {
     filename: `04_${slotSlug}.zs`,
     bundleFolder: runSlug,
-    instruction: `<strong>Main experiment:</strong> Confirm <code>${p.arenaBmp}.bmp</code>${needZoneBmp ? ` and <code>${zoneBmp}.bmp</code>` : ""} exist in Assets, load your ${p.name} plate with organisms, and click <strong>Run</strong>.`,
+    instruction: `<strong>Main experiment:</strong> Confirm <code>${arenaBmp}.bmp</code>${needZoneBmp ? ` and <code>${zoneBmp}.bmp</code>` : ""} exist in Assets, load your ${p.name} ${cfg.isMaze ? "maze" : "plate"} with organisms, and click <strong>Run</strong>.`,
     schemaText: schemaDesc,
     code: out.join("\n"),
     totalRuntimeSec,
@@ -1872,14 +2164,23 @@ function generateAllSteps(cfg) {
     ? `${cfg.userFullClean}${cfg.lastName ? ` (tag: ${cfg.lastName})` : ""}`
     : (cfg.lastName || "Not specified");
 
+  const arenaBmp = cfg.arenaBmp || cfg.plate.arenaBmp;
+  const zoneBmp = cfg.zoneBmp || cfg.plate.zoneBmp;
+  const plateFormatLine = cfg.isMaze
+    ? `Plate Format     : ${cfg.plate.name} (${cfg.numWells} arena(s), ${cfg.numZones} zone(s))`
+    : `Plate Format     : ${cfg.plate.name} (${cfg.plate.rows} x ${cfg.plate.cols}, ${cfg.numWells} arena(s))`;
+  const plateGeoLine = cfg.isMaze
+    ? `Maze Geometry    : ${(cfg.mazeShapes || []).length} shape(s) in mm (${arenaBmp}.bmp / ${zoneBmp}.bmp)`
+    : `Plate Geometry   : X_OFFSET=${g.xOffset}, Y_OFFSET=${g.yOffset}, COL_STEP=${g.colStep}, ROW_STEP=${g.rowStep}, ${sizeKey}=${g.r}, INNER_ZONE=${g.rDz} mm`;
+
   const readme = [
     "ZANTIKS MWP EXPERIMENT BUNDLE",
     "=============================",
     `Researcher       : ${researcherInfo}`,
     `Study Tag        : ${cfg.expTag || "(none)"}`,
-    `Plate Format     : ${cfg.plate.name} (${cfg.plate.rows} x ${cfg.plate.cols}, ${cfg.numWells} arena(s))`,
+    plateFormatLine,
     `Config Profile   : ${state.profileName || "Default"}`,
-    `Plate Geometry   : X_OFFSET=${g.xOffset}, Y_OFFSET=${g.yOffset}, COL_STEP=${g.colStep}, ROW_STEP=${g.rowStep}, ${sizeKey}=${g.r}, INNER_ZONE=${g.rDz} mm`,
+    plateGeoLine,
     `Hardware Target  : MWP ${cfg.hw}`,
     `Stimulus Protocol: ${STIMULI.find(s => s.id === cfg.stimId).name}`,
     `Estimated Runtime: ${formatDuration(s4.totalRuntimeSec)} (${s4.totalRows} CSV rows)`,
@@ -1890,8 +2191,8 @@ function generateAllSteps(cfg) {
     "   - Run ONCE with the black 96-well calibration plate. Skip if already calibrated.",
     "",
     `2. ${s2.filename}`,
-    `   - Run ONCE with an EMPTY ${cfg.plate.name} plate.`,
-    `   - Generates "${cfg.plate.arenaBmp}.bmp" and "${cfg.zoneBmp || cfg.plate.zoneBmp}.bmp" inside the unit's Assets directory.`,
+    `   - Run ONCE with an EMPTY ${cfg.plate.name} ${cfg.isMaze ? "maze" : "plate"}.`,
+    `   - Generates "${arenaBmp}.bmp" and "${zoneBmp}.bmp" inside the unit's Assets directory.`,
     "",
     `3. ${s3.filename} (Optional)`,
     "   - Run with organisms loaded to check TARGET_SIZE and DETECTOR_THRESHOLD on Live View.",

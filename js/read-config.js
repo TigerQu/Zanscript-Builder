@@ -6,8 +6,12 @@
 // 5. Read Current UI Config
 // ---------------------------------------------------------------------------
 function readConfig() {
-  const plate = FACTORY_PLATES[state.plateId];
-  const geo = state.plateGeometries[state.plateId];
+  const plate = FACTORY_PLATES[state.plateId] || FACTORY_PLATES["24well"];
+  const geo = state.plateGeometries[state.plateId] || {
+    xOffset: plate.xOffset, yOffset: plate.yOffset,
+    colStep: plate.colStep, rowStep: plate.rowStep,
+    r: plate.r, rDz: plate.rDz
+  };
   const hw = document.getElementById("hwVersion").value;
 
   const rawFullName = document.getElementById("userName").value;
@@ -48,7 +52,9 @@ function readConfig() {
   const zoneModeEl = document.getElementById("zoneMode");
   const zoneModeRaw = zoneModeEl ? zoneModeEl.value : "concentric";
   const zoneMode = ["concentric", "half_tb", "half_lr"].includes(zoneModeRaw) ? zoneModeRaw : "concentric";
-  const zoneBmp = getZoneAssetName(plate, zoneMode);
+  const mazeData = getActiveMazeData(plate.id, state.customMaze, zoneMode);
+  const arenaBmp = mazeData.arenaBmp;
+  const zoneBmp = mazeData.zoneBmp;
 
   const useDist = document.getElementById("chk_dist").checked;
   const useMsd = document.getElementById("chk_msd").checked;
@@ -61,13 +67,23 @@ function readConfig() {
   const useHeatmap = document.getElementById("chk_heatmap").checked;
   const usePictureEl = document.getElementById("chk_picture");
   const usePicture = Boolean(usePictureEl && usePictureEl.checked);
+  const trackTimeEl = document.getElementById("trackTimeSec");
+  const trackTimeSec = Math.min(600, Math.max(1, parseInt(trackTimeEl ? trackTimeEl.value : "15", 10) || 15));
+  const heatmapPalEl = document.getElementById("heatmapPalette");
+  const heatmapPalette = Math.min(3, Math.max(0, parseInt(heatmapPalEl ? heatmapPalEl.value : "0", 10) || 0));
+  if (trackTimeEl) trackTimeEl.disabled = !useTracks;
+  if (heatmapPalEl) heatmapPalEl.disabled = !useHeatmap;
 
   return {
     plate,
+    isMaze: mazeData.isMaze,
+    mazeShapes: mazeData.shapes,
+    numZones: mazeData.numZones,
+    arenaBmp,
     zoneMode,
     zoneBmp,
-    wells: getWellLabels(plate.rows, plate.cols),
-    numWells: plate.rows * plate.cols,
+    wells: mazeData.wells,
+    numWells: mazeData.numArenas,
     hw,
     userFullClean,
     lastName,
@@ -95,7 +111,9 @@ function readConfig() {
     useXy,
     videoMode,
     useTracks,
+    trackTimeSec,
     useHeatmap,
+    heatmapPalette,
     usePicture,
     geo,
     stimId: state.stimId,

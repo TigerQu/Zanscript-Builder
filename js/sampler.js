@@ -104,10 +104,11 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     const preBins = Math.round(preSec / bin);
     const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
-    const pulseDur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
+    const pulseDur = Math.max(isOffStartle ? 0.1 : 0.05, parseFloat(sp.pulseDurSec) || 1);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiBins = Math.max(1, Math.round(itiSec / bin));
     const itiDur = itiBins * bin;
+    const strobeHz = !isOffStartle && [2, 5, 10].includes(parseInt(sp.strobeHz, 10)) ? parseInt(sp.strobeHz, 10) : 0;
 
     const subBinPulse = pulseDur < bin;
     const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
@@ -138,9 +139,16 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
           ? `LIGHT-OFF PULSE (Trial ${trIdx + 1}/${pulses})`
           : `ITI RECOVERY (Trial ${trIdx + 1}/${pulses})`;
       } else {
-        if (inPulse) setSingleChannelOn(colId);
+        if (inPulse) {
+          if (strobeHz > 0) {
+            const halfPeriod = 0.5 / strobeHz;
+            if (Math.floor(inTrial / halfPeriod) % 2 === 0) setSingleChannelOn(colId);
+          } else {
+            setSingleChannelOn(colId);
+          }
+        }
         phaseName = inPulse
-          ? `${activeLightTag} FLASH (Trial ${trIdx + 1}/${pulses})`
+          ? `${activeLightTag} ${strobeHz > 0 ? `${strobeHz}HZ STROBE` : "FLASH"} (Trial ${trIdx + 1}/${pulses})`
           : `DARK ITI (Trial ${trIdx + 1}/${pulses})`;
       }
     }
@@ -278,28 +286,60 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
     const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
     const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
+    const rampMin = hw === "Z3" ? Math.min(30, Math.max(0, parseInt(sp.circRampMin, 10) || 0)) : 0;
+    const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0;
+    const rampStepBins = hasDawnDusk ? Math.max(1, Math.round((rampMin * 60) / (6 * bin))) : 0;
+    const rampStepDur = rampStepBins * bin;
+    const rampDur = hasDawnDusk ? 6 * rampStepDur : 0;
     const autoref = 300;
     const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
     const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
     const hourDur = 2 * halfBins * bin + autoref;
     const hrsPerDay = lightHrs + darkHrs;
-    const hrsTotal = days * hrsPerDay;
-    totalRuntimeSec = autoref + hrsTotal * hourDur;
+    const dayDur = hrsPerDay * hourDur + (hasDawnDusk ? 2 * rampDur : 0);
+    totalRuntimeSec = autoref + days * dayDur;
     const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
+
+    const setChannelPct = (pct) => {
+      if (pct <= 0) return;
+      if (useTop) topChannels[colId] = pct;
+      if (useBot) bottomChannels[colId] = pct;
+    };
 
     if (t < autoref || hrsPerDay === 0) {
       setSingleChannelOn(colId);
       phaseName = "AUTOREFERENCING";
     } else {
-      const dayDur = hrsPerDay * hourDur;
       const rel = Math.min(Math.max(0, days * dayDur - 0.0001), t - autoref);
       const dayIdx = Math.min(days - 1, Math.floor(rel / dayDur));
       const inDay = rel - dayIdx * dayDur;
-      const hrIdx = Math.min(hrsPerDay - 1, Math.floor(inDay / hourDur));
-      const isLight = hrIdx < lightHrs;
-      const phaseHr = isLight ? (hrIdx + 1) : (hrIdx - lightHrs + 1);
-      if (isLight) setSingleChannelOn(colId);
-      phaseName = `DAY ${dayIdx + 1} ${isLight ? activeLightTag : "DARK"} HR ${phaseHr}`;
+      if (hasDawnDusk) {
+        const lightDur = lightHrs * hourDur;
+        if (inDay < rampDur) {
+          const st = Math.min(5, Math.floor(inDay / rampStepDur));
+          const pct = Math.max(1, Math.round(globalPct * [0.15, 0.30, 0.50, 0.65, 0.85, 1.0][st]));
+          setChannelPct(pct);
+          phaseName = `DAY ${dayIdx + 1} DAWN (${pct}%)`;
+        } else if (inDay < rampDur + lightDur) {
+          const hr = Math.min(lightHrs - 1, Math.floor((inDay - rampDur) / hourDur));
+          setSingleChannelOn(colId);
+          phaseName = `DAY ${dayIdx + 1} ${activeLightTag} HR ${hr + 1}`;
+        } else if (inDay < 2 * rampDur + lightDur) {
+          const st = Math.min(5, Math.floor((inDay - rampDur - lightDur) / rampStepDur));
+          const pct = Math.round(globalPct * [0.85, 0.65, 0.50, 0.30, 0.15, 0.0][st]);
+          setChannelPct(pct);
+          phaseName = `DAY ${dayIdx + 1} DUSK (${pct}%)`;
+        } else {
+          const hr = Math.min(darkHrs - 1, Math.floor((inDay - 2 * rampDur - lightDur) / hourDur));
+          phaseName = `DAY ${dayIdx + 1} DARK HR ${hr + 1}`;
+        }
+      } else {
+        const hrIdx = Math.min(hrsPerDay - 1, Math.floor(inDay / hourDur));
+        const isLight = hrIdx < lightHrs;
+        const phaseHr = isLight ? (hrIdx + 1) : (hrIdx - lightHrs + 1);
+        if (isLight) setSingleChannelOn(colId);
+        phaseName = `DAY ${dayIdx + 1} ${isLight ? activeLightTag : "DARK"} HR ${phaseHr}`;
+      }
     }
     return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };
   }
@@ -341,19 +381,27 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
       const lookupSec = Math.min(Math.max(0, cycleDur - 0.0001), inCyc);
       const sl = comp.slices.find(s => lookupSec >= s.startSec && lookupSec < s.endSec) || comp.slices[comp.slices.length - 1];
       if (sl) {
+        const inSlice = Math.max(0, lookupSec - sl.startSec);
+        const isLitNow = (l) => (!l.strobeHz || Math.floor(inSlice / (0.5 / l.strobeHz)) % 2 === 0);
         if (hw === "Z3") {
-          for (const l of sl.topLights) topChannels[l.id] = l.pct;
-          for (const l of sl.bottomLights) bottomChannels[l.id] = l.pct;
+          for (const l of sl.topLights) {
+            if (isLitNow(l)) topChannels[l.id] = l.pct;
+          }
+          for (const l of sl.bottomLights) {
+            if (isLitNow(l)) bottomChannels[l.id] = l.pct;
+          }
         } else {
-          for (const l of sl.lights) topChannels[l.id] = 100;
+          for (const l of sl.lights) {
+            if (isLitNow(l)) topChannels[l.id] = 100;
+          }
         }
         if (sl.effectiveTemp !== null) {
           tempC = sl.effectiveTemp;
         }
-        if (sl.vibCode) {
+        if (sl.vibTrigger) {
           vibration = sl.vibCode;
         }
-        if (sl.audioFile) {
+        if (sl.audioTrigger) {
           audio = sl.audioFile;
         }
         phaseName = cycles > 1 ? `${sl.overlayText} (Cycle ${cycIdx + 1}/${cycles})` : sl.overlayText;

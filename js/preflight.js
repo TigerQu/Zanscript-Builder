@@ -222,6 +222,27 @@ function computePreflightChecks(cfgIn, bundleIn) {
     }
   }
 
+  // Stepper motor vibration hardware check on legacy MWP Z2
+  const usesStepperVib = cfg.stimId === "vibration_startle" ||
+    cfg.stimId === "ppi" ||
+    (cfg.stimId === "multi_phase" && mpComp && mpComp.hasAnyVibClip);
+  if (usesStepperVib && cfg.hw !== "Z3") {
+    add("warn", "Stepper vibration requires MWP Z2S or Z3",
+      "ZCOMMAND(\"U...\") drives the stepper vibration stand on MWP Z2S / Z3; early non-stepper MWP Z2 units will ignore it.", "study");
+  }
+
+  // Circadian Dawn/Dusk ramp on legacy Z2
+  if (cfg.stimId === "circadian" && (parseInt(sp.circRampMin, 10) || 0) > 0 && cfg.hw !== "Z3") {
+    add("warn", "Smooth Dawn/Dusk PWM ramp needs an MWP Z3",
+      "MWP Z2 / Z2S GPO6-8 switches lights on/off without PWM dimming; ramp duration is skipped on Z2.", "study");
+  }
+
+  // Zone-changes-only stream 2 summary notice
+  if (cfg.useZoneChanges && !cfg.useDist && !cfg.useMsd && !cfg.useZones) {
+    add("info", "Summary CSV (stream 2) includes DIST_* baseline",
+      "Because no binned summary metric was checked alongside Zone Entry/Exit Events, stream 2 records ARENA_DISTANCES by default while stream 0 logs _ZCHANGE transitions.", "data");
+  }
+
   // UV (on MWP Z3, where UV is an optional hardware LED option)
   if (usesUv && cfg.hw === "Z3") {
     add("info", "UV light selected", "UV (365 nm) LEDs are only present on units fitted with them.", uvPage);
@@ -250,8 +271,17 @@ function computePreflightChecks(cfgIn, bundleIn) {
       "A larger time bin gives fewer, easier-to-handle rows.", "stimulus");
   }
 
-  // Calibration
-  if (!isPlateCustomized(state.plateId)) {
+  // Maze & Calibration checks
+  if (cfg.isMaze) {
+    if (cfg.plate.isCustomMaze && (!cfg.mazeShapes || cfg.mazeShapes.length === 0)) {
+      add("warn", "Custom 3D maze has no shapes yet",
+        "Add at least one arena/zone shape in the Plate & Maze editor before exporting Step 2.", "plate");
+    }
+    if (!cfg.useZones && !cfg.useZoneChanges) {
+      add("info", `${cfg.plate.name} zones are not logged yet`,
+        `Enable Zone Summary (ZD/ZC/ZT for Z1-${cfg.numZones}) or Zone Entry/Exit Events on Data & Video to record arm/chamber occupancy.`, "data");
+    }
+  } else if (!isPlateCustomized(state.plateId)) {
     add("info", `Factory offsets for ${cfg.plate.name}`,
       "Calibrating the plate offsets on your own unit gives the most accurate well positions.", "plate");
   }

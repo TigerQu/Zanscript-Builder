@@ -74,7 +74,10 @@ function renderRunSummary(cfg, s4, orgObj) {
     `${cfg.targetSize} mm · threshold ${cfg.detThreshold} · ${tempSummary}`);
 
   setText("sumPlate", cfg.plate.name);
-  setText("sumPlateSub", `${cfg.plate.meta} · ${cfg.plate.arenaBmp}.bmp`);
+  const plateMetaText = cfg.isMaze
+    ? `${cfg.numWells} arena${cfg.numWells === 1 ? "" : "s"} · ${cfg.numZones} zone${cfg.numZones === 1 ? "" : "s"}`
+    : cfg.plate.meta;
+  setText("sumPlateSub", `${plateMetaText} · ${cfg.arenaBmp || cfg.plate.arenaBmp}.bmp`);
 
   const stim = STIMULI.find(s => s.id === state.stimId);
   setText("sumStim", stim ? stim.name : state.stimId);

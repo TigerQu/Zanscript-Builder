@@ -15,6 +15,7 @@ function init() {
   syncCheckStyles();
   renderOrganismChips();
   renderPlateGrid();
+  if (typeof renderCustomMazeEditor === "function") renderCustomMazeEditor();
   renderStimGrid();
   renderStimParams();
   bindEvents();

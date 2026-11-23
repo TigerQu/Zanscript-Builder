@@ -44,12 +44,16 @@ function renderOrganismChips() {
 
 function renderPlateGrid() {
   const wrap = document.getElementById("plateGrid");
+  const mazeWrap = document.getElementById("mazeGrid");
   wrap.innerHTML = "";
-  for (const key of Object.keys(FACTORY_PLATES)) {
+  if (mazeWrap) mazeWrap.innerHTML = "";
+
+  const makeTile = (key) => {
     const p = FACTORY_PLATES[key];
-    const customized = isPlateCustomized(key);
+    const customized = !p.isMaze && isPlateCustomized(key);
     const tile = document.createElement("button");
     tile.type = "button";
+    tile.setAttribute("data-plate-id", key);
     tile.className = "option-tile" + (state.plateId === key ? " active" : "");
     const dotHtml = customized ? '<span class="tile-dot" title="Custom geometry offsets"></span>' : "";
     tile.innerHTML = `<span class="tile-name"><span>${p.name}</span>${dotHtml}</span><span class="tile-meta">${p.meta}</span>`;
@@ -57,14 +61,31 @@ function renderPlateGrid() {
       state.plateId = key;
       syncGeoInputsToActivePlate();
       renderPlateGrid();
+      if (typeof renderCustomMazeEditor === "function") renderCustomMazeEditor();
       refreshAll();
     });
-    wrap.appendChild(tile);
+    return tile;
+  };
+
+  for (const key of getStandardPlateKeys()) {
+    wrap.appendChild(makeTile(key));
+  }
+  if (mazeWrap) {
+    for (const key of getMazePlateKeys()) {
+      mazeWrap.appendChild(makeTile(key));
+    }
   }
 }
 
 function syncGeoInputsToActivePlate() {
   const p = FACTORY_PLATES[state.plateId];
+  const zoneWrap = document.getElementById("zoneModeWrap");
+  const geoDetails = document.getElementById("inlineGeoDetails");
+  const isMaze = Boolean(p && p.isMaze);
+  if (zoneWrap) zoneWrap.style.display = isMaze ? "none" : "";
+  if (geoDetails) geoDetails.style.display = isMaze ? "none" : "";
+  if (isMaze) return;
+
   const g = state.plateGeometries[state.plateId];
   const isSingle = p.rows === 1 && p.cols === 1;
 
@@ -91,8 +112,21 @@ function renderPlateSvg(cfg) {
   const trayH = 85.5;
   let items = `<rect x="0" y="0" width="${trayW}" height="${trayH}" rx="${isPetri ? 8 : 5}" fill="#ffffff" stroke="#afb8c1" stroke-width="1.2"/>`;
 
-  const zMode = cfg.zoneMode || "concentric";
+  const arenaBmp = cfg.arenaBmp || p.arenaBmp;
   const zoneBmp = cfg.zoneBmp || p.zoneBmp;
+
+  if (cfg.isMaze) {
+    items += renderMazeShapesSvgMarkup(cfg.mazeShapes, { mode: "preview", colorBy: "zone" });
+    svg.innerHTML = items;
+    const first = cfg.wells[0];
+    const last = cfg.wells[cfg.wells.length - 1];
+    document.getElementById("platePreviewLabel").textContent =
+      `${cfg.numWells} Arena${cfg.numWells === 1 ? "" : "s"} (${cfg.numWells === 1 ? first : first + "-" + last}) · ${cfg.numZones} Zone${cfg.numZones === 1 ? "" : "s"}`;
+    document.getElementById("plateAssetHint").textContent = `Assets: ${arenaBmp}.bmp, ${zoneBmp}.bmp`;
+    return;
+  }
+
+  const zMode = cfg.zoneMode || "concentric";
   const showInner = cfg.useZones || cfg.useZoneChanges || zMode !== "concentric" || document.getElementById("inlineGeoDetails").open;
 
   for (let r = 0; r < p.rows; r++) {
@@ -139,7 +173,7 @@ function renderPlateSvg(cfg) {
   document.getElementById("platePreviewLabel").textContent =
     cfg.numWells === 1 ? "1 Arena (A1)" : `${p.rows} x ${p.cols} (${first}-${last})`;
   document.getElementById("plateAssetHint").textContent =
-    `Assets: ${p.arenaBmp}.bmp${(cfg.useZones || cfg.useZoneChanges || zMode !== "concentric") ? `, ${zoneBmp}.bmp` : ""}`;
+    `Assets: ${arenaBmp}.bmp${(cfg.useZones || cfg.useZoneChanges || zMode !== "concentric") ? `, ${zoneBmp}.bmp` : ""}`;
 }
 
 function renderConfigModalTable() {
@@ -147,7 +181,7 @@ function renderConfigModalTable() {
   tbody.innerHTML = "";
   document.getElementById("cfgProfileName").value = state.profileName || "";
 
-  for (const key of Object.keys(FACTORY_PLATES)) {
+  for (const key of getStandardPlateKeys()) {
     const p = FACTORY_PLATES[key];
     const g = state.plateGeometries[key];
     const customized = isPlateCustomized(key);
@@ -238,8 +272,10 @@ function updateConfigStatusBadges() {
 
   const p = FACTORY_PLATES[state.plateId];
   const g = state.plateGeometries[state.plateId];
-  document.getElementById("inlineGeoSummaryText").textContent =
-    `${p.name} Offsets: X=${g.xOffset}, Y=${g.yOffset}, ${p.shape === "SQUARE" ? "L" : "R"}=${g.r} mm`;
+  if (p && !p.isMaze && g) {
+    document.getElementById("inlineGeoSummaryText").textContent =
+      `${p.name} Offsets: X=${g.xOffset}, Y=${g.yOffset}, ${p.shape === "SQUARE" ? "L" : "R"}=${g.r} mm`;
+  }
 
   const syncBadge = document.getElementById("cfgSyncBadge");
   if (state.unsavedFileChanges) {

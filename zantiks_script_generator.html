@@ -175,27 +175,39 @@
       </div>
     </section>
 
-    <!-- PAGE 3: PLATE -->
+    <!-- PAGE 3: PLATE & MAZE -->
     <section class="wizard-page" data-page="plate">
       <header class="page-head">
-        <h2 class="page-title">Plate Format</h2>
-        <p class="page-desc">Choose the plate or dish loaded in the MWP. The preview is drawn to true millimeter scale from the calibration offsets.</p>
+        <h2 class="page-title">Plate &amp; Maze Format</h2>
+        <p class="page-desc">Choose a standard multi-well plate, an official Zantiks maze insert, or build your own 3D-printed maze layout in millimeter coordinates.</p>
       </header>
 
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Plate Type</h3>
+          <h3 class="card-title">Plate &amp; Maze Type</h3>
           <span class="card-hint" id="plateAssetHint">Assets: a24.bmp, dz24.bmp</span>
         </div>
         <div class="plate-layout-wrap">
-          <div class="plate-grid" id="plateGrid"></div>
+          <div class="plate-sections-col">
+            <div class="stim-section-head">
+              <span class="stim-section-label">Standard Multi-Well Plates &amp; Dishes</span>
+              <span class="stim-section-hint">Calibrated millimeter grids</span>
+            </div>
+            <div class="plate-grid" id="plateGrid"></div>
+
+            <div class="stim-section-head" style="margin-top: 16px;">
+              <span class="stim-section-label">MWP Mazes &amp; Custom 3D-Printed Layouts</span>
+              <span class="stim-section-hint">Official Zantiks mazes + visual mm editor</span>
+            </div>
+            <div class="plate-grid" id="mazeGrid"></div>
+          </div>
           <div class="plate-preview-box">
             <svg id="plateSvg" width="118" height="80" viewBox="-2 -3 136 92"></svg>
             <div class="plate-preview-caption" id="platePreviewLabel">4 x 6 (A1-D6)</div>
           </div>
         </div>
 
-        <div class="form-grid" style="margin-top: 14px;">
+        <div class="form-grid" id="zoneModeWrap" style="margin-top: 14px;">
           <div class="field">
             <label for="zoneMode">Step 2 Zone Split Mode</label>
             <select id="zoneMode">
@@ -251,6 +263,70 @@
             </div>
           </div>
         </details>
+      </div>
+
+      <!-- CUSTOM 3D-PRINTED MAZE CANVAS EDITOR -->
+      <div class="card" id="customMazeCard" style="display:none;">
+        <div class="card-header">
+          <h3 class="card-title">Custom 3D-Printed Maze Editor (127.8 &times; 85.5 mm)</h3>
+          <span class="card-hint" id="customMazeSummary">8 shapes · 2 arenas · 4 zones</span>
+        </div>
+
+        <div class="maze-toolbar-top">
+          <div class="maze-toolbar-group">
+            <label for="mazeTemplateSel" class="maze-inline-lbl">Template</label>
+            <select id="mazeTemplateSel" class="maze-sel"></select>
+          </div>
+          <div class="maze-toolbar-group">
+            <input type="file" id="mazePhotoInput" accept="image/*" style="display:none;">
+            <button type="button" class="btn btn-xs" id="mazeUploadPhotoBtn">Upload Empty Maze Photo</button>
+            <span class="maze-photo-ctrls" id="mazePhotoControls" style="display:none;">
+              <label for="mazeBgOpacity" class="maze-inline-lbl">Opacity</label>
+              <input type="range" id="mazeBgOpacity" min="5" max="100" step="5" value="45" style="width:70px;">
+              <button type="button" class="btn btn-xs" id="mazeClearPhotoBtn">Clear Photo</button>
+            </span>
+          </div>
+          <div class="maze-toolbar-group">
+            <span class="maze-inline-lbl">Color by</span>
+            <div class="maze-seg-toggle">
+              <button type="button" class="btn btn-xs active" id="mazeColorZoneBtn">Zone</button>
+              <button type="button" class="btn btn-xs" id="mazeColorArenaBtn">Arena</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="maze-toolbar-shapes">
+          <div class="maze-toolbar-group">
+            <button type="button" class="btn btn-xs" id="mazeAddRectBtn">+ Rect</button>
+            <button type="button" class="btn btn-xs" id="mazeAddDiscBtn">+ Disc</button>
+            <button type="button" class="btn btn-xs" id="mazeAddSqBtn">+ Square</button>
+            <button type="button" class="btn btn-xs" id="mazeAddTriBtn">+ Triangle</button>
+          </div>
+          <div class="maze-toolbar-group">
+            <button type="button" class="btn btn-xs" id="mazeDupBtn">Duplicate</button>
+            <button type="button" class="btn btn-xs" id="mazeTile2x2Btn" title="Tile Arena 1 shapes into 4 quadrants">Tile 2&times;2</button>
+            <button type="button" class="btn btn-xs" id="mazeDelBtn">Delete</button>
+            <button type="button" class="btn btn-xs" id="mazeClearBtn">Clear All</button>
+          </div>
+        </div>
+
+        <div class="maze-canvas-wrap">
+          <svg id="customMazeSvg" viewBox="0 0 127.8 85.5" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="maze-canvas-caption">10 mm grid &middot; Drag shapes directly on the SBS footprint or edit exact millimeter values below. Upload an overhead photo from Zantiks <code>PICTURE</code> or CAD to trace 3D-printed walls.</div>
+        </div>
+
+        <div class="maze-inspector" id="mazeShapeInspector"></div>
+
+        <div class="form-grid" style="margin-top: 14px;">
+          <div class="field">
+            <label for="mazeArenaBmp">Arena Asset Name (.bmp)</label>
+            <input type="text" id="mazeArenaBmp" value="aCustom" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="mazeZoneBmp">Zone Asset Name (.bmp)</label>
+            <input type="text" id="mazeZoneBmp" value="zCustom" autocomplete="off">
+          </div>
+        </div>
       </div>
     </section>
 
@@ -419,8 +495,8 @@
           <label class="check-item" id="lbl_zones">
             <input type="checkbox" id="chk_zones">
             <div class="check-body">
-              <div class="check-title">Dual-Zone Summary (Z1 / Z2) <span class="code-pill">ZONE_TIMERS</span></div>
-              <div class="check-desc">Logs binned distance, entries, and time in Zone 1 vs. Zone 2 (concentric or split-half from Plate page).</div>
+              <div class="check-title">Zone Summary (Z1–Z2 or Maze Zones) <span class="code-pill">ZONE_TIMERS</span></div>
+              <div class="check-desc">Logs binned distance, entries, and time per zone (dual-zone concentric/split-half for plates, or Z1–Z8 for mazes).</div>
             </div>
           </label>
 
@@ -465,6 +541,19 @@
               <label class="inline-check"><input type="checkbox" id="chk_heatmap"> End Heatmap</label>
               <label class="inline-check"><input type="checkbox" id="chk_picture"> Start/End Photo</label>
             </div>
+          </div>
+          <div class="field">
+            <label for="trackTimeSec">Track Trace Length (sec)</label>
+            <input type="number" id="trackTimeSec" min="1" max="600" step="1" value="15">
+          </div>
+          <div class="field">
+            <label for="heatmapPalette">Heatmap Palette (COLOURMAP)</label>
+            <select id="heatmapPalette" disabled>
+              <option value="0" selected>0 · Zantiks Default</option>
+              <option value="1">1 · Inferno</option>
+              <option value="2">2 · Plasma</option>
+              <option value="3">3 · Viridis</option>
+            </select>
           </div>
         </div>
       </div>
@@ -673,6 +762,7 @@
 
 <!-- App scripts: classic scripts, order matters (main.js last) -->
 <script src="js/catalogs.js"></script>
+<script src="js/maze-editor.js"></script>
 <script src="js/state.js"></script>
 <script src="js/helpers.js"></script>
 <script src="js/read-config.js"></script>

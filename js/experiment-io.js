@@ -42,7 +42,9 @@ const EXPERIMENT_INPUTS = {
 const OPTIONAL_EXPERIMENT_INPUTS = {
   zoneMode: { prop: "value", def: "concentric" },
   chk_zchange: { prop: "checked", def: false },
-  chk_picture: { prop: "checked", def: false }
+  chk_picture: { prop: "checked", def: false },
+  trackTimeSec: { prop: "value", def: "15" },
+  heatmapPalette: { prop: "value", def: "0" }
 };
 
 function buildExperimentPayload() {
@@ -72,11 +74,28 @@ function buildExperimentPayload() {
     stimId: state.stimId,
     inputs,
     stimParams: stimParamsOut,
-    timelineClips: state.timelineClips.map(c => ({ track: c.track, startSec: c.startSec, endSec: c.endSec, val: c.val })),
+    timelineClips: state.timelineClips.map(c => {
+      const out = { track: c.track, startSec: c.startSec, endSec: c.endSec, val: c.val };
+      if ((c.track === "VIB" || c.track === "AUDIO") && Number(c.repeatSec) > 0) out.repeatSec = Number(c.repeatSec);
+      if (Number.isFinite(c.endVal) && Math.round(c.endVal) !== Math.round(c.val)) out.endVal = Math.round(c.endVal);
+      if ([2, 5, 10].includes(parseInt(c.strobeHz, 10))) out.strobeHz = parseInt(c.strobeHz, 10);
+      return out;
+    }),
     showUnderTracks: Boolean(state.showUnderTracks)
   };
   if (state.z3RgbMap && state.z3RgbMap !== "DOCS") {
     experiment.z3RgbMap = state.z3RgbMap;
+  }
+  if (state.plateId === "custom_maze" && state.customMaze) {
+    experiment.customMaze = {
+      templateId: state.customMaze.templateId,
+      arenaBmp: state.customMaze.arenaBmp,
+      zoneBmp: state.customMaze.zoneBmp,
+      colorBy: state.customMaze.colorBy,
+      shapes: state.customMaze.shapes.map(s => ({
+        type: s.type, x: s.x, y: s.y, w: s.w, h: s.h, angle: s.angle, arena: s.arena, zone: s.zone
+      }))
+    };
   }
   return {
     format: EXPERIMENT_FORMAT,
@@ -123,21 +142,36 @@ function sanitizeTimelineClips(rawClips) {
     const endSec = rawE;
     if (endSec <= startSec) continue;
     let val;
+    const extra = {};
     if (c.track === "TEMP") {
       const rawVal = parseFloat(c.val);
       val = Number.isFinite(rawVal) ? Math.min(40, Math.max(10, Number(rawVal.toFixed(1)))) : 22;
     } else if (c.track === "VIB") {
       val = clampVibLevel(c.val);
+      const rep = parseFloat(c.repeatSec);
+      if (Number.isFinite(rep) && rep > 0) extra.repeatSec = Math.min(3600, Math.max(1, Math.round(rep)));
     } else if (c.track === "AUDIO") {
       val = sanitizeAudioAsset(c.val);
+      const rep = parseFloat(c.repeatSec);
+      if (Number.isFinite(rep) && rep > 0) extra.repeatSec = Math.min(3600, Math.max(1, Math.round(rep)));
     } else {
+      const rawEnd = parseFloat(c.endVal);
+      const hasRamp = Number.isFinite(rawEnd);
       const rawVal = parseFloat(c.val);
-      val = Number.isFinite(rawVal) ? Math.min(100, Math.max(5, Math.round(rawVal))) : 100;
+      val = Number.isFinite(rawVal)
+        ? Math.min(100, Math.max(hasRamp ? 0 : 5, Math.round(rawVal)))
+        : (hasRamp ? 0 : 100);
+      if (hasRamp) {
+        const clampedEnd = Math.min(100, Math.max(0, Math.round(rawEnd)));
+        if (clampedEnd !== val) extra.endVal = clampedEnd;
+      }
+      const st = parseInt(c.strobeHz, 10);
+      if ([2, 5, 10].includes(st)) extra.strobeHz = st;
     }
     if (!byTrack.has(c.track)) byTrack.set(c.track, { slots: [], list: [] });
     const bucket = byTrack.get(c.track);
     bucket.slots.push(slot);
-    bucket.list.push({ track: c.track, startSec, endSec, val, _slot: slot });
+    bucket.list.push({ track: c.track, startSec, endSec, val, extra, _slot: slot });
   }
 
   const placed = [];
@@ -148,7 +182,7 @@ function sanitizeTimelineClips(rawClips) {
     for (const item of list) {
       const s = Math.max(cursor, item.startSec);
       if (item.endSec <= s) continue;
-      kept.push({ track: item.track, startSec: s, endSec: item.endSec, val: item.val });
+      kept.push({ track: item.track, startSec: s, endSec: item.endSec, val: item.val, ...item.extra });
       cursor = item.endSec;
     }
     for (let i = 0; i < kept.length; i++) {
@@ -159,10 +193,7 @@ function sanitizeTimelineClips(rawClips) {
   placed.sort((a, b) => a.order - b.order);
   return placed.map((entry, i) => ({
     id: i + 1,
-    track: entry.clip.track,
-    startSec: entry.clip.startSec,
-    endSec: entry.clip.endSec,
-    val: entry.clip.val
+    ...entry.clip
   }));
 }
 
@@ -201,6 +232,9 @@ function applyExperimentData(payload, opts) {
   }
   if (FACTORY_PLATES[exp.plateId]) state.plateId = exp.plateId;
   else if (exp.plateId) notes.push(`unknown plate "${exp.plateId}"`);
+  if (exp.customMaze && typeof exp.customMaze === "object") {
+    state.customMaze = sanitizeCustomMaze(exp.customMaze);
+  }
   if (STIMULI.some(s => s.id === exp.stimId)) state.stimId = exp.stimId;
   else if (exp.stimId) notes.push(`unknown protocol "${exp.stimId}"`);
 
@@ -263,6 +297,7 @@ function applyExperimentData(payload, opts) {
     syncCheckStyles();
     renderOrganismChips();
     renderPlateGrid();
+    renderCustomMazeEditor();
     renderStimGrid();
     renderStimParams();
     refreshAll();

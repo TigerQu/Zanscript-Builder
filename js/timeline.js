@@ -30,13 +30,14 @@ function renderNleSummaryBar(cfgIn) {
           : lightTokens.join("+"));
     const tSuffix = sl.effectiveTemp !== null ? ` ${sl.effectiveTemp}°C` : "";
     const stimBits = [];
+    if (sl.strobeHz > 0) stimBits.push(`${sl.strobeHz}Hz`);
     if (sl.vibTrigger) stimBits.push(sl.vibCode);
     if (sl.audioTrigger) stimBits.push("Aud");
     const stimSuffix = stimBits.length ? ` +${stimBits.join("+")}` : "";
     const dur = Math.max(0.001, sl.endSec - sl.startSec);
     const tip = `S${sl.idx} (${sl.startSec}-${sl.endSec}s): ${lbl}${tSuffix}${stimSuffix}`;
     const prev = segs[segs.length - 1];
-    if (cls === "tl-overlap" && !sl.vibTrigger && !sl.audioTrigger && prev && prev.cls === "tl-overlap" && !prev._hasStim) {
+    if (cls === "tl-overlap" && !sl.vibTrigger && !sl.audioTrigger && !sl.strobeHz && prev && prev.cls === "tl-overlap" && !prev._hasStim) {
       prev.w += dur;
       lightTokens.forEach(tok => {
         if (!prev._toks.includes(tok)) prev._toks.push(tok);
@@ -166,9 +167,10 @@ function renderTimeline(cfg, s4) {
     const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
     const preDur = Math.round(preSec / bin) * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
-    const pulseDur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
+    const pulseDur = Math.max(isOff ? 0.1 : 0.05, parseFloat(sp.pulseDurSec) || 1);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
+    const strobeHz = !isOff && [2, 5, 10].includes(parseInt(sp.strobeHz, 10)) ? parseInt(sp.strobeHz, 10) : 0;
     const subBinPulse = pulseDur < bin;
     const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
     const pulseBinDur = pulseBins * bin;
@@ -194,7 +196,7 @@ function renderTimeline(cfg, s4) {
     if (pulses > n) {
       segs.push({ cls: "tl-acclim", w: itiDur, txt: `+${pulses - n}`, t0: cursor, t1: s4.totalRuntimeSec });
     }
-    desc.textContent = `${sp.numPulses} ${isOff ? "dark" : activeShort.toLowerCase()} pulses (${sp.pulseDurSec}s pulse, ${sp.itiSec}s ITI)`;
+    desc.textContent = `${sp.numPulses} ${isOff ? "dark" : activeShort.toLowerCase()} ${strobeHz > 0 ? `${strobeHz}Hz strobe bursts` : "pulses"} (${sp.pulseDurSec}s, ${sp.itiSec}s ITI)`;
   } else if (cfg.stimId === "vibration_startle") {
     const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
@@ -303,6 +305,10 @@ function renderTimeline(cfg, s4) {
     const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
     const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
     const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
+    const rampMin = cfg.hw === "Z3" ? Math.min(30, Math.max(0, parseInt(sp.circRampMin, 10) || 0)) : 0;
+    const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0;
+    const rampStepBins = hasDawnDusk ? Math.max(1, Math.round((rampMin * 60) / (6 * bin))) : 0;
+    const rampDur = hasDawnDusk ? 6 * rampStepBins * bin : 0;
     const autoref = 300;
     const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
     const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
@@ -310,11 +316,24 @@ function renderTimeline(cfg, s4) {
     const n = Math.min(5, days);
     preSetupSec = autoref;
     let cursor = autoref;
+    const rampVisW = hasDawnDusk ? Math.max(1.2, rampMin / 25) : 0;
     for (let i = 0; i < n; i++) {
+      if (hasDawnDusk) {
+        const segT0 = segs.length === 0 ? 0 : cursor;
+        const segT1 = cursor + rampDur;
+        segs.push({ cls: "tl-dawn", w: rampVisW, txt: "", t0: segT0, t1: segT1 });
+        cursor = segT1;
+      }
       if (lightHrs > 0) {
         const segT0 = segs.length === 0 ? 0 : cursor;
         const segT1 = cursor + lightHrs * hourDur;
         segs.push({ cls: activeCls, w: lightHrs, txt: `${lightHrs}h L`, t0: segT0, t1: segT1 });
+        cursor = segT1;
+      }
+      if (hasDawnDusk) {
+        const segT0 = segs.length === 0 ? 0 : cursor;
+        const segT1 = cursor + rampDur;
+        segs.push({ cls: "tl-dusk", w: rampVisW, txt: "", t0: segT0, t1: segT1 });
         cursor = segT1;
       }
       if (darkHrs > 0) {
@@ -330,7 +349,7 @@ function renderTimeline(cfg, s4) {
     if (segs.length === 0) {
       segs.push({ cls: activeCls, w: 1, txt: "Autoref", t0: 0, t1: Math.max(1, s4.totalRuntimeSec) });
     }
-    desc.textContent = `${sp.numDays} cycle(s) of ${sp.lightHours}h ${activeShort} : ${sp.darkHours}h Dark`;
+    desc.textContent = `${sp.numDays} cycle(s) of ${sp.lightHours}h ${activeShort} : ${sp.darkHours}h Dark${hasDawnDusk ? ` (±${rampMin}m dawn/dusk)` : ""}`;
   } else if (cfg.stimId === "multi_phase") {
     const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
     const cycles = Math.max(1, parseInt(sp.mpCycles, 10) || 1);
@@ -380,6 +399,8 @@ function renderTimeline(cfg, s4) {
     renderNleSummaryBar(cfg);
     const extraTags = [];
     if (comp.hasAnyBottomClip) extraTags.push("top+bot");
+    if (comp.hasAnyRampClip) extraTags.push("ramp");
+    if (comp.hasAnyStrobeClip) extraTags.push("strobe");
     if (comp.hasAnyTempClip) extraTags.push("temp");
     if (comp.hasAnyVibClip) extraTags.push("vib");
     if (comp.hasAnyAudioClip) extraTags.push("audio");

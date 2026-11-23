@@ -85,7 +85,22 @@ function renderStimParams() {
           </div>
         </div>`;
   } else if (id === "light_off_startle" || id === "light_on_pulse") {
-    const pulseLabel = id === "light_off_startle" ? "Dark Pulse Duration (sec)" : "Light Flash Duration (sec)";
+    const isFlash = id === "light_on_pulse";
+    const pulseLabel = isFlash ? "Light Flash Duration (sec)" : "Dark Pulse Duration (sec)";
+    const pulseMin = isFlash ? "0.05" : "0.2";
+    const pulseStep = isFlash ? "0.05" : "0.2";
+    const curStrobe = parseInt(sp.strobeHz, 10) || 0;
+    const strobeField = isFlash
+      ? `<div class="field">
+            <label>Flash Mode / Strobe</label>
+            <select data-sp="strobeHz">
+              <option value="0" ${curStrobe === 0 ? "selected" : ""}>Solid Flash (0 Hz)</option>
+              <option value="2" ${curStrobe === 2 ? "selected" : ""}>2 Hz Strobe (250ms ON / OFF)</option>
+              <option value="5" ${curStrobe === 5 ? "selected" : ""}>5 Hz Strobe (100ms ON / OFF)</option>
+              <option value="10" ${curStrobe === 10 ? "selected" : ""}>10 Hz Strobe (50ms ON / OFF)</option>
+            </select>
+          </div>`
+      : "";
     box.innerHTML = `
         <div class="form-grid-3">
           <div class="field">
@@ -94,7 +109,7 @@ function renderStimParams() {
           </div>
           <div class="field">
             <label>${pulseLabel}</label>
-            <input type="number" min="0.2" max="60" step="0.2" data-sp="pulseDurSec" value="${sp.pulseDurSec}">
+            <input type="number" min="${pulseMin}" max="60" step="${pulseStep}" data-sp="pulseDurSec" value="${sp.pulseDurSec}">
           </div>
           <div class="field">
             <label>Inter-Trial Interval (sec)</label>
@@ -112,6 +127,7 @@ function renderStimParams() {
             <label>Time Bin (sec)</label>
             <input type="number" min="1" max="300" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
           </div>
+          ${strobeField}
         </div>`;
   } else if (id === "vibration_startle") {
     box.innerHTML = `
@@ -147,6 +163,10 @@ function renderStimParams() {
           <div class="field">
             <label>Acclimation (sec)</label>
             <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
+          </div>
+          <div class="field">
+            <label>Time Bin (sec)</label>
+            <input type="number" min="1" max="300" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
           </div>
         </div>`;
   } else if (id === "acoustic_startle") {
@@ -246,13 +266,17 @@ function renderStimParams() {
             <label>Acclimation (sec)</label>
             <input type="number" min="0" max="7200" step="10" data-sp="acclimSec" value="${sp.acclimSec}">
           </div>
+          <div class="field">
+            <label>Time Bin (sec)</label>
+            <input type="number" min="1" max="300" step="1" data-sp="timeBinSec" value="${sp.timeBinSec}">
+          </div>
         </div>
         <div class="proto-note">
           Uses official MWP stepper PPI command: <code>ZCOMMAND("${sp.ppiPrepulse || "U3"} D1190 M1 M-1 M1 M-1 P${Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300)} ${sp.ppiPulse || "U0"} D1190 M1 M-1 M1 M-1")</code>. Alternating mode logs <code>PULSE_ALONE</code> and <code>PPI_TRIAL</code> rows so % PPI can be computed directly.
         </div>`;
   } else if (id === "circadian") {
     box.innerHTML = `
-        <div class="form-grid">
+        <div class="form-grid-3">
           <div class="field">
             <label>Light Hours per Cycle</label>
             <input type="number" min="0" max="24" step="1" data-sp="lightHours" value="${sp.lightHours}">
@@ -268,6 +292,10 @@ function renderStimParams() {
           <div class="field">
             <label>Time Bin (sec)</label>
             <input type="number" min="1" max="600" step="1" data-sp="circBinSec" value="${sp.circBinSec}">
+          </div>
+          <div class="field">
+            <label>Dawn / Dusk PWM Ramp (min)</label>
+            <input type="number" min="0" max="30" step="5" data-sp="circRampMin" value="${sp.circRampMin || 0}">
           </div>
         </div>`;
   } else if (id === "multi_phase") {
@@ -339,6 +367,8 @@ function renderStimParams() {
               <option value="bg_opto">Preset: White BG + Opto</option>
               <option value="bot_bg_top_opto">Preset: Bot White + Top Opto</option>
               <option value="multi_modal">Preset: Multi-Modal (Light + Vib + Audio)</option>
+              <option value="dawn_dusk">Preset: Dawn / Dusk Smooth Ramp</option>
+              <option value="opto_strobe">Preset: Opto Strobe (10 Hz)</option>
               <option value="rgb_overlap">Preset: RGB Overlap</option>
               <option value="sequential">Preset: Seq Sweep</option>
             </select>
@@ -571,9 +601,18 @@ function renderStimParams() {
         : (tr.group === "ENV" ? "nle-mount-env" : (tr.group === "STIM" ? "nle-mount-stim" : "nle-mount-top"));
 
       let valFieldHtml = "";
+      let extraRowHtml = "";
+      const isLight = tr.kind === "light";
+      const curRep = (isVib || isAudio) && Number(sel.repeatSec) > 0 ? Math.max(bin, Math.round(sel.repeatSec)) : 0;
+      const hasRamp = isLight && Number.isFinite(sel.endVal) && Math.round(sel.endVal) !== Math.round(sel.val);
+      const curStrobe = isLight && [2, 5, 10].includes(parseInt(sel.strobeHz, 10)) ? parseInt(sel.strobeHz, 10) : 0;
+
       const inspSub = isVib
-        ? "ZCOMMAND · fires at clip start"
-        : (isAudio ? "AUDIO_FILE · fires at clip start" : tr.sub);
+        ? (curRep > 0 ? `ZCOMMAND · repeats every ${curRep}s` : "ZCOMMAND · once at clip start")
+        : (isAudio
+            ? (curRep > 0 ? `AUDIO_FILE · repeats every ${curRep}s` : "AUDIO_FILE · once at clip start")
+            : tr.sub);
+
       if (isVib) {
         const curLvl = clampVibLevel(sel.val);
         const opts = VIB_STEP_MODES.map(m =>
@@ -583,6 +622,19 @@ function renderStimParams() {
             <div class="nle-insp-field nle-insp-field-wide">
               <label for="nleInspVibSel">Motor Intensity</label>
               <select id="nleInspVibSel">${opts}</select>
+            </div>`;
+        extraRowHtml = `
+            <div class="nle-insp-extra-row">
+              <div class="nle-insp-field">
+                <label for="nleInspRepMode">Trigger Mode</label>
+                <div class="nle-insp-audio-row">
+                  <select id="nleInspRepMode">
+                    <option value="once" ${curRep === 0 ? "selected" : ""}>Once at start</option>
+                    <option value="repeat" ${curRep > 0 ? "selected" : ""}>Repeat every (sec)</option>
+                  </select>
+                  <input type="number" class="nle-insp-repeat-num" id="nleInspRepSec" min="${bin}" max="3600" step="${bin}" value="${curRep > 0 ? curRep : Math.max(5, bin)}" style="${curRep > 0 ? "" : "display:none;"}">
+                </div>
+              </div>
             </div>`;
       } else if (isAudio) {
         const curFile = sanitizeAudioAsset(sel.val);
@@ -600,10 +652,23 @@ function renderStimParams() {
                 <input type="text" id="nleInspAudioCustom" value="${isBuiltin ? "stereo.wav" : curFile}" style="${selMode === "custom" ? "" : "display:none;"}" autocomplete="off">
               </div>
             </div>`;
+        extraRowHtml = `
+            <div class="nle-insp-extra-row">
+              <div class="nle-insp-field">
+                <label for="nleInspRepMode">Trigger Mode</label>
+                <div class="nle-insp-audio-row">
+                  <select id="nleInspRepMode">
+                    <option value="once" ${curRep === 0 ? "selected" : ""}>Once at start</option>
+                    <option value="repeat" ${curRep > 0 ? "selected" : ""}>Repeat every (sec)</option>
+                  </select>
+                  <input type="number" class="nle-insp-repeat-num" id="nleInspRepSec" min="${bin}" max="3600" step="${bin}" value="${curRep > 0 ? curRep : Math.max(5, bin)}" style="${curRep > 0 ? "" : "display:none;"}">
+                </div>
+              </div>
+            </div>`;
       } else {
-        const valLabel = isTemp ? "Temp (°C)" : "Brightness (%)";
+        const valLabel = isTemp ? "Temp (°C)" : (hasRamp ? "Start Brightness (%)" : "Brightness (%)");
         const valDisabled = (!isTemp && !hwIsZ3) ? "disabled" : "";
-        const valMin = isTemp ? "10" : "5";
+        const valMin = isTemp ? "10" : (hasRamp ? "0" : "5");
         const valMax = isTemp ? "40" : "100";
         const valStep = isTemp ? "0.5" : "1";
         valFieldHtml = `
@@ -614,6 +679,28 @@ function renderStimParams() {
                 <input type="number" id="nleInspVal" min="${valMin}" max="${valMax}" step="${valStep}" value="${sel.val}" ${valDisabled}>
               </div>
             </div>`;
+        if (isLight) {
+          const endValShown = hasRamp ? Math.round(sel.endVal) : (sel.val >= 50 ? 0 : 100);
+          extraRowHtml = `
+            <div class="nle-insp-extra-row">
+              <div class="nle-insp-field">
+                <label class="nle-insp-inline-toggle">
+                  <input type="checkbox" id="nleInspRampChk" ${hasRamp ? "checked" : ""} ${!hwIsZ3 ? "disabled" : ""}>
+                  Smooth PWM Ramp to End (%)
+                </label>
+                <input type="number" id="nleInspEndVal" min="0" max="100" step="5" value="${endValShown}" ${(!hasRamp || !hwIsZ3) ? "disabled" : ""}>
+              </div>
+              <div class="nle-insp-field">
+                <label for="nleInspStrobeSel">Flash / Strobe Mode</label>
+                <select id="nleInspStrobeSel">
+                  <option value="0" ${curStrobe === 0 ? "selected" : ""}>Solid Light (0 Hz)</option>
+                  <option value="2" ${curStrobe === 2 ? "selected" : ""}>2 Hz Strobe (250ms)</option>
+                  <option value="5" ${curStrobe === 5 ? "selected" : ""}>5 Hz Strobe (100ms)</option>
+                  <option value="10" ${curStrobe === 10 ? "selected" : ""}>10 Hz Strobe (50ms)</option>
+                </select>
+              </div>
+            </div>`;
+        }
       }
 
       insp.innerHTML = `
@@ -639,7 +726,8 @@ function renderStimParams() {
               <input type="number" id="nleInspEnd" min="${bin}" max="${totalSec}" step="${bin}" value="${sel.endSec}">
             </div>
             ${valFieldHtml}
-          </div>`;
+          </div>
+          ${extraRowHtml}`;
 
       const sInp = document.getElementById("nleInspStart");
       const eInp = document.getElementById("nleInspEnd");
@@ -648,6 +736,11 @@ function renderStimParams() {
       const vibSel = document.getElementById("nleInspVibSel");
       const audSel = document.getElementById("nleInspAudioSel");
       const audCustom = document.getElementById("nleInspAudioCustom");
+      const repMode = document.getElementById("nleInspRepMode");
+      const repSecInp = document.getElementById("nleInspRepSec");
+      const rampChk = document.getElementById("nleInspRampChk");
+      const endValInp = document.getElementById("nleInspEndVal");
+      const strobeSel = document.getElementById("nleInspStrobeSel");
       const dBtn = document.getElementById("nleDelClipBtn");
 
       const applyStartEnd = (normalize) => {
@@ -700,13 +793,66 @@ function renderStimParams() {
           flushRefresh();
         });
       }
+      if (repMode) {
+        repMode.addEventListener("change", () => {
+          if (repMode.value === "repeat") {
+            const iv = Math.max(bin, snapSec(parseFloat(repSecInp ? repSecInp.value : 5) || Math.max(5, bin), bin));
+            sel.repeatSec = iv;
+          } else {
+            delete sel.repeatSec;
+          }
+          syncNleDom(true, false);
+          flushRefresh();
+        });
+      }
+      if (repSecInp) {
+        repSecInp.addEventListener("change", () => {
+          const iv = Math.max(bin, snapSec(parseFloat(repSecInp.value) || bin, bin));
+          sel.repeatSec = iv;
+          repSecInp.value = iv;
+          syncNleDom(true, false);
+          flushRefresh();
+        });
+      }
+      if (rampChk) {
+        rampChk.addEventListener("change", () => {
+          if (rampChk.checked) {
+            const ev = endValInp ? Math.min(100, Math.max(0, Math.round(parseFloat(endValInp.value) || 0))) : 100;
+            sel.endVal = ev === Math.round(sel.val) ? (sel.val >= 50 ? 0 : 100) : ev;
+          } else {
+            delete sel.endVal;
+            if (sel.val < 5) sel.val = 5;
+          }
+          syncNleDom(true, false);
+          flushRefresh();
+        });
+      }
+      if (endValInp) {
+        endValInp.addEventListener("change", () => {
+          const ev = Math.min(100, Math.max(0, Math.round(parseFloat(endValInp.value) || 0)));
+          sel.endVal = ev;
+          endValInp.value = ev;
+          syncNleDom(false, false);
+          flushRefresh();
+        });
+      }
+      if (strobeSel) {
+        strobeSel.addEventListener("change", () => {
+          const hz = parseInt(strobeSel.value, 10) || 0;
+          if ([2, 5, 10].includes(hz)) sel.strobeHz = hz;
+          else delete sel.strobeHz;
+          syncNleDom(false, false);
+          flushRefresh();
+        });
+      }
       if (vInp) {
         const applyVal = (rawVal, fromRange) => {
           const raw = parseFloat(rawVal);
           if (!Number.isFinite(raw)) return;
+          const allowZero = isLight && Number.isFinite(sel.endVal);
           sel.val = isTemp
             ? Math.min(40, Math.max(10, Number(raw.toFixed(1))))
-            : Math.min(100, Math.max(5, Math.round(raw)));
+            : Math.min(100, Math.max(allowZero ? 0 : 5, Math.round(raw)));
           if (fromRange && vInp) vInp.value = sel.val;
           if (!fromRange && rInp) rInp.value = sel.val;
           syncNleDom(false, false);
@@ -731,10 +877,19 @@ function renderStimParams() {
       const ratio = dur / Math.max(1, totalSec);
       if (ratio < 0.055) return "";
       let main;
-      if (tr.kind === "temp") main = `${c.val}°C`;
-      else if (tr.kind === "vib") main = `${vibLevelToCode(c.val)} Tap`;
-      else if (tr.kind === "audio") main = sanitizeAudioAsset(c.val);
-      else main = hwIsZ3 ? `${c.val}%` : "ON";
+      if (tr.kind === "temp") {
+        main = `${c.val}°C`;
+      } else if (tr.kind === "vib") {
+        const rep = Number(c.repeatSec) > 0 ? ` ↻${c.repeatSec}s` : "";
+        main = `${vibLevelToCode(c.val)}${rep || " Tap"}`;
+      } else if (tr.kind === "audio") {
+        const rep = Number(c.repeatSec) > 0 ? ` ↻${c.repeatSec}s` : "";
+        main = `${sanitizeAudioAsset(c.val)}${rep}`;
+      } else {
+        const hasR = hwIsZ3 && Number.isFinite(c.endVal) && Math.round(c.endVal) !== Math.round(c.val);
+        const st = [2, 5, 10].includes(parseInt(c.strobeHz, 10)) ? ` ${c.strobeHz}Hz` : "";
+        main = hwIsZ3 ? (hasR ? `${c.val}→${Math.round(c.endVal)}%${st}` : `${c.val}%${st}`) : `ON${st}`;
+      }
       return ratio >= 0.18 ? `${main} (${effStart}-${effEnd}s)` : main;
     }
 
@@ -796,6 +951,15 @@ function renderStimParams() {
           }
           el.style.left = leftPct + "%";
           el.style.width = widthPct + "%";
+          if (tr.kind === "light" && Number.isFinite(c.endVal) && Math.round(c.endVal) !== Math.round(c.val)) {
+            const rampUp = c.endVal > c.val;
+            el.style.background = rampUp
+              ? `linear-gradient(90deg, #ffffff 0%, ${tr.bg} 100%)`
+              : `linear-gradient(90deg, ${tr.bg} 0%, #ffffff 100%)`;
+          } else {
+            el.style.background = tr.bg;
+          }
+          el.style.borderStyle = (tr.kind === "light" && [2, 5, 10].includes(parseInt(c.strobeHz, 10))) ? "dashed" : "solid";
           el.classList.toggle("selected", c.id === state.selectedClipId);
           const lblEl = el.querySelector(".nle-clip-label");
           if (lblEl) lblEl.textContent = formatClipLabel(c, tr, totalSec);
@@ -934,6 +1098,21 @@ function renderStimParams() {
           { id: ++_nextClipId, track: "RED",   startSec: 130, endSec: 150, val: 100 },
           { id: ++_nextClipId, track: "VIB",   startSec: 130, endSec: 135, val: 0 },
           { id: ++_nextClipId, track: "AUDIO", startSec: 130, endSec: 135, val: "mono" }
+        ];
+      } else if (pType === "dawn_dusk") {
+        state.showUnderTracks = false;
+        state.timelineClips = [
+          { id: ++_nextClipId, track: "WHITE", startSec: 0,   endSec: 60,  val: 0,   endVal: 100 },
+          { id: ++_nextClipId, track: "WHITE", startSec: 60,  endSec: 120, val: 100 },
+          { id: ++_nextClipId, track: "WHITE", startSec: 120, endSec: 180, val: 100, endVal: 0 }
+        ];
+      } else if (pType === "opto_strobe") {
+        state.showUnderTracks = false;
+        state.timelineClips = [
+          { id: ++_nextClipId, track: "WHITE", startSec: 0,   endSec: 180, val: 25 },
+          { id: ++_nextClipId, track: "BLUE",  startSec: 30,  endSec: 50,  val: 100, strobeHz: 10 },
+          { id: ++_nextClipId, track: "BLUE",  startSec: 90,  endSec: 110, val: 100, strobeHz: 5 },
+          { id: ++_nextClipId, track: "VIB",   startSec: 140, endSec: 165, val: 2,   repeatSec: 5 }
         ];
       } else if (pType === "rgb_overlap") {
         state.showUnderTracks = false;

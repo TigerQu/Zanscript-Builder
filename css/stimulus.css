@@ -103,6 +103,8 @@
 .tl-temp-2 { background: #fef3c7; color: #92400e; }
 .tl-temp-3 { background: #ffedd5; color: #9a3412; }
 .tl-temp-4 { background: #fee2e2; color: #991b1b; }
+.tl-dawn   { background: linear-gradient(90deg, #3b4252 0%, #fde68a 100%); color: #451a03; }
+.tl-dusk   { background: linear-gradient(90deg, #fde68a 0%, #3b4252 100%); color: #451a03; }
 .tl-overlap {
   background: transparent;
   color: #1e293b;
@@ -1166,9 +1168,47 @@
 }
 
 .nle-insp-audio-row select,
-.nle-insp-audio-row input[type="text"] {
+.nle-insp-audio-row input[type="text"],
+.nle-insp-audio-row input[type="number"] {
   flex: 1;
   min-width: 0;
+}
+
+.nle-insp-extra-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-muted);
+  align-items: start;
+}
+
+@media (max-width: 560px) {
+  .nle-insp-extra-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nle-insp-inline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.nle-insp-inline-toggle input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.nle-insp-repeat-num {
+  flex: 0 0 84px !important;
+  width: 84px !important;
 }
 
 /* Top view of the plate */

@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 function cloneDefaultGeometries() {
   const out = {};
-  for (const key of Object.keys(FACTORY_PLATES)) {
+  for (const key of getStandardPlateKeys()) {
     const f = FACTORY_PLATES[key];
     out[key] = {
       xOffset: f.xOffset,
@@ -49,7 +49,27 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       if (trId === "AUDIO") val = sanitizeAudioAsset(c.val);
       else if (trId === "VIB") val = clampVibLevel(c.val);
       else val = parseFloat(c.val);
-      norm.push({ track: trId, sBin, eBin, val });
+      const repeatSecRaw = parseFloat(c.repeatSec);
+      const repeatSec = (trId === "VIB" || trId === "AUDIO") && Number.isFinite(repeatSecRaw) && repeatSecRaw > 0
+        ? Math.max(bin, Math.round(repeatSecRaw / bin) * bin)
+        : 0;
+      const triggerBins = new Set();
+      if (trId === "VIB" || trId === "AUDIO") {
+        triggerBins.add(sBin);
+        if (repeatSec > 0) {
+          const stepBins = Math.max(1, Math.round(repeatSec / bin));
+          for (let k = 1; k < 24 && (sBin + k * stepBins) < eBin; k++) {
+            triggerBins.add(sBin + k * stepBins);
+          }
+        }
+      }
+      const isLightTrack = trId !== "TEMP" && trId !== "VIB" && trId !== "AUDIO";
+      const endValRaw = parseFloat(c.endVal);
+      const hasRamp = isLightTrack && Number.isFinite(endValRaw) && Math.round(endValRaw) !== Math.round(val);
+      const endVal = hasRamp ? Math.min(100, Math.max(0, Math.round(endValRaw))) : null;
+      const strobeRaw = parseInt(c.strobeHz, 10);
+      const strobeHz = isLightTrack && [2, 5, 10].includes(strobeRaw) ? strobeRaw : 0;
+      norm.push({ track: trId, sBin, eBin, val, repeatSec, triggerBins, hasRamp, endVal, strobeHz });
     }
   }
 
@@ -57,10 +77,24 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
   const hasAnyBottomClip = norm.some(c => c.track.startsWith("U_"));
   const hasAnyVibClip = norm.some(c => c.track === "VIB");
   const hasAnyAudioClip = norm.some(c => c.track === "AUDIO");
+  const hasAnyRampClip = norm.some(c => c.hasRamp);
+  const hasAnyStrobeClip = norm.some(c => c.strobeHz > 0);
   const ptSet = new Set([0, totalBins]);
   for (const c of norm) {
-    ptSet.add(c.sBin);
-    ptSet.add(c.eBin);
+    if (c.track === "VIB" || c.track === "AUDIO") {
+      for (const tb of c.triggerBins) {
+        ptSet.add(tb);
+        ptSet.add(Math.min(c.eBin, tb + 1));
+      }
+    } else if (c.hasRamp) {
+      const steps = Math.min(8, Math.max(2, c.eBin - c.sBin));
+      for (let k = 0; k <= steps; k++) {
+        ptSet.add(Math.round(c.sBin + (c.eBin - c.sBin) * (k / steps)));
+      }
+    } else {
+      ptSet.add(c.sBin);
+      ptSet.add(c.eBin);
+    }
   }
   const pts = [...ptSet].sort((a, b) => a - b);
 
@@ -73,19 +107,32 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
 
     const topLights = [];
     const bottomLights = [];
+    const midBin = (b0 + b1) / 2;
+    const resolveLightPct = (hit) => {
+      if (hit.hasRamp) {
+        const frac = Math.max(0, Math.min(1, (midBin - hit.sBin) / Math.max(1, hit.eBin - hit.sBin)));
+        const startPct = Math.min(100, Math.max(0, Number.isFinite(hit.val) ? Math.round(hit.val) : 0));
+        return Math.min(100, Math.max(0, Math.round(startPct + (hit.endVal - startPct) * frac)));
+      }
+      return Math.min(100, Math.max(5, Math.round(hit.val || 100)));
+    };
     for (const lid of lightOrder) {
       const hitTop = norm.find(c => c.track === lid && c.sBin <= b0 && c.eBin >= b1);
       if (hitTop) {
-        const pct = Math.min(100, Math.max(5, Math.round(hitTop.val || 100)));
-        const pwm = Math.round((pct / 100) * 4095);
-        topLights.push({ id: lid, trackId: lid, mount: "TOP", pct, pwm, colObj: LED_COLORS[lid] });
+        const pct = resolveLightPct(hitTop);
+        if (pct > 0) {
+          const pwm = Math.round((pct / 100) * 4095);
+          topLights.push({ id: lid, trackId: lid, mount: "TOP", pct, pwm, strobeHz: hitTop.strobeHz || 0, colObj: LED_COLORS[lid] });
+        }
       }
       const botTrack = "U_" + lid;
       const hitBot = norm.find(c => c.track === botTrack && c.sBin <= b0 && c.eBin >= b1);
       if (hitBot) {
-        const pct = Math.min(100, Math.max(5, Math.round(hitBot.val || 100)));
-        const pwm = Math.round((pct / 100) * 4095);
-        bottomLights.push({ id: lid, trackId: botTrack, mount: "BOT", pct, pwm, colObj: LED_COLORS[lid] });
+        const pct = resolveLightPct(hitBot);
+        if (pct > 0) {
+          const pwm = Math.round((pct / 100) * 4095);
+          bottomLights.push({ id: lid, trackId: botTrack, mount: "BOT", pct, pwm, strobeHz: hitBot.strobeHz || 0, colObj: LED_COLORS[lid] });
+        }
       }
     }
 
@@ -94,19 +141,25 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       ? (tempHit ? Math.min(40, Math.max(10, Number((tempHit.val || baseT).toFixed(1)))) : baseT)
       : null;
 
-    const vibHit = norm.find(c => c.track === "VIB" && c.sBin <= b0 && c.eBin >= b1);
-    const vibTrigger = Boolean(vibHit && vibHit.sBin === b0);
-    const vibCode = vibHit ? vibLevelToCode(vibHit.val) : null;
+    const vibHit = norm.find(c => c.track === "VIB" && c.triggerBins.has(b0) && c.eBin >= b1);
+    const vibTrigger = Boolean(vibHit);
+    const vibCode = vibTrigger ? vibLevelToCode(vibHit.val) : null;
 
-    const audioHit = norm.find(c => c.track === "AUDIO" && c.sBin <= b0 && c.eBin >= b1);
-    const audioTrigger = Boolean(audioHit && audioHit.sBin === b0);
-    const audioFile = audioHit ? audioHit.val : null;
+    const audioHit = norm.find(c => c.track === "AUDIO" && c.triggerBins.has(b0) && c.eBin >= b1);
+    const audioTrigger = Boolean(audioHit);
+    const audioFile = audioTrigger ? audioHit.val : null;
 
-    const sig = "T:" + topLights.map(l => `${l.id}:${l.pct}`).join("+") +
-      "|B:" + bottomLights.map(l => `${l.id}:${l.pct}`).join("+") +
+    const sliceStrobeHz = Math.max(
+      0,
+      ...topLights.map(l => l.strobeHz || 0),
+      ...bottomLights.map(l => l.strobeHz || 0)
+    );
+
+    const sig = "T:" + topLights.map(l => `${l.id}:${l.pct}${l.strobeHz ? `@${l.strobeHz}` : ""}`).join("+") +
+      "|B:" + bottomLights.map(l => `${l.id}:${l.pct}${l.strobeHz ? `@${l.strobeHz}` : ""}`).join("+") +
       "|C:" + (effectiveTemp !== null ? effectiveTemp : "none") +
-      "|V:" + (vibTrigger ? ("TRIG:" + vibCode) : (vibCode || "none")) +
-      "|A:" + (audioTrigger ? ("TRIG:" + audioFile) : (audioFile || "none"));
+      "|V:" + (vibTrigger ? ("TRIG:" + vibCode) : "none") +
+      "|A:" + (audioTrigger ? ("TRIG:" + audioFile) : "none");
     const prev = rawSlices[rawSlices.length - 1];
     // Never merge a slice that fires a one-shot trigger (vibTrigger or audioTrigger) into the previous slice
     if (prev && !vibTrigger && !audioTrigger && !prev.vibTrigger && !prev.audioTrigger && prev.sig === sig) {
@@ -115,7 +168,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     } else {
       rawSlices.push({
         b0, b1, bins: b1 - b0, topLights, bottomLights, effectiveTemp,
-        vibTrigger, vibCode, audioTrigger, audioFile, sig
+        vibTrigger, vibCode, audioTrigger, audioFile, strobeHz: sliceStrobeHz, sig
       });
     }
   }
@@ -128,6 +181,10 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     const tempSuffix = s.effectiveTemp !== null ? `_${s.effectiveTemp}C` : "";
     const stimTagParts = [];
     const stimOvParts = [];
+    if (s.strobeHz > 0) {
+      stimTagParts.push(`${s.strobeHz}HZ`);
+      stimOvParts.push(`${s.strobeHz}Hz`);
+    }
     if (s.vibTrigger) {
       stimTagParts.push(`V${s.vibCode}`);
       stimOvParts.push(s.vibCode);
@@ -194,6 +251,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       vibCode: s.vibCode,
       audioTrigger: s.audioTrigger,
       audioFile: s.audioFile,
+      strobeHz: s.strobeHz,
       csvTag,
       overlayText
     };
@@ -204,7 +262,8 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
 
   return {
     totalBins, totalSec, bin, hasAnyTempClip, hasAnyBottomClip,
-    hasAnyVibClip, hasAnyAudioClip, initialTemp, anyTempChange, slices
+    hasAnyVibClip, hasAnyAudioClip, hasAnyRampClip, hasAnyStrobeClip,
+    initialTemp, anyTempChange, slices
   };
 }
 
@@ -236,7 +295,9 @@ const OPTIONAL_STIM_PARAM_DEFAULTS = {
   ppiIsiMs: 300,
   ppiPairs: 5,
   ppiPattern: "alternating",
-  ppiAmbient: "DARK"
+  ppiAmbient: "DARK",
+  strobeHz: 0,
+  circRampMin: 0
 };
 
 function cloneDefaultStimParams() {
@@ -279,6 +340,7 @@ const state = {
   plateConfigUpdatedAt: null,
   unsavedFileChanges: false,
   plateGeometries: cloneDefaultGeometries(),
+  customMaze: cloneDefaultCustomMaze(),
   timelineClips: cloneDefaultTimelineClips(),
   selectedClipId: 2,
   showUnderTracks: false,
@@ -322,6 +384,7 @@ function resetAssayFieldsAndDom() {
   state.activeStep = 4;
   state.showUnderTracks = false;
   state.z3RgbMap = state.unitZ3RgbMap || "DOCS";
+  state.customMaze = cloneDefaultCustomMaze();
   state.timelineClips = cloneDefaultTimelineClips();
   state.selectedClipId = 2;
   state.stimParams = cloneDefaultStimParams();
@@ -364,6 +427,8 @@ function resetAssayFieldsAndDom() {
   setChk("chk_tracks", true);
   setChk("chk_heatmap", false);
   setChk("chk_picture", false);
+  setVal("trackTimeSec", 15);
+  setVal("heatmapPalette", "0");
 
   const daph = ORGANISM_PRESETS[0];
   setVal("targetSize", daph.targetSize);

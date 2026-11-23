@@ -47,13 +47,14 @@ function roundGeo(n, fallback) {
 }
 
 function isPlateCustomized(plateId) {
-  const cur = state.plateGeometries[plateId];
   const def = FACTORY_PLATES[plateId];
+  const cur = state.plateGeometries[plateId];
+  if (!def || def.isMaze || !cur) return false;
   return GEO_FIELDS.some(k => Math.abs(cur[k] - def[k]) > 0.004);
 }
 
 function countCustomizedPlates() {
-  return Object.keys(FACTORY_PLATES).filter(isPlateCustomized).length;
+  return getStandardPlateKeys().filter(isPlateCustomized).length;
 }
 
 function applyConfigObject(obj, markSavedToFile) {
@@ -61,7 +62,7 @@ function applyConfigObject(obj, markSavedToFile) {
   const platesSrc = obj.plates && typeof obj.plates === "object" ? obj.plates : obj;
   let appliedAny = false;
 
-  for (const key of Object.keys(FACTORY_PLATES)) {
+  for (const key of getStandardPlateKeys()) {
     if (platesSrc[key] && typeof platesSrc[key] === "object") {
       const src = platesSrc[key];
       const def = FACTORY_PLATES[key];
@@ -91,7 +92,7 @@ function applyConfigObject(obj, markSavedToFile) {
 
 function buildConfigPayload(updatedAtOverride) {
   const platesOut = {};
-  for (const key of Object.keys(FACTORY_PLATES)) {
+  for (const key of getStandardPlateKeys()) {
     platesOut[key] = { ...state.plateGeometries[key] };
   }
   return {

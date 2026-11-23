@@ -675,13 +675,27 @@ try {
         const s2Block = code.split("ACTION RUN_S2")[1].split("COMPLETE")[0];
         const s3Block = code.split("ACTION RUN_S3")[1].split("COMPLETE")[0];
 
-        // Scrub into S2 (acclim 120 + autoref 60 + 22s = 202s)
-        setSimulatorTime(202);
-        const vibTxt = document.getElementById("simVibBadge").textContent;
-        const audTxt = document.getElementById("simAudioBadge").textContent;
+        // Scrub into S2 onset bin (acclim 120 + autoref 60 + 20.4s = 200.4s -> fires)
+        setSimulatorTime(200.4);
+        const vibTxtOnset = document.getElementById("simVibBadge").textContent;
+        const audTxtOnset = document.getElementById("simAudioBadge").textContent;
         const hwTxt = document.getElementById("simHwReadout").textContent;
+
+        // Scrub after onset bin (202s -> honest Once mode is idle, not falsely active for 20s)
+        setSimulatorTime(202);
+        const vibTxtAfter = document.getElementById("simVibBadge").textContent;
+        const audTxtAfter = document.getElementById("simAudioBadge").textContent;
+
         const badgeTxt = document.getElementById("hwBadge").textContent;
         const checks = computePreflightChecks();
+
+        // Repeat every 5s triggers at 20s, 25s, 30s, 35s (4 ZCOMMAND triggers!)
+        state.timelineClips[2].repeatSec = 5;
+        refreshAll();
+        const repCode = refreshAll._latestBundle[4].code;
+        const repVibCount = (repCode.match(/ZCOMMAND\("U1 /g) || []).length;
+        delete state.timelineClips[2].repeatSec;
+        refreshAll();
 
         // Round-trip save & reopen preserves VIB int and AUDIO string clips
         const saved = buildExperimentPayload();
@@ -693,7 +707,9 @@ try {
           s2TriggersBoth: s2Block.includes('ZCOMMAND("U1 D1000 M1 M-1 M1 M-1 M1 M-1 M1 M-1 M1 M-1")') &&
             s2Block.includes('LOAD(AUDIO_FILE,"alarm.wav")'),
           s3NoDuplicateTrigger: !s3Block.includes("ZCOMMAND(") && !s3Block.includes("LOAD(AUDIO_FILE"),
-          simBadgesActive: vibTxt === "TAP U1" && audTxt === "AUD: alarm.wav",
+          simBadgesActiveOnset: vibTxtOnset === "TAP U1" && audTxtOnset === "AUD: alarm.wav",
+          simBadgesIdleAfterOnset: vibTxtAfter === "Motor Armed" && audTxtAfter === "Audio Armed",
+          repeatModeFires4x: repVibCount === 4,
           simReadoutHasBoth: hwTxt.includes('ZCOMMAND("U1 ...') && hwTxt.includes('LOAD(AUDIO_FILE,"alarm.wav")'),
           preflightCustomWav: checks.some((c) => c.title.includes("alarm.wav")),
           clipsRoundTrip: JSON.stringify(restoredClips) === JSON.stringify([
@@ -836,6 +852,169 @@ try {
       const ok = Object.values(advIoCheck).every(Boolean);
       report(ok, "Split-half zones (round & square), ZONECHANGES 3-stream CSVs, Dual Video, & Still Photos work and reset cleanly",
         ok ? "" : JSON.stringify(advIoCheck));
+      await page.close();
+    }
+
+    // 6l. PWM Smooth Ramps (NLE + Circadian Dawn/Dusk), Sub-Second 0.05s & 10 Hz Strobe, Track Trace/Heatmap Palette, & Z2 Preflight
+    {
+      const { page } = await openFreshPage("#stimulus");
+      const pwmStrobeCheck = await page.evaluate(() => {
+        // 1) Verify 3x3 grid CSS on #stimGrid and Time Bin inputs on vibration_startle & ppi
+        const stimCols = getComputedStyle(document.getElementById("stimGrid")).gridTemplateColumns.split(" ").length;
+        state.stimId = "vibration_startle";
+        renderStimParams();
+        const vibHasBin = Boolean(document.querySelector('#stimParamsBox [data-sp="timeBinSec"]'));
+        state.stimId = "ppi";
+        renderStimParams();
+        const ppiHasBin = Boolean(document.querySelector('#stimParamsBox [data-sp="timeBinSec"]'));
+
+        // 2) Light-On Flash: 0.05s flash + 10 Hz strobe burst
+        state.stimId = "light_on_pulse";
+        state.stimParams.pulseDurSec = 0.05;
+        state.stimParams.strobeHz = 0;
+        refreshAll();
+        const sub50msCode = refreshAll._latestBundle[4].code;
+
+        state.stimParams.pulseDurSec = 2;
+        state.stimParams.strobeHz = 10;
+        refreshAll();
+        const strobeFlashCode = refreshAll._latestBundle[4].code;
+        const strobeOnSample = sampleAssayStateAtTime(refreshAll._latestCfg, 120 + 60 + 60 + 0.01);
+        const strobeOffSample = sampleAssayStateAtTime(refreshAll._latestCfg, 120 + 60 + 60 + 0.06);
+
+        // 3) Circadian Dawn/Dusk PWM ramp (15 min) on Z3 + Z2 warning
+        state.stimId = "circadian";
+        state.stimParams.circRampMin = 15;
+        refreshAll();
+        const circRampCode = refreshAll._latestBundle[4].code;
+        const circDawnSample = sampleAssayStateAtTime(refreshAll._latestCfg, 305);
+
+        document.getElementById("hwVersion").value = "Z2";
+        refreshAll();
+        const z2CircChecks = computePreflightChecks();
+        state.stimId = "vibration_startle";
+        refreshAll();
+        const z2VibChecks = computePreflightChecks();
+        document.getElementById("hwVersion").value = "Z3";
+
+        // 4) Multi-Track NLE PWM ramp (0->100%) + 10 Hz strobe + X_TRACKTIME / COLOURMAP
+        state.stimId = "multi_phase";
+        state.stimParams.mpTimelineSec = 60;
+        state.timelineClips = [
+          { id: 1, track: "WHITE", startSec: 0,  endSec: 40, val: 0, endVal: 100 },
+          { id: 2, track: "BLUE",  startSec: 40, endSec: 60, val: 100, strobeHz: 10 }
+        ];
+        document.getElementById("trackTimeSec").value = "30";
+        document.getElementById("chk_heatmap").checked = true;
+        document.getElementById("heatmapPalette").value = "3";
+        refreshAll();
+        const nleCode = refreshAll._latestBundle[4].code;
+        const saved = buildExperimentPayload();
+        applyExperimentData(saved);
+        const roundTripOk = JSON.stringify(buildExperimentPayload().experiment) === JSON.stringify(saved.experiment);
+
+        return {
+          grid3Cols: stimCols === 3,
+          vibAndPpiHaveTimeBin: vibHasBin && ppiHasBin,
+          sub50msFlash: sub50msCode.includes("DEFINE PULSE_DURATION 0.05") && sub50msCode.includes("DEFINE POST_PULSE_WAIT 0.95"),
+          strobe10HzFlash: strobeFlashCode.includes("DEFINE STROBE_HALF_SEC 0.05") &&
+            strobeFlashCode.includes("DEFINE STROBE_CYCLES_PER_BIN 10") &&
+            strobeFlashCode.includes("ACTION STROBE_CYCLE") &&
+            strobeOnSample.topChannels.WHITE > 0 && strobeOffSample.topChannels.WHITE === 0,
+          circDawnDusk: circRampCode.includes("ACTION DAWN_RAMP") &&
+            circRampCode.includes("ACTION DUSK_RAMP") &&
+            circRampCode.includes("TEXT:DAWN") &&
+            circRampCode.includes("TEXT:DUSK") &&
+            circDawnSample.phaseName.includes("DAWN"),
+          z2PreflightWarns: z2CircChecks.some(c => c.level === "warn" && c.title.includes("Dawn/Dusk")) &&
+            z2VibChecks.some(c => c.level === "warn" && c.title.includes("Stepper vibration")),
+          nleRampAndStrobe: nleCode.includes("STROBE_HALF 0.05") &&
+            nleCode.includes("ACTION STROBE_S") &&
+            (nleCode.match(/SET\(X_LED_DRIVE,4,[1-9]\d*\)/g) || []).length >= 5,
+          trackAndPalette: nleCode.includes("SET(X_TRACKTIME,30)") && nleCode.includes("SET(COLOURMAP,3)"),
+          roundTripOk
+        };
+      });
+      const ok = Object.values(pwmStrobeCheck).every(Boolean);
+      report(ok, "PWM smooth ramps (NLE & Circadian), 0.05s/10Hz strobe, X_TRACKTIME/COLOURMAP, 3x3 grid & Z2 preflight work",
+        ok ? "" : JSON.stringify(pwmStrobeCheck));
+      await page.close();
+    }
+
+    // 6m. Official MWP Mazes (Y-Maze, Choice, Social) & Custom 3D-Printed Maze Editor (Step 2/4, Z1-Z8, round-trip, reset, zero placeholders)
+    {
+      const { page } = await openFreshPage("#plate");
+      const mazeCheck = await page.evaluate(() => {
+        // 1) Official 4-Unit Y-Maze with Zone Summary (Z1-4)
+        state.plateId = "ymaze4";
+        document.getElementById("chk_zones").checked = true;
+        syncGeoInputsToActivePlate();
+        renderPlateGrid();
+        refreshAll();
+        const ym4S2 = refreshAll._latestBundle[2].code;
+        const ym4S4 = refreshAll._latestBundle[4].code;
+
+        // 2) Official 10-Lane Social Preference (Z1-5)
+        state.plateId = "social10";
+        refreshAll();
+        const socS2 = refreshAll._latestBundle[2].code;
+        const socS4 = refreshAll._latestBundle[4].code;
+
+        // 3) Custom 3D-Printed Maze: load single_ymaze, Tile 2x2 -> 4 arenas, custom asset names, round-trip
+        state.plateId = "custom_maze";
+        syncGeoInputsToActivePlate();
+        renderPlateGrid();
+        renderCustomMazeEditor();
+        const tmplSel = document.getElementById("mazeTemplateSel");
+        tmplSel.value = "single_ymaze";
+        tmplSel.dispatchEvent(new Event("change"));
+        document.getElementById("mazeTile2x2Btn").click();
+        const arenaInp = document.getElementById("mazeArenaBmp");
+        const zoneInp = document.getElementById("mazeZoneBmp");
+        arenaInp.value = "aMyPrint";
+        arenaInp.dispatchEvent(new Event("change"));
+        zoneInp.value = "zMyPrint";
+        zoneInp.dispatchEvent(new Event("change"));
+        refreshAll();
+
+        const custS2 = refreshAll._latestBundle[2].code;
+        const custS4 = refreshAll._latestBundle[4].code;
+        const custCardVisible = document.getElementById("customMazeCard").style.display !== "none";
+        const simHasMazeShapes = document.getElementById("simPlateSvg").querySelectorAll(".sim-svg-well").length === 16;
+
+        // Check zero placeholder= attributes across entire DOM (including custom maze editor!)
+        const anyPlaceholder = document.querySelectorAll("input[placeholder]").length > 0;
+
+        // Round-trip save & reload
+        const saved = buildExperimentPayload();
+        applyExperimentData(saved);
+        const roundTripOk = JSON.stringify(buildExperimentPayload().experiment) === JSON.stringify(saved.experiment);
+
+        // Reset Assay returns to 24-well & hides custom maze card
+        document.getElementById("resetBtn").click();
+        const resetClean = state.plateId === "24well" &&
+          document.getElementById("customMazeCard").style.display === "none" &&
+          document.getElementById("trackTimeSec").value === "15" &&
+          document.getElementById("heatmapPalette").value === "0";
+
+        return {
+          ym4Step2: ym4S2.includes("SET(DrawArena,4)") && ym4S2.includes("ShapeType(TRIANGLE,8)") &&
+            ym4S2.includes("ShapeAngle(180.0)") && ym4S2.includes('SaveDrawing("a_4y")') && ym4S2.includes('SaveDrawing("z_4y")'),
+          ym4Step4Zones: ym4S4.includes('LOAD(ARENAS,"a_4y.bmp")') && ym4S4.includes('LOAD(ZONES,"z_4y.bmp")') &&
+            ym4S4.includes("ZONE_DISTANCES:A1-4 Z1-4") && ym4S4.includes("ZD_A4_Z4"),
+          social5Zones: socS2.includes('SaveDrawing("aSocial")') && socS2.includes('SaveDrawing("zSocial")') &&
+            socS4.includes("ZONE_TIMERS:A1-10 Z1-5") && socS4.includes("ZT_A10_Z5"),
+          customMazeTile2x2: custCardVisible && simHasMazeShapes &&
+            custS2.includes('SaveDrawing("aMyPrint")') && custS2.includes('SaveDrawing("zMyPrint")') &&
+            custS4.includes('LOAD(ARENAS,"aMyPrint.bmp")') && custS4.includes("ZONE_COUNTERS:A1-4 Z1-4"),
+          noPlaceholders: !anyPlaceholder,
+          roundTripOk,
+          resetClean
+        };
+      });
+      const ok = Object.values(mazeCheck).every(Boolean);
+      report(ok, "Official MWP Mazes (4-Y, Social) & Custom 3D-Printed Maze Editor generate Z1-Z8 scripts, tile 2x2, & round-trip",
+        ok ? "" : JSON.stringify(mazeCheck));
       await page.close();
     }
   }

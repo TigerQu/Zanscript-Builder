@@ -97,7 +97,12 @@ function ensureSimPlateSvgGeometry(cfg) {
   if (!svg || !cfg || !cfg.plate || !cfg.geo) return;
   const p = cfg.plate;
   const g = cfg.geo;
-  const sig = `${p.id}|${g.xOffset}|${g.yOffset}|${g.colStep}|${g.rowStep}|${g.r}`;
+  const mazeSig = cfg.isMaze
+    ? (cfg.mazeShapes || []).map(s => `${s.type[0]}${s.x},${s.y},${s.w},${s.h},${s.angle}`).join(";")
+    : "";
+  const sig = cfg.isMaze
+    ? `MAZE|${p.id}|${mazeSig}`
+    : `${p.id}|${g.xOffset}|${g.yOffset}|${g.colStep}|${g.rowStep}|${g.r}`;
   if (simState.plateGeoSig === sig && svg.innerHTML) return;
   simState.plateGeoSig = sig;
 
@@ -105,6 +110,11 @@ function ensureSimPlateSvgGeometry(cfg) {
   const trayW = isPetri ? 132 : 127.8;
   const trayH = 85.5;
   let markup = `<rect class="sim-svg-tray" x="0" y="0" width="${trayW}" height="${trayH}" rx="${isPetri ? 8 : 5}"/>`;
+  if (cfg.isMaze) {
+    markup += renderMazeShapesSvgMarkup(cfg.mazeShapes, { mode: "sim" });
+    svg.innerHTML = markup;
+    return;
+  }
   for (let r = 0; r < p.rows; r++) {
     for (let c = 0; c < p.cols; c++) {
       const cx = g.xOffset + c * g.colStep;
