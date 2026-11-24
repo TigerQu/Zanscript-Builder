@@ -1232,7 +1232,23 @@ try {
 
       // Step 4: Plots (all 3 tabs + metric switching + bin smoothing)
       await page.click('#analyzerStepper [data-goto="plots"]');
-      const tsInitialPaths = await page.evaluate(() => document.querySelectorAll("#tsChartSvg path").length);
+      const tsInitialCheck = await page.evaluate(() => {
+        const texts = [...document.querySelectorAll("#tsChartSvg text")].map((el) => el.textContent.trim());
+        const xTicks = texts.filter((t) => /^\d+[smh](\s+\d+[sm])?$/.test(t));
+        const hasColonTick = texts.some((t) => /^\d+:\d{2}$/.test(t));
+        const tempTexts = [...document.querySelectorAll("#tempChartSvg text")].map((el) => el.textContent.trim());
+        const tempTicks = tempTexts.filter((t) => /^\d+[smh](\s+\d+[sm])?$/.test(t));
+        const tempHasColon = tempTexts.some((t) => /^\d+:\d{2}$/.test(t));
+        return {
+          paths: document.querySelectorAll("#tsChartSvg path").length,
+          xTicks,
+          hasColonTick,
+          hasElapsedLabel: texts.some((t) => t === "Elapsed Time (10s bins)"),
+          tempTicks,
+          tempHasColon
+        };
+      });
+      const tsInitialPaths = tsInitialCheck.paths;
       await page.selectOption("#tsMetricSel", "msd");
       await page.selectOption("#tsSmoothSel", "5");
       const tsSmoothedPaths = await page.evaluate(() => document.querySelectorAll("#tsChartSvg path").length);
@@ -1280,6 +1296,11 @@ try {
         groupsStepCheck.brushHits === 24 &&
         groupsStepCheck.placeholders === 0 &&
         tsInitialPaths >= 3 &&
+        JSON.stringify(tsInitialCheck.xTicks) === '["0m","5m","10m","15m","20m"]' &&
+        !tsInitialCheck.hasColonTick &&
+        tsInitialCheck.hasElapsedLabel &&
+        JSON.stringify(tsInitialCheck.tempTicks) === '["0m","5m","10m","15m","20m"]' &&
+        !tsInitialCheck.tempHasColon &&
         tsSmoothedPaths >= 3 &&
         tsZonePaths >= 3 &&
         compDefault.rects >= 6 &&
@@ -1288,7 +1309,7 @@ try {
         compZoneDots >= 22 &&
         zchangeHintVisible;
       report(ok, "Analyzer ld_24w demo detects D5 empty & D6 spike, computes VMR & Zone Pref, excludes flagged wells, and renders all wizard steps & plot tabs",
-        ok ? "" : JSON.stringify({ errors, step1OverviewOk, beforeExcl, afterExcl, groupsStepCheck, tsInitialPaths, tsSmoothedPaths, tsZonePaths, compDefault, compVmrDots, compZoneDots, zchangeHintVisible }));
+        ok ? "" : JSON.stringify({ errors, step1OverviewOk, beforeExcl, afterExcl, groupsStepCheck, tsInitialCheck, tsSmoothedPaths, tsZonePaths, compDefault, compVmrDots, compZoneDots, zchangeHintVisible }));
       await page.close();
     }
 

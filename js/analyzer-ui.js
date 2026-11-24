@@ -112,18 +112,70 @@
     return `${m}m ${String(r).padStart(2, "0")}s`;
   }
 
-  function fmtAxisTime(sec, maxSec) {
+  function fmtAxisTime(sec, maxSec, stepSec) {
     const s = Math.max(0, Math.round(Number(sec) || 0));
+    if (s === 0) {
+      if (maxSec >= 7200) return "0h";
+      if (stepSec && stepSec < 60) return "0s";
+      if (maxSec >= 180) return "0m";
+      return "0s";
+    }
     if (maxSec >= 7200) {
-      const h = (s / 3600);
-      return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`;
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      if (m === 0) return `${h}h`;
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
     }
     if (maxSec >= 180) {
       const m = Math.floor(s / 60);
       const r = s % 60;
-      return r === 0 ? `${m}m` : `${m}:${String(r).padStart(2, "0")}`;
+      if (r === 0) return `${m}m`;
+      return m > 0 ? `${m}m ${String(r).padStart(2, "0")}s` : `${r}s`;
     }
     return `${s}s`;
+  }
+
+  const TIME_TICK_STEPS_SEC = [
+    1, 2, 5, 10, 15, 20, 30,
+    60, 120, 180, 300, 600, 900, 1200, 1800,
+    3600, 7200, 10800, 14400, 21600, 28800, 43200, 86400
+  ];
+
+  function niceTimeTicks(minSec, maxSec, targetCount) {
+    const count = Math.max(2, targetCount || 5);
+    let lo = Number.isFinite(minSec) ? minSec : 0;
+    let hi = Number.isFinite(maxSec) ? maxSec : 60;
+    if (hi < lo) { const tmp = lo; lo = hi; hi = tmp; }
+    const span = Math.max(1, hi - lo);
+    const ideal = span / count;
+
+    let step = TIME_TICK_STEPS_SEC[TIME_TICK_STEPS_SEC.length - 1];
+    if (ideal > step) {
+      step = Math.ceil(ideal / 86400) * 86400;
+    } else {
+      let bestScore = Infinity;
+      for (const cand of TIME_TICK_STEPS_SEC) {
+        const first = Math.ceil((lo - 1e-6) / cand) * cand;
+        const last = Math.floor((hi + 1e-6) / cand) * cand;
+        const nTicks = last >= first ? Math.floor((last - first) / cand) + 1 : 0;
+        if (nTicks < 2 || nTicks > 11) continue;
+        let score = Math.abs(nTicks - (count + 1));
+        if (Math.abs(span % cand) < 1e-6) score -= 0.45;
+        if (cand >= 60 && cand % 300 === 0) score -= 0.1;
+        if (score < bestScore) {
+          bestScore = score;
+          step = cand;
+        }
+      }
+    }
+
+    const firstTick = Math.ceil((lo - 1e-6) / step) * step;
+    const ticks = [];
+    for (let v = firstTick; v <= hi + 1e-6 && ticks.length < 16; v += step) {
+      ticks.push(Math.abs(v) < 1e-9 ? 0 : Math.round(v));
+    }
+    if (!ticks.length) ticks.push(Math.round(lo), Math.round(hi));
+    return { min: lo, max: hi, step, ticks };
   }
 
   function getGroupColor(name) {
@@ -1550,7 +1602,7 @@
     const ta = a.tempAnalysis || {};
     const pts = ta.points || [];
     const W = 880, H = 225;
-    const m = { left: 58, right: 20, top: 18, bottom: 34 };
+    const m = { left: 58, right: 26, top: 16, bottom: 40 };
     const pw = W - m.left - m.right;
     const ph = H - m.top - m.bottom;
 
@@ -1567,7 +1619,8 @@
       }
 
       const xMin = pts[0].relTime;
-      const xMax = Math.max(xMin + 1, pts[pts.length - 1].relTime);
+      const durEnd = (a.kpis && Number.isFinite(a.kpis.durationSec)) ? a.kpis.durationSec : 0;
+      const xMax = Math.max(xMin + 1, pts[pts.length - 1].relTime, durEnd);
       let yLo = ta.min;
       let yHi = ta.max;
       if (targetC !== null) {
@@ -1600,16 +1653,17 @@
         out += `<text x="${m.left - 8}" y="${(yy + 3.5).toFixed(1)}" font-size="10.5" fill="#59636e" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${tv.toFixed(1)}°</text>`;
       }
 
-      const xTicksObj = niceTicks(xMin, xMax, 7);
+      const xTicksObj = niceTimeTicks(xMin, xMax, 5);
       for (const xt of xTicksObj.ticks) {
         if (xt < xMin - 1e-6 || xt > xMax + 1e-6) continue;
         const xx = sx(xt);
         out += `<line x1="${xx.toFixed(1)}" y1="${m.top + ph}" x2="${xx.toFixed(1)}" y2="${m.top + ph + 4}" stroke="#94a3b8" stroke-width="1"/>`;
-        out += `<text x="${xx.toFixed(1)}" y="${m.top + ph + 17}" font-size="10.5" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtAxisTime(xt, xMax))}</text>`;
+        out += `<text x="${xx.toFixed(1)}" y="${m.top + ph + 16}" font-size="10.5" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtAxisTime(xt, xMax, xTicksObj.step))}</text>`;
       }
 
       out += `<line x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + ph}" stroke="#94a3b8" stroke-width="1"/>`;
       out += `<line x1="${m.left}" y1="${m.top + ph}" x2="${m.left + pw}" y2="${m.top + ph}" stroke="#94a3b8" stroke-width="1"/>`;
+      out += `<text x="${m.left + pw / 2}" y="${H - 7}" font-size="10.5" font-weight="600" fill="#59636e" text-anchor="middle">Elapsed Time</text>`;
 
       const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${sx(p.relTime).toFixed(1)} ${sy(p.tempC).toFixed(1)}`).join(" ");
       out += `<path d="${d}" fill="none" stroke="#ea580c" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>`;
@@ -1650,7 +1704,7 @@
             ? `<div class="az-tt-row"><span>vs Target</span><span class="az-tt-val">${best.tempC - targetC >= 0 ? "+" : ""}${(best.tempC - targetC).toFixed(2)} °C</span></div>`
             : "";
           const html =
-            `<div class="az-tt-title">${esc(fmtAxisTime(best.relTime, xMax))}${best.phase ? " · " + esc(best.phase) : ""}</div>` +
+            `<div class="az-tt-title">t = ${esc(fmtAxisTime(best.relTime, xMax))}${best.phase ? " · " + esc(best.phase) : ""}</div>` +
             `<div class="az-tt-row"><span>TEMP_C</span><span class="az-tt-val">${best.tempC.toFixed(2)} °C</span></div>` +
             deltaStr;
           positionTooltip(tt, stage, e.clientX, e.clientY, html);
@@ -1826,7 +1880,7 @@
     const visSeries = allSeries.filter(s => !ui.hiddenGroups.has(s.group) && s.n > 0);
 
     const W = 880, H = 320;
-    const m = { left: 62, right: 22, top: 28, bottom: 42 };
+    const m = { left: 62, right: 26, top: 28, bottom: 42 };
     const pw = W - m.left - m.right;
     const ph = H - m.top - m.bottom;
 
@@ -1839,11 +1893,18 @@
       return;
     }
 
-    const xTimes = xAxis.map((pt, idx) =>
+    const xStarts = xAxis.map((pt, idx) =>
       typeof pt === "number" ? pt : (Number.isFinite(pt.relTime) ? pt.relTime : idx * (ts.effectiveBinSec || 1))
     );
-    const xMin = xTimes[0];
-    const xMax = Math.max(xMin + 1, xTimes[nPts - 1]);
+    const xEnds = xAxis.map((pt, idx) => {
+      if (typeof pt === "object" && pt && Number.isFinite(pt.endRelTime) && pt.endRelTime > xStarts[idx]) {
+        return pt.endRelTime;
+      }
+      return xStarts[idx] + (ts.effectiveBinSec || 0);
+    });
+    const xTimes = xStarts.map((s, idx) => (xEnds[idx] > s ? (s + xEnds[idx]) / 2 : s));
+    const xMin = xStarts[0];
+    const xMax = Math.max(xMin + 1, xEnds[nPts - 1]);
 
     let yLo = 0;
     let yHi = -Infinity;
@@ -1893,12 +1954,12 @@
       out += `<text x="${m.left - 8}" y="${(yy + 3.5).toFixed(1)}" font-size="10.5" fill="#59636e" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtTick(tv, yTicksObj.step))}</text>`;
     }
 
-    const xTicksObj = niceTicks(xMin, xMax, 7);
+    const xTicksObj = niceTimeTicks(xMin, xMax, 5);
     for (const xt of xTicksObj.ticks) {
       if (xt < xMin - 1e-6 || xt > xMax + 1e-6) continue;
       const xx = sx(xt);
       out += `<line x1="${xx.toFixed(1)}" y1="${m.top + ph}" x2="${xx.toFixed(1)}" y2="${m.top + ph + 5}" stroke="#94a3b8" stroke-width="1"/>`;
-      out += `<text x="${xx.toFixed(1)}" y="${m.top + ph + 18}" font-size="10.5" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtAxisTime(xt, xMax))}</text>`;
+      out += `<text x="${xx.toFixed(1)}" y="${m.top + ph + 18}" font-size="10.5" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtAxisTime(xt, xMax, xTicksObj.step))}</text>`;
     }
 
     if (ui.tsShowStim && Array.isArray(ts.stimulusMarkers) && ts.stimulusMarkers.length > 0) {
@@ -1919,7 +1980,15 @@
 
     const yTitle = ts.metricLabel || ts.metric || "Value";
     out += `<text transform="rotate(-90)" x="${-(m.top + ph / 2)}" y="16" font-size="11" font-weight="600" fill="#59636e" text-anchor="middle">${esc(yTitle)}</text>`;
-    const binLbl = ts.binGroupSize > 1 ? `Time (${fmtNum(ts.effectiveBinSec, 0)}s smoothed bins)` : `Time (${fmtNum(ts.rawBinSec || ts.effectiveBinSec, 1)}s bins)`;
+    const rawBin = ts.rawBinSec || ts.effectiveBinSec;
+    const fmtBinSec = (sec) => {
+      const n = Number(sec);
+      if (!Number.isFinite(n)) return "1s";
+      return Math.abs(n - Math.round(n)) < 1e-6 ? `${Math.round(n)}s` : `${n.toFixed(1)}s`;
+    };
+    const binLbl = ts.binGroupSize > 1
+      ? `Elapsed Time (${fmtBinSec(ts.effectiveBinSec)} smoothed bins)`
+      : `Elapsed Time (${fmtBinSec(rawBin)} bins)`;
     out += `<text x="${m.left + pw / 2}" y="${H - 8}" font-size="11" font-weight="600" fill="#59636e" text-anchor="middle">${esc(binLbl)}</text>`;
 
     let ribbons = "";
@@ -1991,8 +2060,13 @@
         const xx = sx(xTimes[bestIdx]);
         const ptMeta = xAxis[bestIdx];
         const phaseTxt = (ptMeta && ptMeta.phase) ? ` · ${ptMeta.phase}` : "";
+        const tStart = xStarts[bestIdx];
+        const tEnd = xEnds[bestIdx];
+        const timeTitle = (tEnd > tStart)
+          ? `t = ${fmtAxisTime(tStart, xMax)}–${fmtAxisTime(tEnd, xMax)}`
+          : `t = ${fmtAxisTime(tStart, xMax)}`;
         let markerHtml = `<line x1="${xx.toFixed(1)}" y1="${m.top}" x2="${xx.toFixed(1)}" y2="${m.top + ph}" stroke="#59636e" stroke-width="1" stroke-dasharray="3,2"/>`;
-        let ttHtml = `<div class="az-tt-title">${esc(fmtAxisTime(xTimes[bestIdx], xMax))}${esc(phaseTxt)}</div>`;
+        let ttHtml = `<div class="az-tt-title">${esc(timeTitle)}${esc(phaseTxt)}</div>`;
         for (const s of visSeries) {
           const v = s.values[bestIdx];
           if (!v || !Number.isFinite(v.mean)) continue;
