@@ -74,29 +74,50 @@
 
   function filterRowsByTrimWindow(rows, trimWindow) {
     if (!Array.isArray(rows) || rows.length === 0) {
-      return { rows: [], active: false, trimStartSec: null, trimEndSec: null };
+      return { rows: [], active: false, invalid: false, warning: "", trimStartSec: null, trimEndSec: null };
     }
     if (!trimWindow || typeof trimWindow !== "object") {
-      return { rows, active: false, trimStartSec: null, trimEndSec: null };
+      return { rows, active: false, invalid: false, warning: "", trimStartSec: null, trimEndSec: null };
     }
     const rawStart = trimWindow.trimStartSec !== undefined ? trimWindow.trimStartSec : trimWindow.startSec;
     const rawEnd = trimWindow.trimEndSec !== undefined ? trimWindow.trimEndSec : trimWindow.endSec;
     const startSec = rawStart !== null && rawStart !== "" && rawStart !== undefined ? Number(rawStart) : null;
     const endSec = rawEnd !== null && rawEnd !== "" && rawEnd !== undefined ? Number(rawEnd) : null;
     const hasStart = startSec !== null && Number.isFinite(startSec) && startSec > 0;
-    const hasEnd = endSec !== null && Number.isFinite(endSec);
+    const hasEnd = endSec !== null && Number.isFinite(endSec) && endSec >= 0;
     if (!hasStart && !hasEnd) {
-      return { rows, active: false, trimStartSec: null, trimEndSec: null };
+      return { rows, active: false, invalid: false, warning: "", trimStartSec: null, trimEndSec: null };
+    }
+    if (hasStart && hasEnd && startSec >= endSec) {
+      return {
+        rows,
+        active: false,
+        invalid: true,
+        warning: `Trim Start (${startSec}s) must be less than Trim End (${endSec}s).`,
+        trimStartSec: startSec,
+        trimEndSec: endSec
+      };
     }
     const filtered = rows.filter(r => {
       if (hasStart && r.relTime < startSec - 1e-6) return false;
       if (hasEnd && r.relTime > endSec + 1e-6) return false;
       return true;
     });
-    const kept = filtered.length > 0 ? filtered : rows;
+    if (filtered.length === 0) {
+      return {
+        rows,
+        active: false,
+        invalid: true,
+        warning: "Trim window excludes all rows; keeping full recording.",
+        trimStartSec: hasStart ? startSec : null,
+        trimEndSec: hasEnd ? endSec : null
+      };
+    }
     return {
-      rows: kept,
-      active: kept.length !== rows.length,
+      rows: filtered,
+      active: filtered.length !== rows.length,
+      invalid: false,
+      warning: "",
       trimStartSec: hasStart ? startSec : null,
       trimEndSec: hasEnd ? endSec : null
     };
@@ -3761,50 +3782,157 @@
     return { ranks, tieSizes };
   }
 
+  function formatStatNum(v, digits) {
+    if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+    const d = digits == null ? 3 : digits;
+    return Number(v).toFixed(d).replace(/\.?0+$/, (m) => (m.startsWith(".") ? "" : m));
+  }
+
+  function formatPVal(p) {
+    if (p === null || p === undefined || !Number.isFinite(p)) return "—";
+    if (p < 0.0001) return "< 0.0001";
+    if (p < 0.001) return p.toFixed(5);
+    if (p < 0.01) return p.toFixed(4);
+    return p.toFixed(3);
+  }
+
+  function exactBinomialBigInt(n, k) {
+    const kk = Math.min(k, n - k);
+    let res = 1n;
+    for (let i = 1; i <= kk; i++) {
+      res = (res * BigInt(n - kk + i)) / BigInt(i);
+    }
+    return res;
+  }
+
+  // Exact two-sided Mann-Whitney U p-value via BigInt partition DP (no ties; nA, nB <= 25).
+  // Recurrence: c(a, b, u) = c(a - 1, b, u - b) + c(a, b - 1, u), sum_u c(a, b, u) = C(a + b, a).
+  function mannWhitneyUExactP(nA, nB, uMinRaw) {
+    const uMin = Math.floor(Math.max(0, uMinRaw) + 1e-9);
+    const maxU = nA * nB;
+    if (uMin * 2 >= maxU) return 1.0;
+
+    // 2D rolling array over a = 0..nA: prev[b][u], cur[b][u] for u = 0..uMin
+    let prev = Array.from({ length: nB + 1 }, () => {
+      const arr = new Array(uMin + 1).fill(0n);
+      arr[0] = 1n;
+      return arr;
+    });
+
+    for (let a = 1; a <= nA; a++) {
+      const cur = Array.from({ length: nB + 1 }, () => new Array(uMin + 1).fill(0n));
+      cur[0][0] = 1n;
+      for (let b = 1; b <= nB; b++) {
+        const lim = Math.min(uMin, a * b);
+        const curB = cur[b];
+        const curBm1 = cur[b - 1];
+        const prevB = prev[b];
+        for (let u = 0; u <= lim; u++) {
+          curB[u] = curBm1[u] + (u >= b ? prevB[u - b] : 0n);
+        }
+      }
+      prev = cur;
+    }
+
+    let cum = 0n;
+    const row = prev[nB];
+    for (let u = 0; u <= uMin; u++) cum += row[u];
+    const total = exactBinomialBigInt(nA + nB, nA);
+    if (total <= 0n) return 1.0;
+    return Math.min(1.0, (2.0 * Number(cum)) / Number(total));
+  }
+
+  // Exact two-sided Wilcoxon signed-rank p-value via BigInt 0/1 subset-sum DP over {1..nNz}.
+  function wilcoxonExactP(nNz, wMinRaw) {
+    if (nNz <= 0) return 1.0;
+    const wMax = Math.floor(Math.max(0, wMinRaw) + 1e-9);
+    const totalSum = (nNz * (nNz + 1)) / 2;
+    if (wMax * 2 >= totalSum) return 1.0;
+
+    const dp = new Array(wMax + 1).fill(0n);
+    dp[0] = 1n;
+    for (let k = 1; k <= nNz; k++) {
+      const upper = Math.min(wMax, (k * (k + 1)) / 2);
+      for (let s = upper; s >= k; s--) {
+        dp[s] += dp[s - k];
+      }
+    }
+    let cum = 0n;
+    for (let s = 0; s <= wMax; s++) cum += dp[s];
+    const total = 1n << BigInt(nNz);
+    return Math.min(1.0, (2.0 * Number(cum)) / Number(total));
+  }
+
   function welchTTest(aRaw, bRaw) {
     const a = cleanFiniteNumbers(aRaw);
     const b = cleanFiniteNumbers(bRaw);
     const nA = a.length;
     const nB = b.length;
     if (nA < 2 || nB < 2) {
-      return { test: "Welch's t-test", t: null, df: null, p: null, sig: "ns", cohensD: null, meanA: null, meanB: null, meanDiff: null, nA, nB };
+      return {
+        test: "Welch's t-test", t: null, df: null, p: null, sig: "ns",
+        cohensD: null, meanA: null, meanB: null, meanDiff: null, nA, nB,
+        note: "Requires n >= 2 per group"
+      };
     }
     const sA = computeStats(a);
     const sB = computeStats(b);
-    const vA = sA.sd * sA.sd;
-    const vB = sB.sd * sB.sd;
+    let sqA = 0;
+    for (let i = 0; i < nA; i++) { const d = a[i] - sA.mean; sqA += d * d; }
+    let sqB = 0;
+    for (let i = 0; i < nB; i++) { const d = b[i] - sB.mean; sqB += d * d; }
+    const vA = sqA / (nA - 1);
+    const vB = sqB / (nB - 1);
     const seA = vA / nA;
     const seB = vB / nB;
     const se2 = seA + seB;
-    const diff = sA.mean - sB.mean;
+    const rawDiff = sA.mean - sB.mean;
+    const diff = Math.abs(rawDiff - Math.round(rawDiff)) <= 1e-13 ? Math.round(rawDiff) : rawDiff;
 
-    let t, df, p;
+    let t = null;
+    let df = null;
+    let p = null;
+    let note = null;
     if (se2 <= 1e-18) {
       df = nA + nB - 2;
-      if (Math.abs(diff) <= 1e-12) { t = 0; p = 1; }
-      else { t = diff > 0 ? Infinity : -Infinity; p = 0; }
+      if (Math.abs(rawDiff) <= 1e-12) {
+        t = 0;
+        p = 1;
+        note = "All values identical";
+      } else {
+        t = null;
+        p = null;
+        note = "Zero variance in both groups";
+      }
     } else {
-      t = diff / Math.sqrt(se2);
+      t = rawDiff / Math.sqrt(se2);
       const denom = (seA * seA) / (nA - 1) + (seB * seB) / (nB - 1);
-      df = denom > 0 ? (se2 * se2) / denom : (nA + nB - 2);
-      p = tTwoTailedP(t, df);
+      const rawDf = denom > 0 ? (se2 * se2) / denom : (nA + nB - 2);
+      df = Math.abs(rawDf - Math.round(rawDf)) <= 1e-13 ? Math.round(rawDf) : rawDf;
+      p = tTwoTailedP(t, rawDf);
+      if (!Number.isFinite(t)) t = null;
+      if (!Number.isFinite(df)) df = null;
+      if (!Number.isFinite(p)) p = null;
     }
 
     const pooledVar = ((nA - 1) * vA + (nB - 1) * vB) / (nA + nB - 2);
-    const cohensD = pooledVar > 1e-18 ? diff / Math.sqrt(pooledVar) : (Math.abs(diff) <= 1e-12 ? 0 : null);
+    const cohensD = pooledVar > 1e-18
+      ? rawDiff / Math.sqrt(pooledVar)
+      : (Math.abs(rawDiff) <= 1e-12 ? 0 : null);
 
     return {
       test: "Welch's t-test",
-      t: Number.isFinite(t) ? roundNum(t, 4) : t,
-      df: roundNum(df, 2),
-      p: p !== null ? Number(p.toPrecision(5)) : null,
+      t,
+      df,
+      p,
       sig: pToStars(p),
-      cohensD: cohensD !== null ? roundNum(cohensD, 3) : null,
-      meanA: roundNum(sA.mean, 3),
-      meanB: roundNum(sB.mean, 3),
-      meanDiff: roundNum(diff, 3),
+      cohensD: Number.isFinite(cohensD) ? cohensD : null,
+      meanA: sA.mean,
+      meanB: sB.mean,
+      meanDiff: diff,
       nA,
-      nB
+      nB,
+      ...(note ? { note } : {})
     };
   }
 
@@ -3813,12 +3941,17 @@
     const b = cleanFiniteNumbers(bRaw);
     const nA = a.length;
     const nB = b.length;
-    if (nA < 1 || nB < 1 || (nA + nB) < 3) {
-      return { test: "Mann-Whitney U", U: null, U1: null, U2: null, z: null, p: null, sig: "ns", rEffect: null, nA, nB };
+    if (nA < 1 || nB < 1 || (nA + nB) < 2) {
+      return {
+        test: "Mann-Whitney U", U: null, U1: null, U2: null, z: null, p: null,
+        method: "none", hasTies: false, sig: "ns", rEffect: null, nA, nB,
+        note: "Insufficient sample size"
+      };
     }
     const combined = a.concat(b);
     const N = combined.length;
     const { ranks, tieSizes } = computeMidranks(combined);
+    const hasTies = tieSizes.length > 0;
     let rA = 0;
     for (let i = 0; i < nA; i++) rA += ranks[i];
     const U1 = rA - (nA * (nA + 1)) / 2;
@@ -3828,27 +3961,41 @@
     let tieSum = 0;
     for (const t of tieSizes) tieSum += t * t * t - t;
     const meanU = (nA * nB) / 2;
-    const varU = ((nA * nB) / 12) * ((N + 1) - tieSum / (N * (N - 1)));
+    const varU = N > 1 ? ((nA * nB) / 12) * ((N + 1) - tieSum / (N * (N - 1))) : 0;
 
     let z = 0;
-    let p = 1;
     if (varU > 1e-18) {
       const diff = U1 - meanU;
       const absCorr = Math.max(0, Math.abs(diff) - 0.5);
       z = (diff >= 0 ? 1 : -1) * (absCorr / Math.sqrt(varU));
-      p = normalTwoTailedP(z);
     }
-    const rEffect = (2 * U1) / (nA * nB) - 1; // Rank-biserial correlation in [-1, 1]
+
+    let method = "asymptotic";
+    let p = 1;
+    if (!hasTies && nA <= 25 && nB <= 25) {
+      method = "exact";
+      p = mannWhitneyUExactP(nA, nB, U);
+    } else if (varU > 1e-18) {
+      method = "asymptotic";
+      p = normalTwoTailedP(z);
+    } else {
+      method = "asymptotic";
+      p = 1;
+    }
+
+    const rEffect = (nA * nB) > 0 ? ((2 * U1) / (nA * nB) - 1) : 0; // Rank-biserial correlation in [-1, 1]
 
     return {
       test: "Mann-Whitney U",
-      U: roundNum(U, 2),
-      U1: roundNum(U1, 2),
-      U2: roundNum(U2, 2),
-      z: roundNum(z, 4),
-      p: Number(p.toPrecision(5)),
+      U,
+      U1,
+      U2,
+      z: Number.isFinite(z) ? z : 0,
+      p: Number.isFinite(p) ? p : null,
+      method,
+      hasTies,
       sig: pToStars(p),
-      rEffect: roundNum(rEffect, 3),
+      rEffect: Number.isFinite(rEffect) ? rEffect : null,
       nA,
       nB
     };
@@ -3871,18 +4018,22 @@
   }
 
   function applyHolmBonferroni(pairs) {
-    const indexed = pairs.map((item, idx) => ({ item, idx, rawP: Number.isFinite(item.p) ? item.p : 1 }));
+    const indexed = pairs.map((item, idx) => ({ item, idx, validP: Number.isFinite(item.p), rawP: Number.isFinite(item.p) ? item.p : 1 }));
     indexed.sort((a, b) => a.rawP - b.rawP);
     const m = indexed.length;
     let runningMax = 0;
     const adjusted = new Array(m);
     for (let i = 0; i < m; i++) {
-      const pStep = Math.min(1, indexed[i].rawP * (m - i));
-      runningMax = Math.max(runningMax, pStep);
-      adjusted[indexed[i].idx] = runningMax;
+      if (!indexed[i].validP) {
+        adjusted[indexed[i].idx] = null;
+      } else {
+        const pStep = Math.min(1, indexed[i].rawP * (m - i));
+        runningMax = Math.max(runningMax, pStep);
+        adjusted[indexed[i].idx] = runningMax;
+      }
     }
     return pairs.map((item, idx) => {
-      const pAdj = Number(adjusted[idx].toPrecision(5));
+      const pAdj = adjusted[idx];
       return { ...item, pAdj, sig: pToStars(pAdj) };
     });
   }
@@ -3916,8 +4067,23 @@
     const df2 = N - k;
     const msb = ssb / df1;
     const msw = ssw / df2;
-    const F = msw > 1e-18 ? msb / msw : (ssb > 1e-18 ? Infinity : 0);
-    const p = fUpperTailP(F, df1, df2);
+    let F = null;
+    let p = null;
+    let note = null;
+    if (msw > 1e-18) {
+      F = msb / msw;
+      p = fUpperTailP(F, df1, df2);
+      if (!Number.isFinite(F)) F = null;
+      if (!Number.isFinite(p)) p = null;
+    } else if (ssb <= 1e-18) {
+      F = 0;
+      p = 1;
+      note = "All values identical";
+    } else {
+      F = null;
+      p = null;
+      note = "Zero within-group variance";
+    }
     const etaSq = (ssb + ssw) > 1e-18 ? ssb / (ssb + ssw) : 0;
 
     // Pairwise Welch t-tests + Holm-Bonferroni correction
@@ -3943,15 +4109,16 @@
 
     return {
       test: "One-way ANOVA",
-      F: Number.isFinite(F) ? roundNum(F, 4) : F,
+      F,
       df1,
       df2,
-      p: Number.isFinite(p) ? Number(p.toPrecision(5)) : null,
+      p,
       sig: pToStars(p),
-      etaSq: roundNum(etaSq, 4),
+      etaSq: Number.isFinite(etaSq) ? etaSq : null,
       k,
       N,
-      pairwise
+      pairwise,
+      ...(note ? { note } : {})
     };
   }
 
@@ -3960,7 +4127,7 @@
     const k = groups.length;
     const N = groups.reduce((acc, g) => acc + g.values.length, 0);
     if (k < 2 || N <= k) {
-      return { test: "Kruskal-Wallis", H: null, df: null, p: null, sig: "ns", epsSq: null, k, N };
+      return { test: "Kruskal-Wallis", H: null, df: null, p: null, sig: "ns", epsSq: null, k, N, pairwise: [] };
     }
 
     const allVals = [];
@@ -3986,18 +4153,42 @@
     const tieCorr = 1 - tieSum / (N * N * N - N);
     const H = tieCorr > 1e-12 ? Math.max(0, hRaw / tieCorr) : 0;
     const df = k - 1;
-    const p = chi2UpperTailP(H, df);
+    const p = tieCorr > 1e-12 ? chi2UpperTailP(H, df) : 1;
     const epsSq = N > k ? Math.max(0, (H - k + 1) / (N - k)) : 0;
+
+    // Pairwise Mann-Whitney U + Holm-Bonferroni correction
+    const rawPairs = [];
+    for (let i = 0; i < k; i++) {
+      for (let j = i + 1; j < k; j++) {
+        const mw = mannWhitneyU(groups[i].values, groups[j].values);
+        rawPairs.push({
+          groupA: groups[i].group,
+          groupB: groups[j].group,
+          test: `Mann-Whitney U (Holm, ${mw.method})`,
+          method: mw.method,
+          hasTies: mw.hasTies,
+          U: mw.U,
+          z: mw.z,
+          p: mw.p,
+          rEffect: mw.rEffect,
+          nA: mw.nA,
+          nB: mw.nB
+        });
+      }
+    }
+    const pairwise = applyHolmBonferroni(rawPairs);
 
     return {
       test: "Kruskal-Wallis",
-      H: roundNum(H, 4),
+      H: Number.isFinite(H) ? H : null,
       df,
-      p: Number.isFinite(p) ? Number(p.toPrecision(5)) : null,
+      p: Number.isFinite(p) ? p : null,
       sig: pToStars(p),
-      epsSq: roundNum(epsSq, 4),
+      epsSq: Number.isFinite(epsSq) ? epsSq : null,
+      hasTies: tieSizes.length > 0,
       k,
-      N
+      N,
+      pairwise
     };
   }
 
@@ -4013,39 +4204,52 @@
     if (n < 2) {
       return {
         pairedT: { t: null, df: null, p: null, sig: "ns", meanDiff: null },
-        wilcoxon: { W: null, Wplus: null, Wminus: null, z: null, p: null, sig: "ns", nNonZero: 0 },
+        wilcoxon: { W: null, Wplus: null, Wminus: null, z: null, p: null, method: "none", hasTies: false, sig: "ns", nNonZero: 0 },
         n
       };
     }
 
-    // 1. Paired Student's t-test
+    // 1. Paired Student's t-test (full float precision, guarded against var = 0)
     const stD = computeStats(diffs);
     const se = stD.sd / Math.sqrt(n);
-    let t, pT;
+    let t = null;
+    let pT = null;
+    let noteT = null;
     if (se <= 1e-18) {
-      if (Math.abs(stD.mean) <= 1e-12) { t = 0; pT = 1; }
-      else { t = stD.mean > 0 ? Infinity : -Infinity; pT = 0; }
+      if (Math.abs(stD.mean) <= 1e-12) { t = 0; pT = 1; noteT = "All paired differences are zero"; }
+      else { t = null; pT = null; noteT = "Zero variance in paired differences"; }
     } else {
       t = stD.mean / se;
       pT = tTwoTailedP(t, n - 1);
+      if (!Number.isFinite(t)) t = null;
+      if (!Number.isFinite(pT)) pT = null;
     }
 
-    // 2. Wilcoxon signed-rank test (dropping zero differences)
+    // 2. Wilcoxon signed-rank test (exact DP when no ties in |d| & 1 <= nNz <= 50; else approx with tie + continuity corr)
     const nz = diffs.filter(d => Math.abs(d) > 1e-12);
     const nNz = nz.length;
-    let W = null, Wplus = null, Wminus = null, zW = null, pW = null;
+    let W = null;
+    let Wplus = 0;
+    let Wminus = 0;
+    let zW = null;
+    let pW = 1;
+    let methodW = "none";
+    let hasTiesW = false;
+
     if (nNz >= 1) {
       const absVals = nz.map(Math.abs);
       const { ranks, tieSizes } = computeMidranks(absVals);
+      hasTiesW = tieSizes.length > 0;
       let wp = 0;
       let wm = 0;
       for (let i = 0; i < nNz; i++) {
         if (nz[i] > 0) wp += ranks[i];
         else wm += ranks[i];
       }
-      Wplus = roundNum(wp, 2);
-      Wminus = roundNum(wm, 2);
-      W = roundNum(Math.min(wp, wm), 2);
+      Wplus = wp;
+      Wminus = wm;
+      W = Math.min(wp, wm);
+
       const meanW = (nNz * (nNz + 1)) / 4;
       let tieSum = 0;
       for (const tk of tieSizes) tieSum += tk * tk * tk - tk;
@@ -4053,55 +4257,124 @@
       if (varW > 1e-18) {
         const diffW = wp - meanW;
         const absCorr = Math.max(0, Math.abs(diffW) - 0.5);
-        zW = roundNum((diffW >= 0 ? 1 : -1) * (absCorr / Math.sqrt(varW)), 4);
-        pW = Number(normalTwoTailedP(zW).toPrecision(5));
+        zW = (diffW >= 0 ? 1 : -1) * (absCorr / Math.sqrt(varW));
       } else {
         zW = 0;
+      }
+
+      if (!hasTiesW && nNz <= 50) {
+        methodW = "exact";
+        pW = wilcoxonExactP(nNz, W);
+      } else if (varW > 1e-18) {
+        methodW = "approx";
+        pW = normalTwoTailedP(zW);
+      } else {
+        methodW = "approx";
         pW = 1;
       }
     }
 
     return {
       pairedT: {
-        t: Number.isFinite(t) ? roundNum(t, 4) : t,
+        t,
         df: n - 1,
-        p: Number.isFinite(pT) ? Number(pT.toPrecision(5)) : null,
+        p: pT,
         sig: pToStars(pT),
-        meanDiff: roundNum(stD.mean, 3)
+        meanDiff: stD.mean,
+        ...(noteT ? { note: noteT } : {})
       },
       wilcoxon: {
-        W, Wplus, Wminus, z: zW, p: pW, sig: pToStars(pW), nNonZero: nNz
+        W,
+        Wplus,
+        Wminus,
+        z: Number.isFinite(zW) ? zW : null,
+        p: Number.isFinite(pW) ? pW : null,
+        method: methodW,
+        hasTies: hasTiesW,
+        sig: pToStars(pW),
+        nNonZero: nNz
       },
       n
     };
   }
 
-  function screenComparisonGroups(groupsData) {
+  function screenComparisonGroups(groupsData, opts) {
+    const hasExplicitOpts = Boolean(opts && typeof opts === "object");
+    const cfg = hasExplicitOpts ? opts : {};
+    const primaryTestFamily = cfg.primaryTestFamily === "nonparametric" ? "nonparametric" : "parametric";
+    const nUnit = cfg.nUnit === "plates" ? "plates" : "wells";
+    const runCount = Math.max(1, parseInt(cfg.runCount, 10) || 1);
+    const factorNames = Array.isArray(cfg.factorNames)
+      ? cfg.factorNames.map(s => String(s || "").trim()).filter(Boolean)
+      : [];
+
+    const multiFactorNotice = factorNames.length >= 2
+      ? `Multi-factor design detected (${factorNames.join(" × ")}): one-way screening does not test main effects or interactions — run Two-Way ANOVA / Mixed Model in GraphPad Prism, R, or Python.`
+      : null;
+    const pseudoreplicationNotice = (runCount > 1 && nUnit === "wells")
+      ? `Pooled well-level view (n = wells across ${runCount} plates). For plate-level biological replicates, switch Unit of Analysis to Plate Means (n = plates) or use a mixed-effects model.`
+      : null;
+
     const groups = normalizeGroupsListInput(groupsData);
     if (groups.length < 2) {
       return {
         valid: false,
         kind: "insufficient",
+        primaryTestFamily,
+        nUnit,
+        runCount,
+        factorNames,
         groupCount: groups.length,
         groups: groups.map(g => ({ group: g.group, n: g.values.length })),
-        reason: "Need at least 2 groups with n >= 2 included wells to run screening stats.",
+        reason: `Need at least 2 groups with n >= 2 included ${nUnit} to run screening stats.`,
         primary: null,
+        crossCheck: null,
         nonParametric: null,
         omnibus: null,
         pairwise: [],
         brackets: [],
+        primaryRows: [],
         summaryRows: [],
+        crossCheckRows: [],
+        multiFactorNotice,
+        pseudoreplicationNotice,
+        lowReplicateNotice: null,
         disclaimer: STATS_DISCLAIMER
       };
     }
 
+    const lowReplicateNotice = (nUnit === "plates" && groups.some(g => g.values.length < 3))
+      ? "Plate-level view has n < 3 replicate plates per group — statistical power is very low; interpret screening p-values with caution or fit a mixed-effects model."
+      : null;
+
     if (groups.length === 2) {
       const wt = welchTTest(groups[0].values, groups[1].values);
       const mw = mannWhitneyU(groups[0].values, groups[1].values);
-      const pair = {
+
+      const wtRow = {
+        family: "parametric",
+        test: wt.test,
+        method: "welch",
+        stat: wt.t !== null ? `t(${formatStatNum(wt.df, 2)}) = ${formatStatNum(wt.t, 3)}` : (wt.note || "—"),
+        p: wt.p,
+        sig: wt.sig,
+        effect: wt.cohensD !== null ? `d = ${formatStatNum(wt.cohensD, 3)}` : "—"
+      };
+      const mwRow = {
+        family: "nonparametric",
+        test: `${mw.test} (${mw.method})`,
+        method: mw.method,
+        stat: `U = ${formatStatNum(mw.U, 2)}${mw.method === "asymptotic" ? `, z = ${formatStatNum(mw.z, 3)}` : ""}`,
+        p: mw.p,
+        sig: mw.sig,
+        effect: mw.rEffect !== null ? `r = ${formatStatNum(mw.rEffect, 3)}` : "—"
+      };
+
+      const pairParam = {
         groupA: groups[0].group,
         groupB: groups[1].group,
         test: wt.test,
+        method: "welch",
         t: wt.t,
         df: wt.df,
         p: wt.p,
@@ -4110,49 +4383,115 @@
         cohensD: wt.cohensD,
         meanDiff: wt.meanDiff,
         mannWhitneyP: mw.p,
-        mannWhitneySig: mw.sig
+        mannWhitneySig: mw.sig,
+        mannWhitneyMethod: mw.method
       };
+      const pairNonParam = {
+        groupA: groups[0].group,
+        groupB: groups[1].group,
+        test: `${mw.test} (${mw.method})`,
+        method: mw.method,
+        hasTies: mw.hasTies,
+        U: mw.U,
+        z: mw.z,
+        p: mw.p,
+        pAdj: mw.p,
+        sig: mw.sig,
+        rEffect: mw.rEffect,
+        welchP: wt.p,
+        welchSig: wt.sig
+      };
+
+      const isNonParam = primaryTestFamily === "nonparametric";
+      const primary = isNonParam ? mw : wt;
+      const crossCheck = isNonParam ? wt : mw;
+      const activePair = isNonParam ? pairNonParam : pairParam;
+      const primaryRows = [isNonParam ? mwRow : wtRow];
+      const crossCheckRows = [isNonParam ? wtRow : mwRow];
+
       return {
         valid: true,
         kind: "two_group",
+        primaryTestFamily,
+        nUnit,
+        runCount,
+        factorNames,
         groupCount: 2,
         groups: groups.map(g => ({ group: g.group, n: g.values.length })),
-        primary: wt,
+        primary,
+        crossCheck,
         nonParametric: mw,
         omnibus: { parametric: wt, nonParametric: mw },
-        pairwise: [pair],
-        brackets: [pair],
-        summaryRows: [
-          { test: wt.test, stat: `t(${wt.df}) = ${wt.t}`, p: wt.p, sig: wt.sig, effect: wt.cohensD !== null ? `d = ${wt.cohensD}` : "—" },
-          { test: mw.test, stat: `U = ${mw.U}, z = ${mw.z}`, p: mw.p, sig: mw.sig, effect: mw.rEffect !== null ? `r = ${mw.rEffect}` : "—" }
-        ],
+        pairwise: [activePair],
+        brackets: [activePair],
+        primaryRows,
+        summaryRows: hasExplicitOpts ? primaryRows : primaryRows.concat(crossCheckRows),
+        crossCheckRows,
+        multiFactorNotice,
+        pseudoreplicationNotice,
+        lowReplicateNotice,
         disclaimer: STATS_DISCLAIMER
       };
     }
 
     const anova = oneWayAnova(groups);
     const kw = kruskalWallis(groups);
-    const brackets = anova.pairwise.slice().sort((a, b) => (a.pAdj ?? 1) - (b.pAdj ?? 1));
+    const anovaRow = {
+      family: "parametric",
+      test: anova.test,
+      method: "anova_holm",
+      stat: anova.F !== null ? `F(${anova.df1}, ${anova.df2}) = ${formatStatNum(anova.F, 3)}` : (anova.note || "—"),
+      p: anova.p,
+      sig: anova.sig,
+      effect: anova.etaSq !== null ? `η² = ${formatStatNum(anova.etaSq, 3)}` : "—"
+    };
+    const kwRow = {
+      family: "nonparametric",
+      test: kw.test,
+      method: "kruskal_holm_mwu",
+      stat: kw.H !== null ? `H(${kw.df}) = ${formatStatNum(kw.H, 3)}` : "—",
+      p: kw.p,
+      sig: kw.sig,
+      effect: kw.epsSq !== null ? `ε² = ${formatStatNum(kw.epsSq, 3)}` : "—"
+    };
+
+    const isNonParam = primaryTestFamily === "nonparametric";
+    const primary = isNonParam ? kw : anova;
+    const crossCheck = isNonParam ? anova : kw;
+    const activePairwise = isNonParam ? kw.pairwise : anova.pairwise;
+    const brackets = activePairwise.slice().sort((a, b) => (a.pAdj ?? 1) - (b.pAdj ?? 1));
+    const primaryRows = [isNonParam ? kwRow : anovaRow];
+    const crossCheckRows = [isNonParam ? anovaRow : kwRow];
+
     return {
       valid: true,
       kind: "multi_group",
+      primaryTestFamily,
+      nUnit,
+      runCount,
+      factorNames,
       groupCount: groups.length,
       groups: groups.map(g => ({ group: g.group, n: g.values.length })),
-      primary: anova,
+      primary,
+      crossCheck,
       nonParametric: kw,
       omnibus: { parametric: anova, nonParametric: kw },
-      pairwise: anova.pairwise,
+      pairwise: activePairwise,
       brackets,
-      summaryRows: [
-        { test: anova.test, stat: `F(${anova.df1}, ${anova.df2}) = ${anova.F}`, p: anova.p, sig: anova.sig, effect: anova.etaSq !== null ? `η² = ${anova.etaSq}` : "—" },
-        { test: kw.test, stat: `H(${kw.df}) = ${kw.H}`, p: kw.p, sig: kw.sig, effect: kw.epsSq !== null ? `ε² = ${kw.epsSq}` : "—" }
-      ],
+      primaryRows,
+      summaryRows: hasExplicitOpts ? primaryRows : primaryRows.concat(crossCheckRows),
+      crossCheckRows,
+      multiFactorNotice,
+      pseudoreplicationNotice,
+      lowReplicateNotice,
       disclaimer: STATS_DISCLAIMER
     };
   }
 
   const stats = {
     STATS_DISCLAIMER,
+    formatStatNum,
+    formatPVal,
     logGamma,
     betaInc,
     gammaP,
@@ -4162,6 +4501,8 @@
     fUpperTailP,
     chi2UpperTailP,
     pToStars,
+    mannWhitneyUExactP,
+    wilcoxonExactP,
     welchTTest,
     mannWhitneyU,
     oneWayAnova,
@@ -4192,10 +4533,14 @@
     const metaFallback = inferRunMeta(opts.filename || (parsed && parsed.filename) || (zchange && zchange.filename), parsed);
     const runId = opts.runId || metaFallback.runId;
     const date = opts.date || metaFallback.date;
-    const windowAucCfg = (opts.windowAuc && typeof opts.windowAuc === "object" &&
-      Number.isFinite(Number(opts.windowAuc.startSec)) && Number.isFinite(Number(opts.windowAuc.endSec)) &&
-      Number(opts.windowAuc.endSec) > Number(opts.windowAuc.startSec))
-      ? { startSec: Number(opts.windowAuc.startSec), endSec: Number(opts.windowAuc.endSec) }
+    const rawWinStart = opts.windowAuc && opts.windowAuc.startSec !== "" && opts.windowAuc.startSec != null ? Number(opts.windowAuc.startSec) : null;
+    const rawWinEnd = opts.windowAuc && opts.windowAuc.endSec !== "" && opts.windowAuc.endSec != null ? Number(opts.windowAuc.endSec) : null;
+    const hasWinBoth = rawWinStart !== null && rawWinEnd !== null && Number.isFinite(rawWinStart) && Number.isFinite(rawWinEnd);
+    const windowAucWarning = (hasWinBoth && rawWinStart >= rawWinEnd)
+      ? `Window AUC start (${rawWinStart}s) must be less than end (${rawWinEnd}s).`
+      : "";
+    const windowAucCfg = (hasWinBoth && rawWinEnd > rawWinStart)
+      ? { startSec: rawWinStart, endSec: rawWinEnd }
       : null;
 
     if (!parsed || parsed.kind !== "summary" || !Array.isArray(parsed.rows) || parsed.rows.length === 0) {
@@ -4256,12 +4601,15 @@
               zoneEntries: zc.zoneEntries, transitionMatrix: zc.transitionMatrix
             });
           }
+          const exclInfoOnly = (excluded && excludeMeta[w]) ? excludeMeta[w] : null;
           const ws = {
             well: w, wellKey: `${runId}:${w}`, runId, date, group,
             factors: extractWellFactors(w, factorNames, wellFactors),
             excluded,
-            excludeSource: excluded ? ((excludeMeta[w] && excludeMeta[w].source) || "manual") : "",
-            excludeReason: excluded ? ((excludeMeta[w] && excludeMeta[w].reason) || "manual_exclusion") : "",
+            excludeSource: excluded ? ((exclInfoOnly && exclInfoOnly.source) || "manual") : "",
+            excludeReason: excluded ? ((exclInfoOnly && exclInfoOnly.reason) || "manual_exclusion") : "",
+            afterStatsViewed: Boolean(exclInfoOnly && exclInfoOnly.afterStatsViewed),
+            afterStatsAt: (exclInfoOnly && exclInfoOnly.afterStatsAt) ? String(exclInfoOnly.afterStatsAt) : null,
             qc: { well: w, status: "ok", qcStatus: "ok", qcReason: "ok", isEmpty: false, empty: false, isSpikeGlitch: false, spikeGlitch: false, spikeCount: 0, flags: [], reason: "OK", evidence: "OK", activeBins: 0, activePct: 0, maxBinDist: 0, maxSpeedMmS: 0 },
             totalDist: null, meanDist: null, meanSpeedMmS: null, totalMsd: null, meanMsd: null,
             phaseDist: {}, phaseMsd: {}, vmr: null, zones: null, startle: null, habituation: null,
@@ -4311,13 +4659,27 @@
       }
 
       const excludedCountOnly = wellsOnly.filter(ws => ws.excluded).length;
+      const postStatsOnly = wellsOnly.filter(ws => ws.excluded && ws.afterStatsViewed).length;
       const compOnly = [];
       if (hasSabOnly) compOnly.push({ id: "sab", label: "Y-Maze Alternation (SAB %)" });
       if (xyOnly) compOnly.push({ id: "xy_spatial", label: "Spatial Phenotyping (_XY)" });
+      const trimCheckOnly = filterRowsByTrimWindow([], trimWindow);
       return {
         runId, date, factorNames, qcThresholds,
-        trimInfo: { active: false, trimStartSec: null, trimEndSec: null, originalRows: 0, keptRows: 0, originalDurationSec: 0, keptDurationSec: 0 },
+        trimInfo: {
+          active: false,
+          invalid: Boolean(trimCheckOnly.invalid),
+          warning: trimCheckOnly.warning || "",
+          trimStartSec: trimCheckOnly.trimStartSec,
+          trimEndSec: trimCheckOnly.trimEndSec,
+          originalRows: 0, keptRows: 0, originalDurationSec: 0, keptDurationSec: 0
+        },
         windowAucConfig: windowAucCfg,
+        windowAucWarning,
+        unitOfAnalysis: "wells",
+        nUnit: "wells",
+        plateSummaryRows: [],
+        postStatsExclusions: postStatsOnly,
         activeMetric: "dist",
         availableMetrics: [],
         layout,
@@ -4363,6 +4725,8 @@
     const rows = trimRes.rows;
     const trimInfo = {
       active: trimRes.active,
+      invalid: Boolean(trimRes.invalid),
+      warning: trimRes.warning || "",
       trimStartSec: trimRes.trimStartSec,
       trimEndSec: trimRes.trimEndSec,
       originalRows: parsed.rows.length,
@@ -4577,6 +4941,8 @@
       const excludeReason = !excluded
         ? ""
         : (metaEx && metaEx.reason ? String(metaEx.reason) : (qcInfo.qcReason && qcInfo.qcReason !== "ok" ? qcInfo.qcReason : "manual_exclusion"));
+      const afterStatsViewed = Boolean(excluded && metaEx && metaEx.afterStatsViewed);
+      const afterStatsAt = (excluded && metaEx && metaEx.afterStatsAt) ? String(metaEx.afterStatsAt) : null;
 
       const distVals = [];
       const msdVals = [];
@@ -4815,6 +5181,8 @@
         excluded,
         excludeSource,
         excludeReason,
+        afterStatsViewed,
+        afterStatsAt,
         qc: qcInfo,
         qcStatus: qcInfo.qcStatus || qcInfo.status,
         qcReason: qcInfo.qcReason || "ok",
@@ -5164,6 +5532,8 @@
         group: ws.group,
         excluded: ws.excluded,
         excludeSource: ws.excludeSource,
+        afterStatsViewed: ws.afterStatsViewed,
+        afterStatsAt: ws.afterStatsAt,
         status: ws.qc.status,
         qcStatus: ws.qc.qcStatus || ws.qc.status,
         qcReason: ws.qc.qcReason || "ok",
@@ -5198,10 +5568,12 @@
     if (hasSab) comparisonViews.push({ id: "sab", label: "Y-Maze Alternation (SAB %)" });
 
     const excludedCount = wellSummaries.filter(ws => ws.excluded).length;
+    const postStatsExclusions = wellSummaries.filter(ws => ws.excluded && ws.afterStatsViewed).length;
     const kpis = {
       totalWells: wells.length,
       activeWells: wells.length - excludedCount,
       excludedWells: excludedCount,
+      postStatsExclusions,
       rowCount: rows.length,
       durationSec: trimInfo.active ? trimInfo.keptDurationSec : parsed.durationSec,
       binDurationSec: binSec,
@@ -5222,6 +5594,11 @@
       qcThresholds,
       trimInfo,
       windowAucConfig: windowAucCfg,
+      windowAucWarning,
+      unitOfAnalysis: "wells",
+      nUnit: "wells",
+      plateSummaryRows: [],
+      postStatsExclusions,
       activeMetric,
       availableMetrics,
       layout,
@@ -5365,6 +5742,8 @@
     const opts = options || {};
     const runs = Array.isArray(runsRaw) ? runsRaw.filter(Boolean) : [];
     const scope = (opts.scope === "pooled" && runs.length > 1) ? "pooled" : "active";
+    const requestedUnit = (opts.unitOfAnalysis === "plates") ? "plates" : "wells";
+    const effectiveUnit = (scope === "pooled" && runs.length > 1 && requestedUnit === "plates") ? "plates" : "wells";
     const normalizeToControl = Boolean(opts.normalizeToControl);
     const binGroupSize = Math.max(1, Math.round(parseFloat(opts.tsBinGroupSize || opts.binGroupSize) || 1));
     const tsMetric = opts.tsMetric || opts.metric || "dist";
@@ -5380,18 +5759,28 @@
       return {
         ...empty,
         scope: "active",
+        unitOfAnalysis: "wells",
+        nUnit: "wells",
+        plateSummaryRows: [],
+        postStatsExclusions: 0,
         activeRunId: null,
         runCount: 0,
         runsMeta: [],
         runAnalyses: [],
         pooledMeta: {
           scope: "active",
+          unitOfAnalysis: "wells",
+          requestedUnitOfAnalysis: requestedUnit,
+          nUnit: "wells",
           runCount: 0,
           activeRunId: null,
           normalizeToControl: false,
           controlGroupName: null,
           availableControlGroups: [],
           factorNames: [],
+          hasMixedLayouts: false,
+          layoutSummary: "No runs",
+          postStatsExclusions: 0,
           batchDiagnostics: null
         }
       };
@@ -5475,14 +5864,30 @@
         runId: rRunId,
         date: rDate,
         filename: r.filename || (r.summaryParsed && r.summaryParsed.filename) || "",
+        layoutId: an.layout ? an.layout.id : "unknown",
+        layoutName: an.layout ? (an.layout.shortName || an.layout.name || an.layout.id) : "Unknown",
         rowCount: an.kpis.rowCount,
         totalWells: an.kpis.totalWells,
         activeWells: an.kpis.activeWells,
         flaggedCount: an.kpis.flaggedCount,
+        postStatsExclusions: an.postStatsExclusions || 0,
         hasXy: an.capabilities.hasXy,
         hasZchange: an.capabilities.hasZchange
       });
     }
+
+    // Detect homogeneous vs mixed plate layouts across loaded runs
+    const layoutIdSet = new Set(runsMeta.map(m => m.layoutId || "unknown"));
+    const hasMixedLayouts = layoutIdSet.size > 1;
+    const layoutCounts = {};
+    for (const m of runsMeta) {
+      const lbl = m.layoutName || m.layoutId || "Unknown";
+      layoutCounts[lbl] = (layoutCounts[lbl] || 0) + 1;
+    }
+    const layoutParts = Object.entries(layoutCounts).map(([lbl, cnt]) => `${cnt} × ${lbl}`);
+    const layoutSummary = hasMixedLayouts
+      ? `${runsMeta.length} runs (mixed: ${layoutParts.join(" + ")})`
+      : (layoutParts[0] || `${runsMeta.length} runs`);
 
     // 2. Determine Control group & apply per-run % Control normalization
     const controlGroupName = resolveControlGroupName(allDiscoveredGroups, opts.controlGroupName);
@@ -5518,8 +5923,132 @@
     const activeEntry = runAnalyses.find(x => x.id === activeRunInternalId || x.runId === activeRunInternalId) || runAnalyses[0];
     const activeAn = activeEntry.analysis;
 
+    // Build per-plate group mean rows (one biological-replicate observation per run × group)
+    const plateSummaryRows = [];
+    const plateRowsByGroup = {};
+    for (const item of runAnalyses) {
+      const rAn = item.analysis;
+      for (const g of rAn.groups) {
+        const inc = rAn.wells.filter(ws => ws.group === g.group && !ws.excluded);
+        if (inc.length === 0) continue;
+        const phaseDist = {};
+        const phaseMsd = {};
+        for (const ph of Object.keys(g.byPhase || {})) {
+          phaseDist[ph] = {
+            mean: g.byPhase[ph].meanDist ? g.byPhase[ph].meanDist.mean : null,
+            total: g.byPhase[ph].totalDist ? g.byPhase[ph].totalDist.mean : null
+          };
+          if (g.byPhase[ph].meanMsd) {
+            phaseMsd[ph] = { mean: g.byPhase[ph].meanMsd.mean };
+          }
+        }
+        let zonesRow = null;
+        if (g.zones) {
+          const pctMap = {};
+          for (const zKey of Object.keys(g.zones.pct || {})) {
+            pctMap[zKey] = g.zones.pct[zKey] ? g.zones.pct[zKey].mean : null;
+          }
+          zonesRow = {
+            pct: pctMap,
+            z1Pct: g.zones.z1Pct ? g.zones.z1Pct.mean : null,
+            z2Pct: g.zones.z2Pct ? g.zones.z2Pct.mean : null,
+            preferenceIndex: g.zones.preferenceIndex ? g.zones.preferenceIndex.mean : null
+          };
+        }
+        const vmrRow = g.vmr ? {
+          lightMean: g.vmr.lightMean ? g.vmr.lightMean.mean : null,
+          darkMean: g.vmr.darkMean ? g.vmr.darkMean.mean : null,
+          darkMinusLight: g.vmr.darkMinusLight ? g.vmr.darkMinusLight.mean : null,
+          darkOnsetBurst: g.vmr.darkOnsetBurst ? g.vmr.darkOnsetBurst.mean : null,
+          lightOnsetBurst: g.vmr.lightOnsetBurst ? g.vmr.lightOnsetBurst.mean : null
+        } : null;
+        const startleRow = g.startle ? {
+          baselineMean: g.startle.baselineMean ? g.startle.baselineMean.mean : null,
+          itiMean: g.startle.itiMean ? g.startle.itiMean.mean : null,
+          stimMean: g.startle.stimMean ? g.startle.stimMean.mean : null,
+          pulseAloneMean: g.startle.pulseAloneMean ? g.startle.pulseAloneMean.mean : null,
+          ppiTrialMean: g.startle.ppiTrialMean ? g.startle.ppiTrialMean.mean : null,
+          ppiPct: g.startle.ppiPct ? g.startle.ppiPct.mean : null,
+          habituationPct: g.startle.habituationPct ? g.startle.habituationPct.mean : null
+        } : null;
+        const habRow = g.habituation ? {
+          trialCount: g.habituation.trialCount,
+          trialPeaks: (g.habituation.trialSeries || []).map(ts => ts.mean),
+          habituationIndex: g.habituation.habituationIndex ? g.habituation.habituationIndex.mean : null
+        } : null;
+        const winAucRow = g.windowAuc ? {
+          startSec: g.windowAuc.startSec,
+          endSec: g.windowAuc.endSec,
+          auc: g.windowAuc.auc ? g.windowAuc.auc.mean : null,
+          mean: g.windowAuc.mean ? g.windowAuc.mean.mean : null,
+          sum: g.windowAuc.sum ? g.windowAuc.sum.mean : null
+        } : null;
+        const xyRow = g.xy ? {
+          frameCount: g.xy.n > 0 ? 1 : 0,
+          immobilityPct: g.xy.immobilityPct ? g.xy.immobilityPct.mean : null,
+          meanSpeedMmS: g.xy.meanSpeedMmS ? g.xy.meanSpeedMmS.mean : null,
+          burstSpeedP95MmS: g.xy.burstSpeedP95MmS ? g.xy.burstSpeedP95MmS.mean : null,
+          centerOccupancyPct: g.xy.centerOccupancyPct ? g.xy.centerOccupancyPct.mean : null,
+          outerWallPct: g.xy.outerWallPct ? g.xy.outerWallPct.mean : null,
+          meanWallDistMm: g.xy.meanWallDistMm ? g.xy.meanWallDistMm.mean : null,
+          meanNormRadius: g.xy.meanNormRadius ? g.xy.meanNormRadius.mean : null
+        } : null;
+        const zcRow = g.zchange ? {
+          totalEntries: g.zchange.totalEntries ? g.zchange.totalEntries.mean : null,
+          armEntries: g.zchange.armEntries ? g.zchange.armEntries.mean : null,
+          sabPct: g.zchange.sabPct ? g.zchange.sabPct.mean : null
+        } : null;
+        const normRow = g.normalized ? {
+          controlGroup: g.normalized.controlGroup,
+          totalDistPctCtrl: g.normalized.totalDistPctCtrl ? g.normalized.totalDistPctCtrl.mean : null,
+          meanDistPctCtrl: g.normalized.meanDistPctCtrl ? g.normalized.meanDistPctCtrl.mean : null,
+          meanMsdPctCtrl: g.normalized.meanMsdPctCtrl ? g.normalized.meanMsdPctCtrl.mean : null,
+          vmrBurstPctCtrl: g.normalized.vmrBurstPctCtrl ? g.normalized.vmrBurstPctCtrl.mean : null,
+          vmrDarkPctCtrl: g.normalized.vmrDarkPctCtrl ? g.normalized.vmrDarkPctCtrl.mean : null,
+          windowAucPctCtrl: g.normalized.windowAucPctCtrl ? g.normalized.windowAucPctCtrl.mean : null,
+          windowMeanPctCtrl: g.normalized.windowMeanPctCtrl ? g.normalized.windowMeanPctCtrl.mean : null,
+          stimMeanPctCtrl: g.normalized.stimMeanPctCtrl ? g.normalized.stimMeanPctCtrl.mean : null
+        } : null;
+
+        const pRow = {
+          runInternalId: item.id,
+          runId: item.runId,
+          date: item.date,
+          group: g.group,
+          wellKey: `${item.runId}:PLATE_MEAN`,
+          well: `${item.runId} mean`,
+          nWells: inc.length,
+          totalAssigned: g.totalAssigned,
+          excludedCount: g.excludedCount,
+          excluded: false,
+          totalDist: g.totalDist ? g.totalDist.mean : null,
+          meanDist: g.meanDist ? g.meanDist.mean : null,
+          meanSpeedMmS: g.meanSpeedMmS ? g.meanSpeedMmS.mean : null,
+          meanMsd: g.meanMsd ? g.meanMsd.mean : null,
+          phaseDist,
+          phaseMsd,
+          vmr: vmrRow,
+          zones: zonesRow,
+          startle: startleRow,
+          habituation: habRow,
+          windowAuc: winAucRow,
+          xy: xyRow,
+          zchange: zcRow,
+          normalized: normRow
+        };
+        plateSummaryRows.push(pRow);
+        if (!plateRowsByGroup[g.group]) plateRowsByGroup[g.group] = [];
+        plateRowsByGroup[g.group].push(pRow);
+      }
+    }
+
+    const totalPostStatsExclAll = runAnalyses.reduce((acc, x) => acc + (x.analysis.postStatsExclusions || 0), 0);
+
     const pooledMeta = {
       scope,
+      unitOfAnalysis: effectiveUnit,
+      requestedUnitOfAnalysis: requestedUnit,
+      nUnit: effectiveUnit,
       runCount: runAnalyses.length,
       activeRunId: activeEntry.id,
       activeRunLabel: activeEntry.runId,
@@ -5527,6 +6056,9 @@
       controlGroupName,
       availableControlGroups: allDiscoveredGroups.slice(),
       factorNames: allFactorNames,
+      hasMixedLayouts,
+      layoutSummary,
+      postStatsExclusions: scope === "pooled" ? totalPostStatsExclAll : (activeAn.postStatsExclusions || 0),
       batchDiagnostics
     };
 
@@ -5571,6 +6103,10 @@
       return {
         ...activeAn,
         scope: "active",
+        unitOfAnalysis: "wells",
+        nUnit: "wells",
+        plateSummaryRows,
+        postStatsExclusions: activeAn.postStatsExclusions || 0,
         activeRunId: activeEntry.id,
         runCount: runAnalyses.length,
         runsMeta,
@@ -5618,89 +6154,91 @@
     const hasZchange = runAnalyses.some(x => x.analysis.capabilities.hasZchange);
     const hasXy = runAnalyses.some(x => x.analysis.capabilities.hasXy);
 
-    // Pooled group summaries across all runs
+    // Pooled group summaries across all runs (respects unitOfAnalysis: "wells" | "plates")
     const pooledGroups = [];
     for (const gName of allDiscoveredGroups) {
       const assigned = pooledWells.filter(ws => ws.group === gName);
       if (assigned.length === 0) continue;
       const included = assigned.filter(ws => !ws.excluded);
+      const pRows = plateRowsByGroup[gName] || [];
+      const obs = (effectiveUnit === "plates") ? pRows : included;
       const runIdsSet = new Set(included.map(ws => ws.runId));
 
       const byPhase = {};
       for (const ph of pooledPhases) {
         byPhase[ph] = {
-          meanDist: computeStats(included.map(ws => (ws.phaseDist && ws.phaseDist[ph]) ? ws.phaseDist[ph].mean : null)),
-          totalDist: computeStats(included.map(ws => (ws.phaseDist && ws.phaseDist[ph]) ? ws.phaseDist[ph].total : null)),
-          meanMsd: hasMsd ? computeStats(included.map(ws => (ws.phaseMsd && ws.phaseMsd[ph]) ? ws.phaseMsd[ph].mean : null)) : null
+          meanDist: computeStats(obs.map(ws => (ws.phaseDist && ws.phaseDist[ph]) ? ws.phaseDist[ph].mean : null)),
+          totalDist: computeStats(obs.map(ws => (ws.phaseDist && ws.phaseDist[ph]) ? ws.phaseDist[ph].total : null)),
+          meanMsd: hasMsd ? computeStats(obs.map(ws => (ws.phaseMsd && ws.phaseMsd[ph]) ? ws.phaseMsd[ph].mean : null)) : null
         };
       }
 
       const vmrGroup = hasVmr ? {
-        lightMean: computeStats(included.map(ws => ws.vmr ? ws.vmr.lightMean : null)),
-        darkMean: computeStats(included.map(ws => ws.vmr ? ws.vmr.darkMean : null)),
-        darkMinusLight: computeStats(included.map(ws => ws.vmr ? ws.vmr.darkMinusLight : null)),
-        darkOnsetBurst: computeStats(included.map(ws => ws.vmr ? ws.vmr.darkOnsetBurst : null)),
-        lightOnsetBurst: computeStats(included.map(ws => ws.vmr ? ws.vmr.lightOnsetBurst : null))
+        lightMean: computeStats(obs.map(ws => ws.vmr ? ws.vmr.lightMean : null)),
+        darkMean: computeStats(obs.map(ws => ws.vmr ? ws.vmr.darkMean : null)),
+        darkMinusLight: computeStats(obs.map(ws => ws.vmr ? ws.vmr.darkMinusLight : null)),
+        darkOnsetBurst: computeStats(obs.map(ws => ws.vmr ? ws.vmr.darkOnsetBurst : null)),
+        lightOnsetBurst: computeStats(obs.map(ws => ws.vmr ? ws.vmr.lightOnsetBurst : null))
       } : null;
 
       let zonesGroup = null;
       if (hasZones) {
         const pctStats = {};
         for (let z = 1; z <= maxZone; z++) {
-          pctStats[z] = computeStats(included.map(ws => ws.zones ? ws.zones.pct[z] : null));
+          pctStats[z] = computeStats(obs.map(ws => ws.zones ? ws.zones.pct[z] : null));
         }
         zonesGroup = {
           pct: pctStats,
           z1Pct: pctStats[1] || computeStats([]),
           z2Pct: pctStats[2] || computeStats([]),
-          preferenceIndex: computeStats(included.map(ws => ws.zones ? ws.zones.preferenceIndex : null))
+          preferenceIndex: computeStats(obs.map(ws => ws.zones ? ws.zones.preferenceIndex : null))
         };
       }
 
       const startleGroup = hasStartle ? {
-        baselineMean: computeStats(included.map(ws => ws.startle ? ws.startle.baselineMean : null)),
-        itiMean: computeStats(included.map(ws => ws.startle ? ws.startle.itiMean : null)),
-        stimMean: computeStats(included.map(ws => ws.startle ? ws.startle.stimMean : null)),
-        pulseAloneMean: computeStats(included.map(ws => ws.startle ? ws.startle.pulseAloneMean : null)),
-        ppiTrialMean: computeStats(included.map(ws => ws.startle ? ws.startle.ppiTrialMean : null)),
-        ppiPct: computeStats(included.map(ws => ws.startle ? ws.startle.ppiPct : null)),
-        habituationPct: computeStats(included.map(ws => ws.startle ? ws.startle.habituationPct : null))
+        baselineMean: computeStats(obs.map(ws => ws.startle ? ws.startle.baselineMean : null)),
+        itiMean: computeStats(obs.map(ws => ws.startle ? ws.startle.itiMean : null)),
+        stimMean: computeStats(obs.map(ws => ws.startle ? ws.startle.stimMean : null)),
+        pulseAloneMean: computeStats(obs.map(ws => ws.startle ? ws.startle.pulseAloneMean : null)),
+        ppiTrialMean: computeStats(obs.map(ws => ws.startle ? ws.startle.ppiTrialMean : null)),
+        ppiPct: computeStats(obs.map(ws => ws.startle ? ws.startle.ppiPct : null)),
+        habituationPct: computeStats(obs.map(ws => ws.startle ? ws.startle.habituationPct : null))
       } : null;
 
       let habituationGroup = null;
       if (hasHabituation) {
-        const maxTrials = included.reduce((mx, ws) => Math.max(mx, ws.habituation ? ws.habituation.trialCount : 0), 0);
+        const maxTrials = obs.reduce((mx, ws) => Math.max(mx, ws.habituation ? ws.habituation.trialCount : 0), 0);
         const trialLabels = [];
         for (let t = 1; t <= maxTrials; t++) trialLabels.push(`T${t}`);
         const trialSeries = trialLabels.map((lbl, tIdx) => {
-          const st = computeStats(included.map(ws => (ws.habituation && ws.habituation.trialPeaks[tIdx] != null) ? ws.habituation.trialPeaks[tIdx] : null));
+          const st = computeStats(obs.map(ws => (ws.habituation && ws.habituation.trialPeaks[tIdx] != null) ? ws.habituation.trialPeaks[tIdx] : null));
           return { trialNum: tIdx + 1, label: lbl, mean: st.mean !== null ? roundNum(st.mean, 3) : null, sem: st.sem !== null ? roundNum(st.sem, 3) : null, sd: st.sd !== null ? roundNum(st.sd, 3) : null, n: st.n };
         });
         habituationGroup = {
           trialCount: maxTrials,
           trialLabels,
           trialSeries,
-          habituationIndex: computeStats(included.map(ws => ws.habituation ? ws.habituation.habituationIndex : null))
+          habituationIndex: computeStats(obs.map(ws => ws.habituation ? ws.habituation.habituationIndex : null))
         };
       }
 
       const windowAucGroup = hasWindowAuc ? {
         startSec: refAn.windowAucConfig ? refAn.windowAucConfig.startSec : null,
         endSec: refAn.windowAucConfig ? refAn.windowAucConfig.endSec : null,
-        auc: computeStats(included.map(ws => ws.windowAuc ? ws.windowAuc.auc : null)),
-        mean: computeStats(included.map(ws => ws.windowAuc ? ws.windowAuc.mean : null)),
-        sum: computeStats(included.map(ws => ws.windowAuc ? ws.windowAuc.sum : null))
+        auc: computeStats(obs.map(ws => ws.windowAuc ? ws.windowAuc.auc : null)),
+        mean: computeStats(obs.map(ws => ws.windowAuc ? ws.windowAuc.mean : null)),
+        sum: computeStats(obs.map(ws => ws.windowAuc ? ws.windowAuc.sum : null))
       } : null;
 
       const xyGroup = hasXy ? {
-        n: included.filter(ws => ws.xy && ws.xy.frameCount > 0).length,
-        immobilityPct: computeStats(included.map(ws => ws.xy ? ws.xy.immobilityPct : null)),
-        meanSpeedMmS: computeStats(included.map(ws => ws.xy ? ws.xy.meanSpeedMmS : null)),
-        burstSpeedP95MmS: computeStats(included.map(ws => ws.xy ? ws.xy.burstSpeedP95MmS : null)),
-        centerOccupancyPct: computeStats(included.map(ws => ws.xy ? ws.xy.centerOccupancyPct : null)),
-        outerWallPct: computeStats(included.map(ws => ws.xy ? ws.xy.outerWallPct : null)),
-        meanWallDistMm: computeStats(included.map(ws => ws.xy ? ws.xy.meanWallDistMm : null)),
-        meanNormRadius: computeStats(included.map(ws => ws.xy ? ws.xy.meanNormRadius : null))
+        n: obs.filter(ws => ws.xy && ws.xy.frameCount > 0).length,
+        immobilityPct: computeStats(obs.map(ws => ws.xy ? ws.xy.immobilityPct : null)),
+        meanSpeedMmS: computeStats(obs.map(ws => ws.xy ? ws.xy.meanSpeedMmS : null)),
+        burstSpeedP95MmS: computeStats(obs.map(ws => ws.xy ? ws.xy.burstSpeedP95MmS : null)),
+        centerOccupancyPct: computeStats(obs.map(ws => ws.xy ? ws.xy.centerOccupancyPct : null)),
+        outerWallPct: computeStats(obs.map(ws => ws.xy ? ws.xy.outerWallPct : null)),
+        meanWallDistMm: computeStats(obs.map(ws => ws.xy ? ws.xy.meanWallDistMm : null)),
+        meanNormRadius: computeStats(obs.map(ws => ws.xy ? ws.xy.meanNormRadius : null))
       } : null;
 
       let zchangeGroup = null;
@@ -5716,36 +6254,39 @@
           }
         }
         zchangeGroup = {
-          totalEntries: computeStats(included.map(ws => ws.zchange ? ws.zchange.totalEntries : null)),
-          armEntries: computeStats(included.map(ws => ws.zchange ? ws.zchange.armEntries : null)),
-          sabPct: computeStats(included.map(ws => ws.zchange ? ws.zchange.sabPct : null)),
+          totalEntries: computeStats(obs.map(ws => ws.zchange ? ws.zchange.totalEntries : null)),
+          armEntries: computeStats(obs.map(ws => ws.zchange ? ws.zchange.armEntries : null)),
+          sabPct: computeStats(obs.map(ws => ws.zchange ? ws.zchange.sabPct : null)),
           transitionMatrix: gMat
         };
       }
 
       const normGroup = {
         controlGroup: controlGroupName,
-        totalDistPctCtrl: computeStats(included.map(ws => ws.normalized ? ws.normalized.totalDistPctCtrl : null)),
-        meanDistPctCtrl: computeStats(included.map(ws => ws.normalized ? ws.normalized.meanDistPctCtrl : null)),
-        meanMsdPctCtrl: computeStats(included.map(ws => ws.normalized ? ws.normalized.meanMsdPctCtrl : null)),
-        vmrBurstPctCtrl: computeStats(included.map(ws => ws.normalized ? ws.normalized.vmrBurstPctCtrl : null)),
-        vmrDarkPctCtrl: computeStats(included.map(ws => ws.normalized ? ws.normalized.vmrDarkPctCtrl : null)),
-        windowAucPctCtrl: computeStats(included.map(ws => ws.normalized ? ws.normalized.windowAucPctCtrl : null)),
-        windowMeanPctCtrl: computeStats(included.map(ws => ws.normalized ? ws.normalized.windowMeanPctCtrl : null)),
-        stimMeanPctCtrl: computeStats(included.map(ws => ws.normalized ? ws.normalized.stimMeanPctCtrl : null))
+        totalDistPctCtrl: computeStats(obs.map(ws => ws.normalized ? ws.normalized.totalDistPctCtrl : null)),
+        meanDistPctCtrl: computeStats(obs.map(ws => ws.normalized ? ws.normalized.meanDistPctCtrl : null)),
+        meanMsdPctCtrl: computeStats(obs.map(ws => ws.normalized ? ws.normalized.meanMsdPctCtrl : null)),
+        vmrBurstPctCtrl: computeStats(obs.map(ws => ws.normalized ? ws.normalized.vmrBurstPctCtrl : null)),
+        vmrDarkPctCtrl: computeStats(obs.map(ws => ws.normalized ? ws.normalized.vmrDarkPctCtrl : null)),
+        windowAucPctCtrl: computeStats(obs.map(ws => ws.normalized ? ws.normalized.windowAucPctCtrl : null)),
+        windowMeanPctCtrl: computeStats(obs.map(ws => ws.normalized ? ws.normalized.windowMeanPctCtrl : null)),
+        stimMeanPctCtrl: computeStats(obs.map(ws => ws.normalized ? ws.normalized.stimMeanPctCtrl : null))
       };
 
       pooledGroups.push({
         group: gName,
-        n: included.length,
+        n: obs.length,
+        nUnit: effectiveUnit,
+        wellLevelN: included.length,
         nRuns: runIdsSet.size,
         totalAssigned: assigned.length,
         excludedCount: assigned.length - included.length,
         wells: included.map(ws => ws.wellKey),
-        totalDist: computeStats(included.map(ws => ws.totalDist)),
-        meanDist: computeStats(included.map(ws => ws.meanDist)),
-        meanSpeedMmS: computeStats(included.map(ws => ws.meanSpeedMmS)),
-        meanMsd: hasMsd ? computeStats(included.map(ws => ws.meanMsd)) : null,
+        plateMeans: pRows,
+        totalDist: computeStats(obs.map(ws => ws.totalDist)),
+        meanDist: computeStats(obs.map(ws => ws.meanDist)),
+        meanSpeedMmS: computeStats(obs.map(ws => ws.meanSpeedMmS)),
+        meanMsd: hasMsd ? computeStats(obs.map(ws => ws.meanMsd)) : null,
         byPhase,
         vmr: vmrGroup,
         zones: zonesGroup,
@@ -5758,8 +6299,9 @@
       });
     }
 
-    // Pooled Time Series aligned on reference xAxis chunk grid
+    // Pooled Time Series aligned on reference xAxis chunk grid (with relTime fallback for mixed bin durations)
     const refXAxis = refAn.timeSeries.xAxis || [];
+    const refBinSec = refAn.kpis.binDurationSec || 1;
     const pooledSeries = [];
     let yMin = Infinity;
     let yMax = -Infinity;
@@ -5771,42 +6313,69 @@
       const normRef = (normalizeToControl && item.normInfo && item.normInfo.controlMeanPerBin)
         ? item.normInfo.controlMeanPerBin
         : null;
-      return { item, parsed: p, rows: tr.rows, normRef };
+      const rBinSec = item.analysis.kpis.binDurationSec || p.binDurationSec || 1;
+      return { item, parsed: p, rows: tr.rows, normRef, binSec: rBinSec };
     });
 
     for (const gObj of pooledGroups) {
       const gName = gObj.group;
       const values = [];
       for (let ci = 0; ci < refXAxis.length; ci++) {
+        const xPt = refXAxis[ci];
         const chunkStart = ci * binGroupSize;
         const chunkEnd = chunkStart + binGroupSize - 1;
-        const wellVals = [];
+        const obsVals = [];
 
         for (const rr of runRowsList) {
           const rRows = rr.rows;
-          if (chunkStart >= rRows.length) continue;
-          const rEnd = Math.min(rRows.length - 1, chunkEnd);
+          if (!rRows.length) continue;
           const incWells = rr.item.analysis.wells.filter(ws => ws.group === gName && !ws.excluded).map(ws => ws.well);
+          if (incWells.length === 0) continue;
 
+          // Choose matching row indices: index-aligned when binDurationSec matches, relTime-windowed otherwise
+          const sameGrid = Math.abs(rr.binSec - refBinSec) <= 1e-6;
+          let matchedRows = null;
+          if (sameGrid) {
+            if (chunkStart >= rRows.length) continue;
+            const rEnd = Math.min(rRows.length - 1, chunkEnd);
+            matchedRows = [];
+            for (let r = chunkStart; r <= rEnd; r++) matchedRows.push(rRows[r]);
+          } else {
+            const t0 = xPt.relTime;
+            const t1 = xPt.endRelTime;
+            matchedRows = rRows.filter(row => row.relTime >= t0 - 1e-6 && row.relTime < t1 - 1e-6);
+            if (matchedRows.length === 0) continue;
+          }
+
+          const runWellVals = [];
           for (const w of incWells) {
             let sum = 0;
             let cnt = 0;
-            for (let r = chunkStart; r <= rEnd; r++) {
-              const v = extractRowMetricValue(rRows[r], w, activeMetric, rr.parsed);
+            for (let r = 0; r < matchedRows.length; r++) {
+              const v = extractRowMetricValue(matchedRows[r], w, activeMetric, rr.parsed);
               if (v !== null && Number.isFinite(v)) { sum += v; cnt++; }
             }
             if (cnt > 0) {
               const meanBin = sum / cnt;
               if (normalizeToControl) {
-                if (rr.normRef !== null) wellVals.push((meanBin / rr.normRef) * 100);
+                if (rr.normRef !== null) runWellVals.push((meanBin / rr.normRef) * 100);
               } else {
-                wellVals.push(meanBin);
+                runWellVals.push(meanBin);
               }
+            }
+          }
+
+          if (runWellVals.length > 0) {
+            if (effectiveUnit === "plates") {
+              const plateMean = runWellVals.reduce((a, b) => a + b, 0) / runWellVals.length;
+              obsVals.push(plateMean);
+            } else {
+              for (const v of runWellVals) obsVals.push(v);
             }
           }
         }
 
-        const st = computeStats(wellVals);
+        const st = computeStats(obsVals);
         if (st.mean !== null) {
           yMin = Math.min(yMin, st.mean - (st.sem || 0));
           yMax = Math.max(yMax, st.mean + (st.sem || 0));
@@ -5820,7 +6389,7 @@
           max: st.max !== null ? roundNum(st.max, 3) : null
         });
       }
-      pooledSeries.push({ group: gName, n: gObj.n, values });
+      pooledSeries.push({ group: gName, n: gObj.n, nUnit: effectiveUnit, values });
     }
 
     if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) { yMin = 0; yMax = 1; }
@@ -5828,6 +6397,7 @@
 
     const pooledTimeSeries = {
       ...refAn.timeSeries,
+      nUnit: effectiveUnit,
       normalized: normalizeToControl,
       metricLabel: normalizeToControl ? `${refAn.timeSeries.metricLabel} (% of ${controlGroupName})` : refAn.timeSeries.metricLabel,
       unit: normalizeToControl ? "% Ctrl" : refAn.timeSeries.unit,
@@ -5953,6 +6523,10 @@
 
     return {
       scope: "pooled",
+      unitOfAnalysis: effectiveUnit,
+      nUnit: effectiveUnit,
+      plateSummaryRows,
+      postStatsExclusions: totalPostStatsExclAll,
       activeRunId: activeEntry.id,
       runId: `Pooled (${runAnalyses.length} runs)`,
       date: runsMeta.map(m => m.date).filter(Boolean).join(" .. "),
@@ -5964,6 +6538,7 @@
       qcThresholds: refAn.qcThresholds,
       trimInfo: refAn.trimInfo,
       windowAucConfig: refAn.windowAucConfig,
+      windowAucWarning: refAn.windowAucWarning || "",
       activeMetric,
       availableMetrics: refAn.availableMetrics,
       layout: activeAn.layout, // Active plate map layout
@@ -5989,6 +6564,7 @@
         totalWells: totalWellsAll,
         activeWells: totalWellsAll - excludedAll,
         excludedWells: excludedAll,
+        postStatsExclusions: totalPostStatsExclAll,
         runCount: runAnalyses.length,
         rowCount: refAn.kpis.rowCount,
         durationSec: refAn.kpis.durationSec,
@@ -6263,14 +6839,24 @@
     const includeBom = Boolean(opts && opts.includeBom === true);
     const avail = getAvailablePrismMetrics(analysis);
     const key = metricKey || (avail[0] ? avail[0].id : "total_dist");
+    const usePlates = (opts && opts.unitOfAnalysis)
+      ? opts.unitOfAnalysis === "plates"
+      : (analysis.nUnit === "plates" || analysis.unitOfAnalysis === "plates");
 
     const columns = analysis.groups.map(g => {
       const vals = [];
-      for (const w of g.wells) {
-        const ws = (analysis.wellsByKey && analysis.wellsByKey[w]) || (analysis.wellsById && analysis.wellsById[w]);
-        if (!ws || ws.excluded) continue;
-        const v = extractWellMetricForPrism(ws, key);
-        if (v !== null && Number.isFinite(v)) vals.push(v);
+      if (usePlates && Array.isArray(g.plateMeans) && g.plateMeans.length > 0) {
+        for (const pRow of g.plateMeans) {
+          const v = extractWellMetricForPrism(pRow, key);
+          if (v !== null && Number.isFinite(v)) vals.push(roundNum(v, 4));
+        }
+      } else {
+        for (const w of g.wells) {
+          const ws = (analysis.wellsByKey && analysis.wellsByKey[w]) || (analysis.wellsById && analysis.wellsById[w]);
+          if (!ws || ws.excluded) continue;
+          const v = extractWellMetricForPrism(ws, key);
+          if (v !== null && Number.isFinite(v)) vals.push(v);
+        }
       }
       return { name: g.group, vals };
     });
@@ -6553,7 +7139,8 @@
     const key = metricKey || (payload && payload.metricKey) || undefined;
     const includeBom = !(opts && opts.includeBom === false);
     const delimiter = (opts && opts.delimiter) || ",";
-    return buildPrismGroupedCsv(analysis, key, { delimiter, includeBom });
+    const unitOfAnalysis = (opts && opts.unitOfAnalysis) || (payload && payload.unitOfAnalysis) || undefined;
+    return buildPrismGroupedCsv(analysis, key, { delimiter, includeBom, unitOfAnalysis });
   }
 
   function exportPrismGroupedTsv(payload, metricKey) {
@@ -6567,6 +7154,22 @@
     const trim = (analysis && analysis.trimInfo) || null;
     const winAuc = (analysis && analysis.windowAucConfig) || p.windowAuc || null;
     const pooledMeta = (analysis && analysis.pooledMeta) || null;
+    const primaryTestFamily = (p && p.primaryTestFamily === "nonparametric") ? "nonparametric" : "parametric";
+    const unitOfAnalysis = (p && p.unitOfAnalysis === "plates")
+      ? "plates"
+      : ((analysis && (analysis.nUnit || analysis.unitOfAnalysis)) || (pooledMeta && pooledMeta.nUnit) || "wells");
+    const effectiveUnit = (scope === "pooled" && targetRuns.length > 1 && unitOfAnalysis === "plates") ? "plates" : "wells";
+
+    // Build per-run excludeMeta lookup so afterStatsViewed works even if payload only passed it on runs
+    const runExcludeMetaByRunId = new Map();
+    for (const r of targetRuns) {
+      const sp = r.summaryParsed || r.parsed;
+      const meta = inferRunMeta(r.filename || (sp && sp.filename), sp);
+      const rId = r.runId || meta.runId;
+      if (r.excludeMeta && typeof r.excludeMeta === "object") {
+        runExcludeMetaByRunId.set(rId, r.excludeMeta);
+      }
+    }
 
     const lines = [
       "======================================================================",
@@ -6575,6 +7178,7 @@
       `Software         : Zanscript-Builder CSV Analyzer v${ANALYZER_VERSION}`,
       `Generated (UTC)  : ${isoNow}`,
       `Analysis Scope   : ${scope === "pooled" ? `Pooled (${targetRuns.length} runs)` : "Active single run"}`,
+      `Unit of Analysis : ${effectiveUnit === "plates" ? "Plate Means (n = plates, biological replicates)" : "Individual Wells (n = wells)"}`,
       ""
     ];
 
@@ -6605,6 +7209,9 @@
         } else {
           lines.push("    Context      : None (inferred directly from CSV headers)");
         }
+      }
+      if (pooledMeta && pooledMeta.hasMixedLayouts) {
+        lines.push(`  Layout Summary : ${pooledMeta.layoutSummary}`);
       }
     }
 
@@ -6646,32 +7253,53 @@
     let grandAutoExcl = 0;
     let grandManualExcl = 0;
     let grandFlaggedKept = 0;
+    let grandPostStatsExcl = 0;
+
+    const getPostStatsFlag = (rId, ws) => {
+      if (ws.afterStatsViewed) return { flagged: true, at: ws.afterStatsAt || null };
+      const rm = runExcludeMetaByRunId.get(rId) || (p && p.excludeMeta) || null;
+      const entry = rm && rm[ws.well];
+      if (entry && entry.afterStatsViewed) {
+        return { flagged: true, at: entry.afterStatsAt ? String(entry.afterStatsAt) : null };
+      }
+      return { flagged: false, at: null };
+    };
 
     for (const [rId, wList] of byRun.entries()) {
       const autoExcl = wList.filter(ws => ws.excluded && ws.excludeSource === "auto");
       const manualExcl = wList.filter(ws => ws.excluded && ws.excludeSource !== "auto");
       const flaggedKept = wList.filter(ws => !ws.excluded && ws.qc && (ws.qc.isEmpty || ws.qc.isSpikeGlitch));
       const incCount = wList.length - autoExcl.length - manualExcl.length;
+      const runPostStatsCount = wList.filter(ws => ws.excluded && getPostStatsFlag(rId, ws).flagged).length;
 
       grandTotal += wList.length;
       grandIncluded += incCount;
       grandAutoExcl += autoExcl.length;
       grandManualExcl += manualExcl.length;
       grandFlaggedKept += flaggedKept.length;
+      grandPostStatsExcl += runPostStatsCount;
 
-      lines.push(`  [${rId}] Total: ${wList.length} | Included: ${incCount} | Auto-excluded: ${autoExcl.length} | Manually-excluded: ${manualExcl.length} | Flagged-but-kept: ${flaggedKept.length}`);
+      lines.push(
+        `  [${rId}] Total: ${wList.length} | Included: ${incCount} | Auto-excluded: ${autoExcl.length} | ` +
+        `Manually-excluded: ${manualExcl.length} | Flagged-but-kept: ${flaggedKept.length}` +
+        (runPostStatsCount > 0 ? ` | Post-stats exclusions: ${runPostStatsCount}` : "")
+      );
 
       if (autoExcl.length > 0) {
         lines.push("    Auto-excluded wells:");
         for (const ws of autoExcl) {
-          lines.push(`      - ${ws.well} (${ws.group}): ${ws.qcReason} [${ws.qc ? ws.qc.evidence : ""}]`);
+          const ps = getPostStatsFlag(rId, ws);
+          const tag = ps.flagged ? ` [EXCLUDED AFTER VIEWING STATS${ps.at ? ` @ ${ps.at}` : ""}]` : "";
+          lines.push(`      - ${ws.well} (${ws.group}): ${ws.qcReason} [${ws.qc ? ws.qc.evidence : ""}]${tag}`);
         }
       }
       if (manualExcl.length > 0) {
         lines.push("    Manually-excluded wells:");
         for (const ws of manualExcl) {
           const ev = ws.qc ? ws.qc.evidence : "";
-          lines.push(`      - ${ws.well} (${ws.group}): ${ws.excludeReason || "manual_exclusion"} [${ev}]`);
+          const ps = getPostStatsFlag(rId, ws);
+          const tag = ps.flagged ? ` [EXCLUDED AFTER VIEWING STATS${ps.at ? ` @ ${ps.at}` : ""}]` : "";
+          lines.push(`      - ${ws.well} (${ws.group}): ${ws.excludeReason || "manual_exclusion"} [${ev}]${tag}`);
         }
       }
       if (flaggedKept.length > 0) {
@@ -6684,19 +7312,75 @@
         lines.push("    All wells passed QC and were included.");
       }
     }
+    lines.push(`  Post-stats exclusions total : ${grandPostStatsExcl}${grandPostStatsExcl > 0 ? "  [WARNING: wells excluded after viewing screening statistics should be explicitly disclosed]" : " (all exclusions finalized prior to viewing stats)"}`);
 
     lines.push("");
-    lines.push("4. METHODS SUMMARY DRAFT");
+    lines.push("4. SCREENING STATISTICS & PARAMETER SNAPSHOT");
+    lines.push("----------------------------------------------------------------------");
+    lines.push(`  Primary Test Family : ${primaryTestFamily === "nonparametric" ? "Non-Parametric (Mann-Whitney U / Kruskal-Wallis + Holm-Bonferroni)" : "Parametric (Welch's t-test / One-way ANOVA + Holm-Bonferroni Welch)"}`);
+    lines.push("  Exact / Approx Rule : Mann-Whitney U uses exact BigInt DP when no ties & n1, n2 <= 25 (else asymptotic w/ continuity & tie corr);");
+    lines.push("                        Wilcoxon signed-rank uses exact BigInt DP when no tied |d| & 1 <= n_nz <= 50 (else approx w/ continuity & tie corr).");
+    lines.push(`  Unit of Analysis    : ${effectiveUnit === "plates" ? "Plate Means (n = plates, biological replicates)" : "Individual Wells (n = wells)"}`);
+    lines.push(`  Batch Normalization : ${pooledMeta && pooledMeta.normalizeToControl ? `Per-run % of Control ("${pooledMeta.controlGroupName}")` : "Off (raw metric units)"}`);
+    lines.push(`  Trim / AUC Windows  : Trim=${trim && trim.active ? `${trim.trimStartSec ?? 0}-${trim.trimEndSec ?? trim.originalDurationSec}s` : "Off"} | Custom AUC=${winAuc ? `${winAuc.startSec}-${winAuc.endSec}s` : "Off"}`);
+    if (factorNames.length >= 2) {
+      lines.push(`  Multi-Factor Notice : ${factorNames.join(" x ")} detected — one-way screening does not test main effects or interactions; verify with Two-Way ANOVA / Mixed Model.`);
+    }
+    if (scope === "pooled" && targetRuns.length > 1 && effectiveUnit === "wells") {
+      lines.push(`  Replicate Notice    : Pooled well-level view (n = wells across ${targetRuns.length} plates). Switch to Plate Means (n = plates) or use a mixed-effects model for plate-level inference.`);
+    }
+
+    const rawSnap = p && p.statsSnapshot;
+    const snapResult = (rawSnap && rawSnap.result) ? rawSnap.result : rawSnap;
+    const snapMetric = (rawSnap && rawSnap.metricLabel) || (p && p.statsMetricLabel) || null;
+    if (snapResult && typeof snapResult === "object") {
+      if (snapMetric) lines.push(`  Screened Metric     : ${snapMetric}`);
+      if (snapResult.valid) {
+        const primRow = (snapResult.summaryRows && snapResult.summaryRows[0]) || null;
+        const ccRow = (snapResult.crossCheckRows && snapResult.crossCheckRows[0]) || null;
+        if (primRow) {
+          lines.push(`  Primary Result      : ${primRow.test} | ${primRow.stat} | p = ${formatPVal(primRow.p)} (${primRow.sig}) | ${primRow.effect}`);
+        }
+        if (ccRow) {
+          lines.push(`  Cross-Check Result  : ${ccRow.test} | ${ccRow.stat} | p = ${formatPVal(ccRow.p)} (${ccRow.sig}) | ${ccRow.effect}`);
+        }
+        if (Array.isArray(snapResult.pairwise) && snapResult.pairwise.length > 0 && snapResult.kind === "multi_group") {
+          lines.push("  Pairwise Comparisons (Holm-Bonferroni adjusted):");
+          for (const pr of snapResult.pairwise) {
+            const statTxt = pr.t !== undefined && pr.t !== null
+              ? `t(${formatStatNum(pr.df, 2)})=${formatStatNum(pr.t, 3)}`
+              : (pr.U !== undefined && pr.U !== null ? `U=${formatStatNum(pr.U, 2)}` : "—");
+            lines.push(`    - ${pr.groupA} vs ${pr.groupB}: ${statTxt}, p_raw=${formatPVal(pr.p)}, p_holm=${formatPVal(pr.pAdj)} (${pr.sig})`);
+          }
+        }
+      } else if (snapResult.reason) {
+        lines.push(`  Screening Status    : ${snapResult.reason}`);
+      }
+    } else {
+      lines.push("  Screened Metric     : (No screening statistics snapshot passed at export time)");
+    }
+
+    lines.push("");
+    lines.push("5. METHODS SUMMARY DRAFT");
     lines.push("----------------------------------------------------------------------");
     const exclTotal = grandAutoExcl + grandManualExcl;
     const normSentence = (pooledMeta && pooledMeta.normalizeToControl)
       ? ` To correct for inter-plate baseline drift across ${targetRuns.length} runs, well-level metrics were normalized per run to percentage of the "${pooledMeta.controlGroupName}" group mean.`
       : "";
+    const unitSentence = effectiveUnit === "plates"
+      ? ` Pooled multi-plate comparisons were aggregated to per-plate group means (n = biological replicate plates).`
+      : "";
+    const postStatsSentence = grandPostStatsExcl > 0
+      ? ` Note: ${grandPostStatsExcl} well exclusion(s) were recorded after viewing screening statistics and are flagged in Section 3.`
+      : "";
+    const testFamilySentence = primaryTestFamily === "nonparametric"
+      ? " Exploratory group screening used non-parametric tests (exact/asymptotic Mann-Whitney U for 2 groups; Kruskal-Wallis with Holm-Bonferroni pairwise Mann-Whitney U for >=3 groups)."
+      : " Exploratory group screening used parametric tests (Welch's t-test for 2 groups; one-way ANOVA with Holm-Bonferroni pairwise Welch's t-tests for >=3 groups).";
     lines.push(
       `  Raw Zantiks MWP behavioral CSV exports were inspected and cleaned using Zanscript-Builder CSV Analyzer v${ANALYZER_VERSION} ` +
       `(${qcTh.label} QC preset: empty well < ${qcTh.emptyDistMm} mm total distance; tracking spike > max(${qcTh.spikeMinMm} mm, median + ${qcTh.spikeMadMult}*MAD) or > ${qcTh.spikeMaxSpeedMmS} mm/s). ` +
       `Across ${targetRuns.length} run(s) (${grandTotal} total wells), ${exclTotal} well(s) were excluded (${grandAutoExcl} auto-flagged, ${grandManualExcl} manual) and ${grandIncluded} well(s) were retained for analysis.` +
-      normSentence
+      normSentence + unitSentence + testFamilySentence + postStatsSentence
     );
     lines.push("");
 
@@ -6707,6 +7391,12 @@
     const { p, analysis, scope, targetRuns, factorNames } = resolveExportPayload(payload);
     const caps = (analysis && analysis.capabilities) || {};
     const pooledMeta = (analysis && analysis.pooledMeta) || null;
+    const primaryTestFamily = (p && p.primaryTestFamily === "nonparametric") ? "nonparametric" : "parametric";
+    const unitOfAnalysis = (p && p.unitOfAnalysis === "plates")
+      ? "plates"
+      : ((analysis && (analysis.nUnit || analysis.unitOfAnalysis)) || (pooledMeta && pooledMeta.nUnit) || "wells");
+    const effectiveUnit = (scope === "pooled" && targetRuns.length > 1 && unitOfAnalysis === "plates") ? "plates" : "wells";
+
     const primaryRun = targetRuns[0] || null;
     const fname = (primaryRun && (primaryRun.filename || (primaryRun.summaryParsed && primaryRun.summaryParsed.filename))) ||
       (p.parsed && p.parsed.filename) || "zantiks_well_summary.csv";
@@ -6729,12 +7419,39 @@
       if (ws.excluded) excludedList.push(JSON.stringify(k));
     }
 
+    const twoWayAnovaBlock = factorNames.length >= 2 ? [
+      "",
+      "",
+      "def run_two_way_anova(df_inc: pd.DataFrame, metric_col: str) -> None:",
+      '    """Two-Way ANOVA (Type II SS) for multi-factor designs via statsmodels."""',
+      "    f1, f2 = FACTOR_NAMES[0], FACTOR_NAMES[1]",
+      "    if f1 not in df_inc.columns or f2 not in df_inc.columns:",
+      "        return",
+      "    sub = df_inc[[metric_col, f1, f2]].dropna().copy()",
+      "    if len(sub) < 4:",
+      "        return",
+      "    print(f'\\n=== Two-Way ANOVA: {metric_col} ~ C({f1}) * C({f2}) ===')",
+      "    try:",
+      "        import statsmodels.api as sm",
+      "        from statsmodels.formula.api import ols",
+      "        formula = f'Q(\"{metric_col}\") ~ C(Q(\"{f1}\")) * C(Q(\"{f2}\"))'",
+      "        model = ols(formula, data=sub).fit()",
+      "        table = sm.stats.anova_lm(model, typ=2)",
+      "        print(table)",
+      "    except ImportError:",
+      "        print('Install statsmodels (`pip install statsmodels`) to run Two-Way ANOVA (main effects + interaction).')"
+    ] : [];
+
+    const twoWayAnovaCall = factorNames.length >= 2
+      ? ["    run_two_way_anova(inc_df, metric_col)"]
+      : [];
+
     return [
       "#!/usr/bin/env python3",
       '"""',
-      `Zantiks MWP Reproducible Analysis & scipy.stats Verification Script`,
+      "Zantiks MWP Reproducible Analysis & scipy.stats Verification Script",
       `Generated by Zanscript-Builder CSV Analyzer v${ANALYZER_VERSION}`,
-      `Scope: ${isPooled ? `Pooled (${targetRuns.length} runs)` : "Single run"} | QC Preset: ${qcTh.label}`,
+      `Scope: ${isPooled ? `Pooled (${targetRuns.length} runs)` : "Single run"} | Unit: ${effectiveUnit} | Primary: ${primaryTestFamily} | QC Preset: ${qcTh.label}`,
       '"""',
       "",
       "from itertools import combinations",
@@ -6747,6 +7464,8 @@
       `TIDY_CSV = ${JSON.stringify(tidyCsvName)}`,
       `PRIMARY_METRIC = ${JSON.stringify(metricCol)}`,
       `PRIMARY_LABEL = ${JSON.stringify(metricLabel)}`,
+      `PRIMARY_TEST_FAMILY = ${JSON.stringify(primaryTestFamily)}`,
+      `UNIT_OF_ANALYSIS = ${JSON.stringify(effectiveUnit)}`,
       `FACTOR_NAMES = ${JSON.stringify(factorNames)}`,
       "",
       "WELL_GROUPS = {",
@@ -6755,52 +7474,106 @@
       `EXCLUDED_WELLS = {${excludedList.join(", ")}}`,
       "",
       "",
+      "def has_ties(values) -> bool:",
+      '    """Return True if an array contains any duplicate finite values."""',
+      "    arr = np.asarray(values, dtype=float)",
+      "    return len(np.unique(arr)) < len(arr)",
+      "",
+      "",
+      "def run_mann_whitney(v1, v2):",
+      '    """Exact-parity Mann-Whitney U matching Zanscript-Builder JS (exact when no ties & n1, n2 <= 25)."""',
+      "    a = np.asarray(v1, dtype=float)",
+      "    b = np.asarray(v2, dtype=float)",
+      "    combined = np.concatenate([a, b])",
+      "    method = 'exact' if (not has_ties(combined) and len(a) <= 25 and len(b) <= 25) else 'asymptotic'",
+      "    res = stats.mannwhitneyu(a, b, alternative='two-sided', use_continuity=True, method=method)",
+      "    u_stat = float(min(res.statistic, len(a) * len(b) - res.statistic))",
+      "    return u_stat, float(res.pvalue), method",
+      "",
+      "",
+      "def run_paired_wilcoxon(x, y):",
+      '    """Exact-parity Wilcoxon signed-rank matching Zanscript-Builder JS (exact when no tied |d| & n_nz <= 50)."""',
+      "    a = np.asarray(x, dtype=float)",
+      "    b = np.asarray(y, dtype=float)",
+      "    diffs = a - b",
+      "    nz = diffs[np.abs(diffs) > 1e-12]",
+      "    if len(nz) == 0:",
+      "        return 0.0, 1.0, 'none'",
+      "    method = 'exact' if (not has_ties(np.abs(nz)) and len(nz) <= 50) else 'approx'",
+      "    res = stats.wilcoxon(a, b, alternative='two-sided', zero_method='wilcox', correction=True, method=method)",
+      "    return float(res.statistic), float(res.pvalue), method",
+      "",
+      "",
       "def holm_bonferroni(p_values):",
       '    """Apply Holm-Bonferroni step-down adjustment to a list of raw p-values."""',
       "    m = len(p_values)",
-      "    order = np.argsort(p_values)",
-      "    adjusted = np.empty(m, dtype=float)",
+      "    safe_ps = [float(p) if (p is not None and np.isfinite(p)) else 1.0 for p in p_values]",
+      "    order = np.argsort(safe_ps)",
+      "    adjusted = [None] * m",
       "    running_max = 0.0",
       "    for rank, idx in enumerate(order):",
-      "        p_step = min(1.0, float(p_values[idx]) * (m - rank))",
+      "        raw = p_values[idx]",
+      "        if raw is None or not np.isfinite(raw):",
+      "            adjusted[idx] = float('nan')",
+      "            continue",
+      "        p_step = min(1.0, float(raw) * (m - rank))",
       "        running_max = max(running_max, p_step)",
       "        adjusted[idx] = running_max",
-      "    return adjusted.tolist()",
+      "    return adjusted",
       "",
       "",
       "def run_screening_stats(df_inc: pd.DataFrame, metric_col: str) -> None:",
-      '    """Verify browser screening statistics using scipy.stats."""',
+      '    """Verify browser screening statistics using scipy.stats with exact parity settings."""',
+      "    work_df = df_inc",
+      "    n_unit_label = 'wells'",
+      "    if UNIT_OF_ANALYSIS == 'plates' and 'run_id' in df_inc.columns and df_inc['run_id'].nunique() > 1:",
+      "        work_df = df_inc.groupby(['run_id', 'group'], sort=False)[metric_col].mean().reset_index()",
+      "        n_unit_label = 'plates'",
+      "",
       "    grouped = [(grp, sub[metric_col].dropna().to_numpy(dtype=float))",
-      "               for grp, sub in df_inc.groupby('group', sort=False)]",
+      "               for grp, sub in work_df.groupby('group', sort=False)]",
       "    grouped = [(g, vals) for g, vals in grouped if len(vals) >= 2]",
       "    if len(grouped) < 2:",
-      "        print('Need at least 2 groups with n >= 2 for statistical testing.')",
+      "        print(f'Need at least 2 groups with n >= 2 {n_unit_label} for statistical testing.')",
       "        return",
       "",
-      "    print(f'\\n=== scipy.stats Verification ({metric_col}) ===')",
+      "    print(f'\\n=== scipy.stats Verification ({metric_col} | unit={n_unit_label} | primary={PRIMARY_TEST_FAMILY}) ===')",
       "    if len(grouped) == 2:",
       "        (g1, v1), (g2, v2) = grouped",
       "        t_res = stats.ttest_ind(v1, v2, equal_var=False)",
-      "        u_res = stats.mannwhitneyu(v1, v2, alternative='two-sided')",
-      "        print(f\"Welch's t-test ({g1} vs {g2}): t = {t_res.statistic:.4f}, p = {t_res.pvalue:.5g}\")",
-      "        print(f\"Mann-Whitney U ({g1} vs {g2}): U = {u_res.statistic:.2f}, p = {u_res.pvalue:.5g}\")",
+      "        u_stat, u_p, u_method = run_mann_whitney(v1, v2)",
+      "        print(f\"Welch's t-test ({g1} vs {g2}): t = {t_res.statistic:.6f}, p = {t_res.pvalue:.10g}\")",
+      "        print(f\"Mann-Whitney U [{u_method}] ({g1} vs {g2}): U = {u_stat:.2f}, p = {u_p:.10g}\")",
       "    else:",
       "        arrays = [vals for _, vals in grouped]",
       "        f_stat, f_p = stats.f_oneway(*arrays)",
       "        h_stat, h_p = stats.kruskal(*arrays)",
-      "        print(f'One-way ANOVA:   F = {f_stat:.4f}, p = {f_p:.5g}')",
-      "        print(f'Kruskal-Wallis:  H = {h_stat:.4f}, p = {h_p:.5g}')",
+      "        print(f'One-way ANOVA:   F = {f_stat:.6f}, p = {f_p:.10g}')",
+      "        print(f'Kruskal-Wallis:  H = {h_stat:.6f}, p = {h_p:.10g}')",
       "        pairs = list(combinations(grouped, 2))",
-      "        raw_ps = []",
-      "        pair_rows = []",
-      "        for (g1, v1), (g2, v2) in pairs:",
-      "            res = stats.ttest_ind(v1, v2, equal_var=False)",
-      "            raw_ps.append(float(res.pvalue))",
-      "            pair_rows.append((g1, g2, float(res.statistic), float(res.pvalue)))",
-      "        adj_ps = holm_bonferroni(raw_ps)",
-      "        print('Pairwise Welch t-tests (Holm-Bonferroni adjusted):')",
-      "        for (g1, g2, t_val, p_raw), p_adj in zip(pair_rows, adj_ps):",
-      "            print(f'  {g1} vs {g2}: t = {t_val:.4f}, p_raw = {p_raw:.5g}, p_holm = {p_adj:.5g}')",
+      "        if PRIMARY_TEST_FAMILY == 'nonparametric':",
+      "            raw_ps = []",
+      "            pair_rows = []",
+      "            for (g1, v1), (g2, v2) in pairs:",
+      "                u_stat, u_p, u_method = run_mann_whitney(v1, v2)",
+      "                raw_ps.append(u_p)",
+      "                pair_rows.append((g1, g2, u_stat, u_p, u_method))",
+      "            adj_ps = holm_bonferroni(raw_ps)",
+      "            print('Pairwise Mann-Whitney U (Holm-Bonferroni adjusted):')",
+      "            for (g1, g2, u_val, p_raw, u_method), p_adj in zip(pair_rows, adj_ps):",
+      "                print(f'  {g1} vs {g2} [{u_method}]: U = {u_val:.2f}, p_raw = {p_raw:.10g}, p_holm = {p_adj:.10g}')",
+      "        else:",
+      "            raw_ps = []",
+      "            pair_rows = []",
+      "            for (g1, v1), (g2, v2) in pairs:",
+      "                res = stats.ttest_ind(v1, v2, equal_var=False)",
+      "                raw_ps.append(float(res.pvalue))",
+      "                pair_rows.append((g1, g2, float(res.statistic), float(res.pvalue)))",
+      "            adj_ps = holm_bonferroni(raw_ps)",
+      "            print('Pairwise Welch t-tests (Holm-Bonferroni adjusted):')",
+      "            for (g1, g2, t_val, p_raw), p_adj in zip(pair_rows, adj_ps):",
+      "                print(f'  {g1} vs {g2}: t = {t_val:.6f}, p_raw = {p_raw:.10g}, p_holm = {p_adj:.10g}')",
+      ...twoWayAnovaBlock,
       "",
       "",
       "def main() -> None:",
@@ -6824,6 +7597,7 @@
       "        print(inc_df.groupby(FACTOR_NAMES)[metric_col].agg(['count', 'mean', 'sem']))",
       "",
       "    run_screening_stats(inc_df, metric_col)",
+      ...twoWayAnovaCall,
       "",
       "    # Optional: load tidy long CSV for time-series plotting",
       "    try:",

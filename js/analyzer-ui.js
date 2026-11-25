@@ -46,12 +46,16 @@
     runs: [],                  // Array<RunRecord>
     activeRunId: null,         // internal run.id
     scope: "active",           // "active" | "pooled"
+    unitOfAnalysis: "wells",   // "wells" | "plates"
     normalizeToControl: false,
     controlGroupName: "",
     qcThresholds: null,        // { presetId, emptyDistMm, spikeMaxSpeedMmS, spikeMinMm, spikeMadMult }
     trimWindow: { trimStartSec: 0, trimEndSec: null },
     windowAuc: { startSec: null, endSec: null },
     xyFreezeSpeedMmS: 0.5,
+    primaryTestFamily: "parametric", // "parametric" | "nonparametric"
+    hasViewedStats: false,
+    lastStatsSnapshot: null,
 
     // Pending context/companions attached before any Summary CSV is dropped
     pendingContext: null,
@@ -191,11 +195,47 @@
     return n.toFixed(d);
   }
 
+  function fmtStat(val, digits) {
+    const core = getCore();
+    if (core && core.stats && typeof core.stats.formatStatNum === "function") {
+      return core.stats.formatStatNum(val, digits !== undefined ? digits : 2);
+    }
+    if (val === null || val === undefined || !Number.isFinite(Number(val))) return "—";
+    return Number(val).toFixed(digits !== undefined ? digits : 2);
+  }
+
   function fmtPVal(p) {
-    if (!Number.isFinite(p)) return "—";
-    if (p < 0.0001) return "< 0.0001";
-    if (p < 0.001) return p.toFixed(4);
-    return p.toFixed(3);
+    const core = getCore();
+    if (core && core.stats && typeof core.stats.formatPVal === "function") {
+      return core.stats.formatPVal(p);
+    }
+    if (p === null || p === undefined || !Number.isFinite(Number(p))) return "—";
+    const n = Number(p);
+    if (n < 0.0001) return "< 0.0001";
+    if (n < 0.001) return n.toFixed(4);
+    return n.toFixed(3);
+  }
+
+  function fmtNUnit(n, analysis) {
+    const count = Number.isFinite(Number(n)) ? Number(n) : 0;
+    const isPlates = Boolean(analysis && analysis.nUnit === "plates");
+    const unit = isPlates ? (count === 1 ? "plate" : "plates") : (count === 1 ? "well" : "wells");
+    return `${count} ${unit}`;
+  }
+
+  function resetWorkspaceControlsDom() {
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    const rmInvalid = (id) => { const el = document.getElementById(id); if (el) el.classList.remove("is-invalid"); };
+    setVal("tsSmoothSel", "1");
+    setVal("tsWinStartInput", "");
+    setVal("tsWinEndInput", "");
+    setVal("qcTrimStartInput", "0");
+    setVal("qcTrimEndInput", "");
+    setVal("xyFreezeInput", "0.5");
+    setVal("compTestFamilySel", ui.primaryTestFamily || "parametric");
+    const normChk = document.getElementById("normControlChk");
+    if (normChk) normChk.checked = false;
+    ["tsWinStartInput", "tsWinEndInput", "qcTrimStartInput", "qcTrimEndInput"].forEach(rmInvalid);
   }
 
   function fmtDurationNice(sec) {
@@ -583,6 +623,12 @@
     } catch (_) {}
 
     if (changed && !(opts && opts.initial)) window.scrollTo(0, 0);
+
+    if (id === "plots" && ui.analysis && ui.activeChartTab === "comparison") {
+      renderComparisonChart();
+    } else if (id === "export" && ui.analysis) {
+      updateWellTableScrollHint();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -745,6 +791,10 @@
     ui.trimWindow = { trimStartSec: 0, trimEndSec: null };
     ui.windowAuc = { startSec: null, endSec: null };
     ui.normalizeToControl = false;
+    ui.unitOfAnalysis = "wells";
+    ui.xyFreezeSpeedMmS = 0.5;
+    ui.hasViewedStats = false;
+    ui.lastStatsSnapshot = null;
     ui.controlGroupName = demo.defaultControlGroup || "";
 
     if (demo.isMultiRun && Array.isArray(demo.runs) && demo.runs.length > 0) {
@@ -807,12 +857,9 @@
 
     const sel = document.getElementById("demoPresetSelect");
     if (sel) sel.value = presetId;
-    const winS = document.getElementById("tsWinStartInput");
-    const winE = document.getElementById("tsWinEndInput");
-    if (winS) winS.value = "";
-    if (winE) winE.value = "";
+    resetWorkspaceControlsDom();
 
-    recomputeAndRender();
+    recomputeAndRender({ onDatasetLoad: true });
     toast(`Loaded demo: ${demo.name || presetId}`);
   }
 
@@ -839,15 +886,20 @@
     toast(`Attached Builder config: ${ctx.plateName || ctx.plateId} · ${ctx.stimName || ctx.stimId}`);
   }
 
-  function clearAllData() {
+  function clearAllData(opts) {
     const core = getCore();
     ui.runs = [];
     ui.activeRunId = null;
     ui.scope = "active";
+    ui.unitOfAnalysis = "wells";
     ui.normalizeToControl = false;
     ui.controlGroupName = "";
     ui.trimWindow = { trimStartSec: 0, trimEndSec: null };
     ui.windowAuc = { startSec: null, endSec: null };
+    ui.xyFreezeSpeedMmS = 0.5;
+    ui.primaryTestFamily = "parametric";
+    ui.hasViewedStats = false;
+    ui.lastStatsSnapshot = null;
     ui.qcThresholds = core ? core.normalizeQcThresholds("default", null) : null;
     ui.pendingContext = null;
     ui.pendingContextFilename = "";
@@ -857,6 +909,7 @@
     ui.hiddenGroups = new Set();
     ui.selectedWell = null;
     ui.analysis = null;
+    ui.activeChartTab = "timeseries";
     ui.compView = "";
     ui.brushTool = "group";
     ui.activeFactorLayer = PRIMARY_LAYER;
@@ -869,16 +922,11 @@
 
     const sel = document.getElementById("demoPresetSelect");
     if (sel) sel.value = "";
-    const smoothSel = document.getElementById("tsSmoothSel");
-    if (smoothSel) smoothSel.value = "1";
-    const winS = document.getElementById("tsWinStartInput");
-    const winE = document.getElementById("tsWinEndInput");
-    if (winS) winS.value = "";
-    if (winE) winE.value = "";
+    resetWorkspaceControlsDom();
 
-    goToPage("data");
+    if (!(opts && opts.stayOnPage)) goToPage("data");
     renderAll();
-    toast("Cleared analyzer workspace");
+    if (!(opts && opts.silent)) toast("Cleared analyzer workspace");
   }
 
   function matchCompanionToRun(filename) {
@@ -975,6 +1023,15 @@
       if (shouldReplace) {
         ui.runs = [];
         ui.activeDemoId = "";
+        ui.trimWindow = { trimStartSec: 0, trimEndSec: null };
+        ui.windowAuc = { startSec: null, endSec: null };
+        ui.normalizeToControl = false;
+        ui.controlGroupName = "";
+        ui.unitOfAnalysis = "wells";
+        ui.xyFreezeSpeedMmS = 0.5;
+        ui.hasViewedStats = false;
+        ui.lastStatsSnapshot = null;
+        resetWorkspaceControlsDom();
         const demoSel = document.getElementById("demoPresetSelect");
         if (demoSel) demoSel.value = "";
       } else {
@@ -1058,7 +1115,7 @@
 
     if (loadedAny) {
       syncLegacyStateAliases();
-      if (ui.runs.length > 0) recomputeAndRender();
+      if (ui.runs.length > 0) recomputeAndRender({ onDatasetLoad: summaries.length > 0 });
       else renderAll();
       if (msgs.length) toast(`Loaded: ${msgs.join(" · ")}`);
     }
@@ -1068,9 +1125,15 @@
     if (!obj || typeof obj !== "object") return;
     const run = getActiveRun();
     if (!run) return;
+    const validWells = (run.summaryParsed && Array.isArray(run.summaryParsed.wells))
+      ? new Set(run.summaryParsed.wells)
+      : null;
+    const keepWell = (w) => !validWells || validWells.has(w);
+
     const rawGroups = obj.groups && typeof obj.groups === "object" ? obj.groups : {};
     const nextGroups = {};
     for (const [w, g] of Object.entries(rawGroups)) {
+      if (!keepWell(w)) continue;
       const clean = String(g || "").trim();
       if (clean && clean !== UNASSIGNED && clean !== ALL_WELLS) nextGroups[w] = clean;
     }
@@ -1083,18 +1146,25 @@
       run.factorNames = obj.factorNames.map(s => String(s).trim()).filter(Boolean);
       run.wellFactors = {};
       for (const fn of run.factorNames) {
-        run.wellFactors[fn] = (obj.wellFactors[fn] && typeof obj.wellFactors[fn] === "object")
-          ? { ...obj.wellFactors[fn] }
-          : {};
+        const srcMap = (obj.wellFactors[fn] && typeof obj.wellFactors[fn] === "object") ? obj.wellFactors[fn] : {};
+        const filtered = {};
+        for (const [w, v] of Object.entries(srcMap)) {
+          if (keepWell(w)) filtered[w] = v;
+        }
+        run.wellFactors[fn] = filtered;
       }
       run.factorLevelOrder = buildFactorLevelOrder(run.factorNames, run.wellFactors);
     }
 
     if (Array.isArray(obj.excludedWells)) {
-      run.excludedWells = new Set(obj.excludedWells.map(String));
+      run.excludedWells = new Set(obj.excludedWells.map(String).filter(keepWell));
     }
     if (obj.excludeMeta && typeof obj.excludeMeta === "object") {
-      run.excludeMeta = { ...obj.excludeMeta };
+      const filteredMeta = {};
+      for (const [w, m] of Object.entries(obj.excludeMeta)) {
+        if (keepWell(w)) filteredMeta[w] = m;
+      }
+      run.excludeMeta = filteredMeta;
     }
     ui.activeFactorLayer = PRIMARY_LAYER;
     ui.activeBrushGroup = run.groupOrder.length ? run.groupOrder[0] : UNASSIGNED;
@@ -1128,6 +1198,15 @@
   // ---------------------------------------------------------------------------
   // 5. Core Analysis Recompute & Master Render
   // ---------------------------------------------------------------------------
+  function getRawWindowAucOption() {
+    const s = ui.windowAuc && ui.windowAuc.startSec;
+    const e = ui.windowAuc && ui.windowAuc.endSec;
+    if (Number.isFinite(s) && Number.isFinite(e)) {
+      return { startSec: s, endSec: e };
+    }
+    return null;
+  }
+
   function getActiveWindowAucConfig() {
     const s = ui.windowAuc && ui.windowAuc.startSec;
     const e = ui.windowAuc && ui.windowAuc.endSec;
@@ -1148,10 +1227,34 @@
     return out;
   }
 
+  function computeCurrentStatsSnapshot() {
+    if (ui.lastStatsSnapshot && ui.lastStatsSnapshot.result) return ui.lastStatsSnapshot;
+    const core = getCore();
+    const a = ui.analysis;
+    if (!core || !core.stats || !a) return null;
+    const viewId = ui.compView || (a.comparisonViews && a.comparisonViews[0] && a.comparisonViews[0].id) || "phase_totals";
+    const ds = buildComparisonDataset(viewId);
+    if (!ds || !ds.categories.length || ds.groups.length < 2) return null;
+    const cat = ds.categories[0];
+    const gData = cat.bars.map(b => ({ group: b.group, values: b.points.map(p => p.value) }));
+    const res = core.stats.screenComparisonGroups(gData, {
+      primaryTestFamily: ui.primaryTestFamily,
+      nUnit: a.nUnit || "wells",
+      runCount: a.runCount || 1,
+      factorNames: a.factorNames || []
+    });
+    const vEntry = (a.comparisonViews || []).find(v => v.id === viewId);
+    const metricLabel = vEntry ? `${vEntry.label}${ds.categories.length > 1 ? ` — ${cat.label}` : ""}` : cat.label;
+    return { metricLabel, result: res };
+  }
+
   function buildExportPayload() {
     return {
       analysis: ui.analysis,
       scope: ui.runs.length > 1 ? ui.scope : "active",
+      unitOfAnalysis: ui.runs.length > 1 && ui.scope === "pooled" ? ui.unitOfAnalysis : "wells",
+      primaryTestFamily: ui.primaryTestFamily,
+      statsSnapshot: computeCurrentStatsSnapshot(),
       activeRunId: ui.activeRunId,
       runs: ui.runs,
       parsed: ui.summaryParsed,
@@ -1170,40 +1273,49 @@
     };
   }
 
-  function recomputeAndRender() {
+  function recomputeAndRender(opts) {
     const core = getCore();
     syncLegacyStateAliases();
 
     if (!core || ui.runs.length === 0) {
       ui.analysis = null;
+      ui.lastStatsSnapshot = null;
       renderAll();
       return;
     }
 
     const effectiveScope = ui.runs.length > 1 ? ui.scope : "active";
+    const effectiveUnit = (ui.runs.length > 1 && effectiveScope === "pooled") ? ui.unitOfAnalysis : "wells";
     if (!ui.qcThresholds) {
       ui.qcThresholds = core.normalizeQcThresholds("default", ui.context);
     }
 
     ui.analysis = core.analyzePooledRuns(ui.runs, {
       scope: effectiveScope,
+      unitOfAnalysis: effectiveUnit,
       activeRunId: ui.activeRunId,
       normalizeToControl: ui.normalizeToControl,
       controlGroupName: ui.controlGroupName || undefined,
       qcThresholds: ui.qcThresholds,
       trimWindow: ui.trimWindow,
-      windowAuc: getActiveWindowAucConfig(),
+      windowAuc: getRawWindowAucOption(),
       tsMetric: ui.tsMetric,
       tsBinGroupSize: ui.tsBinGroupSize,
       xyFreezeSpeedMmS: ui.xyFreezeSpeedMmS,
       groupOrder: collectUnionGroupOrder()
     });
+    ui.lastStatsSnapshot = null;
 
     if (ui.analysis && ui.analysis.activeMetric) {
       ui.tsMetric = ui.analysis.activeMetric;
     }
     if (ui.analysis && ui.analysis.pooledMeta && ui.analysis.pooledMeta.controlGroupName && !ui.controlGroupName) {
       ui.controlGroupName = ui.analysis.pooledMeta.controlGroupName;
+    }
+
+    if (opts && opts.onDatasetLoad && ui.analysis && ui.analysis.capabilities) {
+      if (ui.activeChartTab === "spatial" && !ui.analysis.capabilities.hasXy) ui.activeChartTab = "timeseries";
+      if (ui.activeChartTab === "zchange" && !ui.analysis.capabilities.hasZchange) ui.activeChartTab = "timeseries";
     }
 
     // Validate trace view (if no periStimulus, fall back to full)
@@ -1252,7 +1364,10 @@
     const modeBadge = document.getElementById("analyzerModeBadge");
     if (modeBadge) {
       if (hasSummary && ui.runs.length > 1) {
-        modeBadge.textContent = `${ui.runs.length} Runs · ${ui.analysis.layout.name || "Pool"}`;
+        const pm = ui.analysis.pooledMeta || {};
+        modeBadge.textContent = pm.hasMixedLayouts && pm.layoutSummary
+          ? pm.layoutSummary
+          : `${ui.runs.length} Runs · ${ui.analysis.layout.name || "Pool"}`;
       } else if (hasSummary && ui.analysis.layout) {
         modeBadge.textContent = ui.analysis.layout.name || `${ui.summaryParsed.wells.length} Wells`;
       } else if (ui.context && ui.context.plateName) {
@@ -1456,9 +1571,14 @@
       const first = a.layout.wells[0] || "";
       const last = a.layout.wells[a.layout.wells.length - 1] || "";
       const range = a.layout.wells.length > 1 ? `${first}–${last}` : first;
+      const pm = a.pooledMeta || {};
+      const mixedLayouts = Boolean(ui.runs.length > 1 && pm.hasMixedLayouts);
+      const layoutLabel = mixedLayouts
+        ? (pm.layoutSummary || `${ui.runs.length} runs (mixed layouts)`)
+        : (ui.runs.length > 1 ? `${ui.runs.length} × ${a.layout.name || "Plate"}` : (a.layout.name || "Plate"));
       const runLbl = ui.runs.length > 1 ? `${ui.runs.length} runs pooled · ` : "";
 
-      setText("loadedOverviewHint", `${runLbl}${a.layout.name || "Plate"} · ${k.rowCount} rows · ${fmtDurationNice(k.durationSec)}`);
+      setText("loadedOverviewHint", `${runLbl}${mixedLayouts ? (pm.layoutSummary || "Mixed layouts") : (a.layout.name || "Plate")} · ${k.rowCount} rows · ${fmtDurationNice(k.durationSec)}`);
       if (ovGrid) {
         ovGrid.style.display = "";
         const phaseTxt = a.phases && a.phases.length ? a.phases.slice(0, 3).join(", ") + (a.phases.length > 3 ? "…" : "") : "Single phase";
@@ -1469,8 +1589,11 @@
         if (caps.hasHabituation) readyTags.push("Habit");
         if (caps.hasSab) readyTags.push("SAB %");
         if (caps.hasXy) readyTags.push("Spatial");
+        const wellSub = mixedLayouts
+          ? `${k.totalWells} total wells across mixed plates`
+          : `${k.totalWells} total wells (${range})`;
         ovGrid.innerHTML =
-          `<div class="az-ov-cell"><div class="az-ov-label">${ui.runs.length > 1 ? "Pooled Plates" : "Plate / Maze"}</div><div class="az-ov-val">${ui.runs.length > 1 ? `${ui.runs.length} × ${esc(a.layout.name || "Plate")}` : esc(a.layout.name || "Plate")}</div><div class="az-ov-sub">${k.totalWells} total wells (${esc(range)})</div></div>` +
+          `<div class="az-ov-cell"><div class="az-ov-label">${ui.runs.length > 1 ? "Pooled Plates" : "Plate / Maze"}</div><div class="az-ov-val">${esc(layoutLabel)}</div><div class="az-ov-sub">${esc(wellSub)}</div></div>` +
           `<div class="az-ov-cell"><div class="az-ov-label">Rows &amp; Duration</div><div class="az-ov-val">${k.rowCount} rows · ${esc(fmtDurationNice(k.durationSec))}</div><div class="az-ov-sub">${fmtNum(k.binDurationSec, k.binDurationSec >= 10 ? 0 : 1)}s bins</div></div>` +
           `<div class="az-ov-cell"><div class="az-ov-label">Detected Metrics</div><div class="az-ov-val">${esc(metricTags.join(", ") || "Summary")}</div><div class="az-ov-sub">${readyTags.length ? readyTags.join(" · ") + " ready" : "Standard tracking"}</div></div>` +
           `<div class="az-ov-cell"><div class="az-ov-label">Phases &amp; Temp</div><div class="az-ov-val">${esc(phaseTxt)}</div><div class="az-ov-sub">${esc(tempTxt)}</div></div>`;
@@ -1496,17 +1619,20 @@
   function removeRun(runInternalId) {
     ui.runs = ui.runs.filter(r => r.id !== runInternalId);
     if (ui.runs.length === 0) {
-      ui.activeRunId = null;
-      ui.activeDemoId = "";
+      clearAllData({ stayOnPage: true, silent: true });
+      return;
+    }
+    if (!ui.runs.some(r => r.id === ui.activeRunId)) ui.activeRunId = ui.runs[0].id;
+    if (ui.runs.length <= 1) {
       ui.scope = "active";
-      const dsel = document.getElementById("demoPresetSelect");
-      if (dsel) dsel.value = "";
-    } else {
-      if (!ui.runs.some(r => r.id === ui.activeRunId)) ui.activeRunId = ui.runs[0].id;
-      if (ui.runs.length === 1) ui.scope = "active";
+      ui.unitOfAnalysis = "wells";
+      ui.normalizeToControl = false;
+      if (ui.compView === "normalized_ctrl") ui.compView = "";
+      const normChk = document.getElementById("normControlChk");
+      if (normChk) normChk.checked = false;
     }
     syncLegacyStateAliases();
-    recomputeAndRender();
+    recomputeAndRender({ onDatasetLoad: true });
   }
 
   function renderDatasetSummarySidebar() {
@@ -1730,7 +1856,17 @@
     syncNum("qcTrimEndInput", ui.trimWindow.trimEndSec != null ? ui.trimWindow.trimEndSec : "");
 
     const trim = a.trimInfo;
-    if (trim && trim.active) {
+    const trimInvalid = Boolean(trim && trim.invalid);
+    const tsInp = document.getElementById("qcTrimStartInput");
+    const teInp = document.getElementById("qcTrimEndInput");
+    if (tsInp) tsInp.classList.toggle("is-invalid", trimInvalid);
+    if (teInp) teInp.classList.toggle("is-invalid", trimInvalid);
+
+    const hintEl = document.getElementById("qcThresholdHint");
+    if (hintEl) hintEl.classList.toggle("az-inline-warn", trimInvalid);
+    if (trimInvalid) {
+      setText("qcThresholdHint", trim.warning || "Invalid trim window: start must be less than end (showing full assay).");
+    } else if (trim && trim.active) {
       const sLbl = trim.trimStartSec != null ? `${trim.trimStartSec}s` : "0s";
       const eLbl = trim.trimEndSec != null ? `${trim.trimEndSec}s` : "end";
       setText("qcThresholdHint", `Trim active (${sLbl} → ${eLbl}) · keeping ${trim.keptRows}/${trim.originalRows} rows`);
@@ -2241,8 +2377,19 @@
   function setWellExcluded(run, wellId, isExcluded, source, reason) {
     if (!run || !wellId) return;
     if (isExcluded) {
+      const wasExcluded = run.excludedWells.has(wellId);
+      const prevMeta = run.excludeMeta && run.excludeMeta[wellId];
+      const src = source || "manual";
+      const isManualAfterStats = src === "manual" && ui.hasViewedStats;
       run.excludedWells.add(wellId);
-      run.excludeMeta[wellId] = { source: source || "manual", reason: reason || "manual_exclude" };
+      run.excludeMeta[wellId] = {
+        source: src,
+        reason: reason || "manual_exclude",
+        afterStatsViewed: isManualAfterStats || Boolean(wasExcluded && prevMeta && prevMeta.afterStatsViewed),
+        afterStatsAt: isManualAfterStats
+          ? new Date().toISOString()
+          : (wasExcluded && prevMeta && prevMeta.afterStatsAt ? prevMeta.afterStatsAt : null)
+      };
     } else {
       run.excludedWells.delete(wellId);
       delete run.excludeMeta[wellId];
@@ -2460,13 +2607,14 @@
       const gCol = getGroupColor(w.group);
       const reasonCode = w.qcReason || (w.qc && w.qc.qcReason) || "ok";
       const srcTag = w.excludeSource ? ` (${w.excludeSource})` : "";
+      const postBadge = w.afterStatsViewed ? `<span class="az-poststats-badge" title="Manually excluded after viewing screening stats">After stats</span>` : "";
       return (
         `<tr class="${w.excluded ? "is-excluded" : ""}">` +
           `<td><input type="checkbox" class="az-chk" data-qc-chk="${esc(w.well)}" aria-label="Exclude ${esc(w.well)}"${w.excluded ? " checked" : ""}></td>` +
           `<td class="az-well-id-cell">${esc(w.well)}</td>` +
           `<td><span class="az-group-tag" style="background:${hexToRgba(gCol, 0.14)};color:${gCol};"><span class="az-swatch-dot" style="background:${gCol};"></span>${esc(w.group)}</span></td>` +
           `<td>${buildQcPillsHtml(w)}</td>` +
-          `<td><span class="az-reason-code">${esc(reasonCode)}${esc(srcTag)}</span></td>` +
+          `<td><span class="az-reason-code">${esc(reasonCode)}${esc(srcTag)}</span>${postBadge}</td>` +
           `<td class="num">${fmtNum(w.totalDist, 1)} mm</td>` +
           `<td class="num">${fmtNum(w.qc && w.qc.maxBinDist, 1)} mm</td>` +
           `<td class="num">${(w.qc && w.qc.spikeCount) || 0}</td>` +
@@ -2514,6 +2662,13 @@
       activeBtn.textContent = `Active: ${run ? run.runId : "Run"}`;
       activeBtn.classList.toggle("active", ui.scope !== "pooled");
     }
+
+    const unitWrap = document.getElementById("plotUnitToggleWrap");
+    const unitWellsBtn = document.getElementById("unitWellsBtn");
+    const unitPlatesBtn = document.getElementById("unitPlatesBtn");
+    if (unitWrap) unitWrap.style.display = (multi && ui.scope === "pooled") ? "" : "none";
+    if (unitWellsBtn) unitWellsBtn.classList.toggle("active", ui.unitOfAnalysis !== "plates");
+    if (unitPlatesBtn) unitPlatesBtn.classList.toggle("active", ui.unitOfAnalysis === "plates");
 
     const normChk = document.getElementById("normControlChk");
     if (normChk) normChk.checked = ui.normalizeToControl;
@@ -2591,11 +2746,21 @@
     const winWrap = document.getElementById("tsWindowAucWrap");
     if (winWrap) winWrap.style.display = ui.tsTraceView === "full" ? "" : "none";
     const winCfg = getActiveWindowAucConfig();
+    const winWarn = a.windowAucWarning || "";
+    const winS = document.getElementById("tsWinStartInput");
+    const winE = document.getElementById("tsWinEndInput");
+    if (winS) winS.classList.toggle("is-invalid", Boolean(winWarn));
+    if (winE) winE.classList.toggle("is-invalid", Boolean(winWarn));
     const winClear = document.getElementById("tsWinClearBtn");
     const winReadout = document.getElementById("tsWinAucReadout");
-    if (winClear) winClear.style.display = winCfg ? "" : "none";
+    if (winClear) winClear.style.display = (winCfg || winWarn) ? "" : "none";
     if (winReadout) {
-      winReadout.textContent = winCfg ? `Shaded ${winCfg.startSec}–${winCfg.endSec}s (see Phase & Group → Window AUC)` : "";
+      winReadout.classList.toggle("az-inline-warn", Boolean(winWarn));
+      if (winWarn) {
+        winReadout.textContent = winWarn;
+      } else {
+        winReadout.textContent = winCfg ? `Shaded ${winCfg.startSec}–${winCfg.endSec}s (see Phase & Group → Window AUC)` : "";
+      }
     }
 
     const compSel = document.getElementById("compViewSel");
@@ -2609,6 +2774,10 @@
 
     const showStatsChk = document.getElementById("compShowStatsChk");
     if (showStatsChk) showStatsChk.checked = ui.compShowStats;
+    const tfWrap = document.getElementById("compTestFamilyWrap");
+    const tfSel = document.getElementById("compTestFamilySel");
+    if (tfWrap) tfWrap.style.display = ui.compShowStats ? "" : "none";
+    if (tfSel) tfSel.value = ui.primaryTestFamily || "parametric";
 
     const xyInp = document.getElementById("xyFreezeInput");
     if (xyInp && document.activeElement !== xyInp) xyInp.value = String(ui.xyFreezeSpeedMmS);
@@ -2653,7 +2822,7 @@
         `<button type="button" class="az-legend-item${muted ? " is-muted" : ""}" data-legend-group="${esc(name)}" title="Click to toggle visibility">` +
           `<span class="az-legend-swatch" style="background:${col};"></span>` +
           `<span>${esc(name)}</span>` +
-          `<span class="az-legend-n">(n=${g.n})</span>` +
+          `<span class="az-legend-n">(n=${esc(fmtNUnit(g.n, ui.analysis))})</span>` +
         `</button>`
       );
     }).join("");
@@ -3071,7 +3240,10 @@
     const a = ui.analysis;
     if (!a) return null;
     const activeGroups = (a.groups || []).filter(g => !ui.hiddenGroups.has(g.group) && g.n > 0);
-    const activeWells = (a.wells || []).filter(w => !w.excluded && !ui.hiddenGroups.has(w.group));
+    const usePlates = a.nUnit === "plates" && Array.isArray(a.plateSummaryRows) && a.plateSummaryRows.length > 0;
+    const activeWells = usePlates
+      ? a.plateSummaryRows.filter(r => !ui.hiddenGroups.has(r.group))
+      : (a.wells || []).filter(w => !w.excluded && !ui.hiddenGroups.has(w.group));
 
     const statOf = (vals) => {
       const clean = vals.filter(v => Number.isFinite(v));
@@ -3090,7 +3262,9 @@
             if (w.group !== g.group) continue;
             const v = c.getWellVal(w);
             if (Number.isFinite(v)) {
-              const ptLabel = w.runId && ui.runs.length > 1 ? `${w.runId}:${w.well}` : w.well;
+              const ptLabel = usePlates
+                ? `${w.runId} mean (${w.nWells}w)`
+                : (w.runId && ui.runs.length > 1 ? `${w.runId}:${w.well}` : w.well);
               pts.push({ well: w.well, label: ptLabel, value: v });
             }
           }
@@ -3234,11 +3408,28 @@
 
     // Run screening statistics per category when enabled
     const catStats = [];
+    const statsOpts = {
+      primaryTestFamily: ui.primaryTestFamily || "parametric",
+      nUnit: a.nUnit || "wells",
+      runCount: a.runCount || 1,
+      factorNames: a.factorNames || []
+    };
     if (ui.compShowStats && core && core.stats && ds && ds.categories.length && ds.groups.length >= 2) {
       for (const cat of ds.categories) {
         const gData = cat.bars.map(b => ({ group: b.group, values: b.points.map(p => p.value) }));
-        const res = core.stats.screenComparisonGroups(gData);
+        const res = core.stats.screenComparisonGroups(gData, statsOpts);
         catStats.push({ catLabel: cat.label, res });
+      }
+      const firstValid = catStats.find(c => c.res && c.res.valid);
+      if (firstValid) {
+        const vEntry = (a.comparisonViews || []).find(v => v.id === ui.compView);
+        const metricLabel = vEntry
+          ? `${vEntry.label}${ds.categories.length > 1 ? ` — ${firstValid.catLabel}` : ""}`
+          : firstValid.catLabel;
+        ui.lastStatsSnapshot = { metricLabel, result: firstValid.res };
+        if (ui.currentPage === "plots" && ui.activeChartTab === "comparison") {
+          ui.hasViewedStats = true;
+        }
       }
     }
 
@@ -3363,7 +3554,7 @@
         }
         const lbl = bar.group.length > 18 ? bar.group.slice(0, 17) + "…" : bar.group;
         out += `<text x="${cx.toFixed(1)}" y="${m.top + ph + 18}" font-size="11.5" font-weight="600" fill="#1f2328" text-anchor="middle">${esc(lbl)}</text>`;
-        out += `<text x="${cx.toFixed(1)}" y="${m.top + ph + 32}" font-size="10" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">n=${bar.n}</text>`;
+        out += `<text x="${cx.toFixed(1)}" y="${m.top + ph + 32}" font-size="10" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">n=${esc(fmtNUnit(bar.n, a))}</text>`;
       });
     } else {
       const innerPad = Math.min(20, catSlotW * 0.14);
@@ -3446,36 +3637,37 @@
     if (summaryStrip) {
       const cards = ds.groups.map(g => {
         const col = getGroupColor(g.group);
-        let mainVal = "—", subTxt = `n = ${g.n} active`;
+        const nTag = `n=${fmtNUnit(g.n, a)}${a.nUnit === "plates" && g.wellLevelN ? ` (${g.wellLevelN}w)` : ""}`;
+        let mainVal = "—", subTxt = `${nTag} active`;
         if (ui.compView === "ppi" && g.startle && g.startle.ppiPct && Number.isFinite(g.startle.ppiPct.mean)) {
           mainVal = `${fmtNum(g.startle.ppiPct.mean, 1)} ± ${fmtNum(g.startle.ppiPct.sem, 1)}%`;
-          subTxt = `n=${g.n} · Pulse ${g.startle.pulseAloneMean ? fmtNum(g.startle.pulseAloneMean.mean, 1) : "—"} vs PPI ${g.startle.ppiTrialMean ? fmtNum(g.startle.ppiTrialMean.mean, 1) : "—"} mm`;
+          subTxt = `${nTag} · Pulse ${g.startle.pulseAloneMean ? fmtNum(g.startle.pulseAloneMean.mean, 1) : "—"} vs PPI ${g.startle.ppiTrialMean ? fmtNum(g.startle.ppiTrialMean.mean, 1) : "—"} mm`;
         } else if (ui.compView === "habituation" && g.habituation && g.habituation.habituationIndex && Number.isFinite(g.habituation.habituationIndex.mean)) {
           mainVal = `${fmtNum(g.habituation.habituationIndex.mean, 1)} ± ${fmtNum(g.habituation.habituationIndex.sem, 1)}%`;
-          subTxt = `n=${g.n} · Habituation index`;
+          subTxt = `${nTag} · Habituation index`;
         } else if (ui.compView === "window_auc" && g.windowAuc && g.windowAuc.auc && Number.isFinite(g.windowAuc.auc.mean)) {
           mainVal = `${fmtNum(g.windowAuc.auc.mean, 1)} ± ${fmtNum(g.windowAuc.auc.sem, 1)} mm·s`;
-          subTxt = `n=${g.n} · Window mean ${g.windowAuc.mean ? fmtNum(g.windowAuc.mean.mean, 2) : "—"} mm/bin`;
+          subTxt = `${nTag} · Window mean ${g.windowAuc.mean ? fmtNum(g.windowAuc.mean.mean, 2) : "—"} mm/bin`;
         } else if (ui.compView === "normalized_ctrl" && g.normalized && g.normalized.totalDistPctCtrl && Number.isFinite(g.normalized.totalDistPctCtrl.mean)) {
           mainVal = `${fmtNum(g.normalized.totalDistPctCtrl.mean, 1)} ± ${fmtNum(g.normalized.totalDistPctCtrl.sem, 1)}%`;
-          subTxt = `n=${g.n} · % of ${g.normalized.controlGroup || "Control"}`;
+          subTxt = `${nTag} · % of ${g.normalized.controlGroup || "Control"}`;
         } else if (ui.compView === "xy_spatial" && g.xy && g.xy.immobilityPct && Number.isFinite(g.xy.immobilityPct.mean)) {
           mainVal = `Immob ${fmtNum(g.xy.immobilityPct.mean, 1)}%`;
-          subTxt = `n=${g.n} · Speed ${g.xy.meanSpeedMmS ? fmtNum(g.xy.meanSpeedMmS.mean, 2) : "—"} mm/s`;
+          subTxt = `${nTag} · Speed ${g.xy.meanSpeedMmS ? fmtNum(g.xy.meanSpeedMmS.mean, 2) : "—"} mm/s`;
         } else if (ui.compView === "sab" && g.zchange && g.zchange.sabPct && Number.isFinite(g.zchange.sabPct.mean)) {
           mainVal = `${fmtNum(g.zchange.sabPct.mean, 1)} ± ${fmtNum(g.zchange.sabPct.sem, 1)}%`;
-          subTxt = `n=${g.n} · Mean entries ${g.zchange.totalEntries ? fmtNum(g.zchange.totalEntries.mean, 0) : "—"}`;
+          subTxt = `${nTag} · Mean entries ${g.zchange.totalEntries ? fmtNum(g.zchange.totalEntries.mean, 0) : "—"}`;
         } else if (ui.compView === "vmr" && g.vmr && g.vmr.darkMinusLight && Number.isFinite(g.vmr.darkMinusLight.mean)) {
           const sign = g.vmr.darkMinusLight.mean >= 0 ? "+" : "";
           mainVal = `${sign}${fmtNum(g.vmr.darkMinusLight.mean, 2)} mm/bin`;
-          subTxt = `n=${g.n} · Dark − Light VMR Δ`;
+          subTxt = `${nTag} · Dark − Light VMR Δ`;
         } else if ((ui.compView === "zones" || ui.compView === "thigmotaxis" || ui.compView === "zone_pref") && g.zones && g.zones.z2Pct && Number.isFinite(g.zones.z2Pct.mean)) {
           mainVal = `Z2 ${fmtNum(g.zones.z2Pct.mean, 1)} ± ${fmtNum(g.zones.z2Pct.sem, 1)}%`;
           const pi = g.zones.preferenceIndex && Number.isFinite(g.zones.preferenceIndex.mean) ? fmtNum(g.zones.preferenceIndex.mean, 2) : "—";
-          subTxt = `n=${g.n} · Pref Index ${pi}`;
+          subTxt = `${nTag} · Pref Index ${pi}`;
         } else if (g.totalDist && Number.isFinite(g.totalDist.mean)) {
           mainVal = `${fmtNum(g.totalDist.mean, 1)} ± ${fmtNum(g.totalDist.sem, 1)} mm`;
-          subTxt = `n=${g.n} · Total Dist (${g.excludedCount || 0} excl)`;
+          subTxt = `${nTag} · Total Dist (${g.excludedCount || 0} excl)`;
         }
         return (
           `<div class="az-stat-mini">` +
@@ -3499,60 +3691,127 @@
       return;
     }
 
+    const firstRes = catStats[0] && catStats[0].res;
+    const renderNoticeBanners = (res) => {
+      if (!res) return "";
+      const items = [];
+      if (res.pseudoreplicationNotice) {
+        items.push(`<div class="az-stats-notice"><strong>Unit of Analysis:</strong> ${esc(res.pseudoreplicationNotice)}</div>`);
+      }
+      if (res.lowReplicateNotice) {
+        items.push(`<div class="az-stats-notice"><strong>Low Replicate Count:</strong> ${esc(res.lowReplicateNotice)}</div>`);
+      }
+      if (res.multiFactorNotice) {
+        items.push(`<div class="az-stats-notice is-info"><strong>Multi-Factor Design:</strong> ${esc(res.multiFactorNotice)}</div>`);
+      }
+      return items.length ? `<div class="az-stats-notices">${items.join("")}</div>` : "";
+    };
+
+    const renderStatChip = (row) => {
+      const isSig = row.sig && row.sig !== "ns";
+      const pStr = fmtPVal(row.p);
+      const pDisp = pStr === "—" ? "p = —" : (pStr.startsWith("<") ? `p ${pStr}` : `p = ${pStr}`);
+      const mTag = (row.method === "exact" || row.method === "asymptotic")
+        ? `<span class="az-method-tag${row.method === "exact" ? " is-exact" : ""}">${esc(row.method)}</span>`
+        : "";
+      return (
+        `<span class="az-stats-chip">` +
+          `<span>${esc(row.test)}:</span>` +
+          `<code>${esc(row.stat)}</code>` +
+          `<code>${esc(pDisp)}</code>` +
+          mTag +
+          `<span class="az-sig-pill${isSig ? " is-sig" : ""}">${esc(row.sig || "ns")}</span>` +
+          `<span style="color:var(--text-muted);">${esc(row.effect || "")}</span>` +
+        `</span>`
+      );
+    };
+
     const validCats = catStats.filter(c => c.res && c.res.valid);
     if (!validCats.length) {
-      const reason = (catStats[0] && catStats[0].res && catStats[0].res.reason) || "Need at least 2 groups with n >= 2 included wells to run screening stats.";
+      const reason = (firstRes && firstRes.reason) || "Need at least 2 groups with n >= 2 included observations to run screening stats.";
       panel.style.display = "";
-      panel.innerHTML = `<div class="az-stats-title">Quick Screening Statistics</div><div class="az-stats-disclaimer" style="margin-top:4px;">${esc(reason)}</div>`;
+      panel.innerHTML =
+        `<div class="az-stats-title">Quick Screening Statistics</div>` +
+        renderNoticeBanners(firstRes) +
+        `<div class="az-stats-disclaimer" style="margin-top:4px;">${esc(reason)}</div>`;
       return;
     }
 
+    const famLabel = ui.primaryTestFamily === "nonparametric"
+      ? "Primary: Non-Parametric"
+      : "Primary: Parametric";
+    const unitBadge = (firstRes && firstRes.nUnit === "plates") ? "n = plates" : "n = wells";
+
     const sections = validCats.map(({ catLabel, res }) => {
-      const omniHtml = (res.summaryRows || []).map(row => {
-        const isSig = row.sig && row.sig !== "ns";
-        const pStr = fmtPVal(row.p);
-        const pDisp = pStr.startsWith("<") ? `p ${pStr}` : `p = ${pStr}`;
-        return (
-          `<span class="az-stats-chip">` +
-            `<span>${esc(row.test)}:</span>` +
-            `<code>${esc(row.stat)}</code>` +
-            `<code>${esc(pDisp)}</code>` +
-            `<span class="az-sig-pill${isSig ? " is-sig" : ""}">${esc(row.sig || "ns")}</span>` +
-            `<span style="color:var(--text-muted);">${esc(row.effect || "")}</span>` +
-          `</span>`
-        );
-      }).join("");
+      const primaryList = (Array.isArray(res.primaryRows) && res.primaryRows.length) ? res.primaryRows : (res.summaryRows || []);
+      const omniHtml = primaryList.map(renderStatChip).join("");
 
       let pairwiseHtml = "";
       if (res.kind === "multi_group" && Array.isArray(res.pairwise) && res.pairwise.length > 0) {
-        pairwiseHtml =
-          `<div class="az-stats-table-wrap"><table class="az-table"><thead><tr>` +
-            `<th>Pairwise Comparison (Welch t + Holm)</th><th class="num">Mean Δ</th><th class="num">t (df)</th><th class="num">p (raw)</th><th class="num">p (Holm)</th><th class="num">Cohen's d</th><th>Sig</th>` +
-          `</tr></thead><tbody>` +
-          res.pairwise.map(pw => {
-            const isSig = pw.sig && pw.sig !== "ns";
-            return (
-              `<tr>` +
-                `<td><strong>${esc(pw.groupA)}</strong> vs <strong>${esc(pw.groupB)}</strong></td>` +
-                `<td class="num">${fmtNum(pw.meanDiff, 2)}</td>` +
-                `<td class="num">${fmtNum(pw.t, 2)} (${fmtNum(pw.df, 1)})</td>` +
-                `<td class="num">${esc(fmtPVal(pw.p))}</td>` +
-                `<td class="num"><strong>${esc(fmtPVal(pw.pAdj))}</strong></td>` +
-                `<td class="num">${fmtNum(pw.cohensD, 2)}</td>` +
-                `<td><span class="az-sig-pill${isSig ? " is-sig" : ""}">${esc(pw.sig || "ns")}</span></td>` +
-              `</tr>`
-            );
-          }).join("") +
-          `</tbody></table></div>`;
+        const isNonParam = res.primaryTestFamily === "nonparametric";
+        if (isNonParam) {
+          pairwiseHtml =
+            `<div class="az-stats-table-wrap"><table class="az-table"><thead><tr>` +
+              `<th>Pairwise Comparison (Mann-Whitney U + Holm)</th><th class="num">U</th><th>Method</th><th class="num">p (raw)</th><th class="num">p (Holm)</th><th class="num">Effect r</th><th>Sig</th>` +
+            `</tr></thead><tbody>` +
+            res.pairwise.map(pw => {
+              const isSig = pw.sig && pw.sig !== "ns";
+              const mLbl = pw.method || "—";
+              return (
+                `<tr>` +
+                  `<td><strong>${esc(pw.groupA)}</strong> vs <strong>${esc(pw.groupB)}</strong></td>` +
+                  `<td class="num">${esc(fmtStat(pw.U, 1))}</td>` +
+                  `<td><span class="az-method-tag${mLbl === "exact" ? " is-exact" : ""}">${esc(mLbl)}</span></td>` +
+                  `<td class="num">${esc(fmtPVal(pw.p))}</td>` +
+                  `<td class="num"><strong>${esc(fmtPVal(pw.pAdj))}</strong></td>` +
+                  `<td class="num">${esc(fmtStat(pw.rEffect, 2))}</td>` +
+                  `<td><span class="az-sig-pill${isSig ? " is-sig" : ""}">${esc(pw.sig || "ns")}</span></td>` +
+                `</tr>`
+              );
+            }).join("") +
+            `</tbody></table></div>`;
+        } else {
+          pairwiseHtml =
+            `<div class="az-stats-table-wrap"><table class="az-table"><thead><tr>` +
+              `<th>Pairwise Comparison (Welch t + Holm)</th><th class="num">Mean Δ</th><th class="num">t (df)</th><th class="num">p (raw)</th><th class="num">p (Holm)</th><th class="num">Cohen's d</th><th>Sig</th>` +
+            `</tr></thead><tbody>` +
+            res.pairwise.map(pw => {
+              const isSig = pw.sig && pw.sig !== "ns";
+              const tCell = pw.t !== null && Number.isFinite(pw.t)
+                ? `${fmtStat(pw.t, 2)} (${fmtStat(pw.df, 1)})`
+                : "—";
+              return (
+                `<tr>` +
+                  `<td><strong>${esc(pw.groupA)}</strong> vs <strong>${esc(pw.groupB)}</strong></td>` +
+                  `<td class="num">${esc(fmtStat(pw.meanDiff, 2))}</td>` +
+                  `<td class="num">${esc(tCell)}</td>` +
+                  `<td class="num">${esc(fmtPVal(pw.p))}</td>` +
+                  `<td class="num"><strong>${esc(fmtPVal(pw.pAdj))}</strong></td>` +
+                  `<td class="num">${esc(fmtStat(pw.cohensD, 2))}</td>` +
+                  `<td><span class="az-sig-pill${isSig ? " is-sig" : ""}">${esc(pw.sig || "ns")}</span></td>` +
+                `</tr>`
+              );
+            }).join("") +
+            `</tbody></table></div>`;
+        }
       }
 
+      const ccRows = Array.isArray(res.crossCheckRows) ? res.crossCheckRows : [];
+      const crossCheckHtml = ccRows.length
+        ? `<details class="az-stats-crosscheck">` +
+            `<summary>Cross-check alternative test (${esc(ccRows[0].test)})</summary>` +
+            `<div class="az-stats-crosscheck-body">${ccRows.map(renderStatChip).join("")}</div>` +
+          `</details>`
+        : "";
+
       const heading = validCats.length > 1 ? `<div class="az-stats-head"><span class="az-stats-title">${esc(catLabel)}</span></div>` : "";
-      return `${heading}<div class="az-stats-omnibus">${omniHtml}</div>${pairwiseHtml}`;
+      return `${heading}<div class="az-stats-omnibus">${omniHtml}</div>${pairwiseHtml}${crossCheckHtml}`;
     }).join("");
 
     panel.style.display = "";
     panel.innerHTML =
-      `<div class="az-stats-head"><span class="az-stats-title">Quick Screening Statistics (Two-Sided)</span><span class="card-hint">Parametric + Non-Parametric</span></div>` +
+      `<div class="az-stats-head"><span class="az-stats-title">Quick Screening Statistics (Two-Sided)</span><span class="card-hint">${esc(famLabel)} · ${esc(unitBadge)}</span></div>` +
+      renderNoticeBanners(validCats[0].res) +
       sections +
       `<div class="az-stats-disclaimer">Quick screening stats — confirm publication models in Prism / R / Python; equivalent <code>scipy.stats</code> code is included in <code>.py</code> export.</div>`;
   }
@@ -3853,7 +4112,7 @@
         const col = getGroupColor(gName);
         return (
           `<div class="az-stat-mini">` +
-            `<div class="az-stat-mini-head"><span class="az-swatch-dot" style="background:${col};"></span><span>${esc(gName)} (n=${gs.n})</span></div>` +
+            `<div class="az-stat-mini-head"><span class="az-swatch-dot" style="background:${col};"></span><span>${esc(gName)} (n=${gs.n} ${gs.n === 1 ? "well" : "wells"})</span></div>` +
             `<div class="az-stat-mini-val">Immob ${fmtNum(gs.immobilityPct && gs.immobilityPct.mean, 1)}% · Center ${fmtNum(gs.centerOccupancyPct && gs.centerOccupancyPct.mean, 1)}%</div>` +
             `<div class="az-stat-mini-sub">Speed ${fmtNum(gs.meanSpeedMmS && gs.meanSpeedMmS.mean, 2)} mm/s · Burst P95 ${fmtNum(gs.burstSpeedP95MmS && gs.burstSpeedP95MmS.mean, 1)} mm/s</div>` +
           `</div>`
@@ -3868,16 +4127,29 @@
   function renderExportAuditSummary() {
     const el = document.getElementById("cleaningLogAuditSummary");
     if (!el || !ui.analysis) return;
-    let autoEx = 0, manEx = 0;
+    let autoEx = 0, manEx = 0, postStats = 0;
     const targetRuns = (ui.runs.length > 1 && ui.scope === "pooled") ? ui.runs : (getActiveRun() ? [getActiveRun()] : []);
     for (const r of targetRuns) {
       for (const w of r.excludedWells) {
         const meta = r.excludeMeta && r.excludeMeta[w];
         if (meta && meta.source === "auto") autoEx++;
         else manEx++;
+        if (meta && meta.afterStatsViewed) postStats++;
       }
     }
-    el.textContent = `${targetRuns.length} run${targetRuns.length === 1 ? "" : "s"} · ${autoEx} auto-excl · ${manEx} manual-excl · UTF-8 BOM`;
+    const postPart = postStats > 0 ? ` · ${postStats} post-stats` : "";
+    el.className = postStats > 0 ? "badge-warn" : "badge-custom";
+    el.textContent = `${targetRuns.length} run${targetRuns.length === 1 ? "" : "s"} · ${autoEx} auto-excl · ${manEx} manual-excl${postPart} · UTF-8 BOM`;
+  }
+
+  function updateWellTableScrollHint() {
+    const hint = document.getElementById("wellTableScrollHint");
+    const tbl = document.getElementById("wellSummaryTable");
+    const wrap = tbl && tbl.closest ? tbl.closest(".az-table-wrap") : null;
+    if (!hint || !wrap) return;
+    requestAnimationFrame(() => {
+      hint.style.display = wrap.scrollWidth > wrap.clientWidth + 4 ? "" : "none";
+    });
   }
 
   function renderWellTable() {
@@ -4014,7 +4286,8 @@
         cells += `<td>${esc(fv)}</td>`;
       }
       const qReason = w.qcReason || (w.qc && w.qc.qcReason) || "ok";
-      cells += `<td>${buildQcPillsHtml(w)}</td><td><span class="az-reason-code">${esc(qReason)}</span></td>`;
+      const postTag = w.afterStatsViewed ? `<span class="az-poststats-badge">After stats</span>` : "";
+      cells += `<td>${buildQcPillsHtml(w)}</td><td><span class="az-reason-code">${esc(qReason)}</span>${postTag}</td>`;
       cells += `<td class="num">${fmtNum(w.totalDist, 1)}</td><td class="num">${fmtNum(w.meanDist, 2)}</td>`;
       if (ui.normalizeToControl && a.wells.some(x => x.normalized && x.normalized.totalDistPctCtrl !== null)) {
         cells += `<td class="num">${w.normalized && Number.isFinite(w.normalized.totalDistPctCtrl) ? fmtNum(w.normalized.totalDistPctCtrl, 1) + "%" : "—"}</td>`;
@@ -4062,6 +4335,8 @@
         recomputeAndRender();
       });
     });
+
+    updateWellTableScrollHint();
   }
 
   // ---------------------------------------------------------------------------
@@ -4137,18 +4412,41 @@
     const src = getActiveRun();
     if (!src || ui.runs.length < 2) return;
     let copied = 0;
+    let trimmedAny = false;
     for (const r of ui.runs) {
       if (r.id === src.id) continue;
-      r.groups = { ...src.groups };
-      r.groupOrder = [...src.groupOrder];
-      r.groupColors = { ...src.groupColors };
+      const validWells = (r.summaryParsed && Array.isArray(r.summaryParsed.wells))
+        ? new Set(r.summaryParsed.wells)
+        : null;
+      const keepWell = (w) => !validWells || validWells.has(w);
+
+      const nextGroups = {};
+      for (const [w, g] of Object.entries(src.groups || {})) {
+        if (keepWell(w)) nextGroups[w] = g;
+        else trimmedAny = true;
+      }
+      r.groups = nextGroups;
+      const reg = buildGroupRegistryForRun(nextGroups, src.groupOrder, src.groupColors);
+      r.groupOrder = reg.groupOrder;
+      r.groupColors = reg.groupColors;
+
       r.factorNames = [...src.factorNames];
-      r.wellFactors = JSON.parse(JSON.stringify(src.wellFactors || {}));
-      r.factorLevelOrder = JSON.parse(JSON.stringify(src.factorLevelOrder || {}));
+      r.wellFactors = {};
+      for (const fn of r.factorNames) {
+        const fSrc = (src.wellFactors && src.wellFactors[fn]) || {};
+        const fDst = {};
+        for (const [w, v] of Object.entries(fSrc)) {
+          if (keepWell(w)) fDst[w] = v;
+          else trimmedAny = true;
+        }
+        r.wellFactors[fn] = fDst;
+      }
+      r.factorLevelOrder = buildFactorLevelOrder(r.factorNames, r.wellFactors);
       copied++;
     }
     recomputeAndRender();
-    toast(`Copied group & factor map from ${src.runId} to ${copied} other run${copied === 1 ? "" : "s"}`);
+    const extra = trimmedAny ? " (filtered to matching wells)" : "";
+    toast(`Copied group & factor map from ${src.runId} to ${copied} other run${copied === 1 ? "" : "s"}${extra}`);
   }
 
   function addNewGroupOrLevel() {
@@ -4207,6 +4505,7 @@
     delete run.groupColors[oldName];
     for (const w of Object.keys(run.groups)) { if (run.groups[w] === oldName) run.groups[w] = nextName; }
     if (ui.hiddenGroups.has(oldName)) { ui.hiddenGroups.delete(oldName); ui.hiddenGroups.add(nextName); }
+    if (ui.controlGroupName === oldName) ui.controlGroupName = nextName;
     ui.activeBrushGroup = nextName;
     recomputeAndRender();
   }
@@ -4231,6 +4530,7 @@
     run.groupOrder = run.groupOrder.filter(g => g !== target);
     delete run.groupColors[target];
     ui.hiddenGroups.delete(target);
+    if (ui.controlGroupName === target) ui.controlGroupName = "";
     for (const w of Object.keys(run.groups)) { if (run.groups[w] === target) delete run.groups[w]; }
     ui.activeBrushGroup = run.groupOrder.length ? run.groupOrder[0] : UNASSIGNED;
     recomputeAndRender();
@@ -4488,7 +4788,24 @@
     };
     ["qcEmptyDistInput", "qcMaxSpeedInput", "qcSpikeMinInput", "qcMadMultInput", "qcTrimStartInput", "qcTrimEndInput"].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.addEventListener("change", readQcInputs);
+      if (el) {
+        el.addEventListener("change", readQcInputs);
+        el.addEventListener("blur", () => {
+          // Restore active fallback value if a required numeric QC input was cleared or negative
+          if (id === "qcTrimEndInput") {
+            const v = parseFloat(el.value);
+            if (el.value.trim() !== "" && (!Number.isFinite(v) || v <= 0)) {
+              el.value = ui.trimWindow && ui.trimWindow.trimEndSec != null ? String(ui.trimWindow.trimEndSec) : "";
+            }
+          } else {
+            const v = parseFloat(el.value);
+            const minVal = id === "qcEmptyDistInput" || id === "qcTrimStartInput" ? 0 : 1;
+            if (el.value.trim() === "" || !Number.isFinite(v) || v < minVal) {
+              renderQcThresholdsCard();
+            }
+          }
+        });
+      }
     });
 
     // Step 2: QC Exclude & Plate Heatmap interaction
@@ -4640,11 +4957,16 @@
       window.addEventListener("pointerup", () => { _painting = false; _paintedInStroke.clear(); });
     }
 
-    // Step 4: Scope, Normalization, Plot Tabs, Window AUC, Screening Stats & Spatial
+    // Step 4: Scope, Unit of Analysis, Normalization, Plot Tabs, Window AUC, Screening Stats & Spatial
     const pooledBtn = document.getElementById("plotScopePooledBtn");
     const activeBtn = document.getElementById("plotScopeActiveBtn");
     if (pooledBtn) pooledBtn.addEventListener("click", () => { ui.scope = "pooled"; recomputeAndRender(); });
     if (activeBtn) activeBtn.addEventListener("click", () => { ui.scope = "active"; recomputeAndRender(); });
+
+    const unitWellsBtn = document.getElementById("unitWellsBtn");
+    const unitPlatesBtn = document.getElementById("unitPlatesBtn");
+    if (unitWellsBtn) unitWellsBtn.addEventListener("click", () => { ui.unitOfAnalysis = "wells"; recomputeAndRender(); });
+    if (unitPlatesBtn) unitPlatesBtn.addEventListener("click", () => { ui.unitOfAnalysis = "plates"; recomputeAndRender(); });
 
     const normChk = document.getElementById("normControlChk");
     if (normChk) {
@@ -4678,10 +5000,10 @@
     const readWindowAuc = () => {
       const sEl = document.getElementById("tsWinStartInput");
       const eEl = document.getElementById("tsWinEndInput");
-      const s = sEl && sEl.value !== "" ? parseFloat(sEl.value) : NaN;
-      const e = eEl && eEl.value !== "" ? parseFloat(eEl.value) : NaN;
-      if (Number.isFinite(s) && Number.isFinite(e) && e > s) {
-        ui.windowAuc = { startSec: Math.max(0, s), endSec: e };
+      const s = sEl && sEl.value.trim() !== "" ? parseFloat(sEl.value) : NaN;
+      const e = eEl && eEl.value.trim() !== "" ? parseFloat(eEl.value) : NaN;
+      if (Number.isFinite(s) && Number.isFinite(e)) {
+        ui.windowAuc = { startSec: Math.max(0, s), endSec: Math.max(0, e) };
       } else {
         ui.windowAuc = { startSec: null, endSec: null };
       }
@@ -4694,8 +5016,8 @@
     if (weInp) weInp.addEventListener("change", readWindowAuc);
     if (wcBtn) {
       wcBtn.addEventListener("click", () => {
-        if (wsInp) wsInp.value = "";
-        if (weInp) weInp.value = "";
+        if (wsInp) { wsInp.value = ""; wsInp.classList.remove("is-invalid"); }
+        if (weInp) { weInp.value = ""; weInp.classList.remove("is-invalid"); }
         ui.windowAuc = { startSec: null, endSec: null };
         recomputeAndRender();
       });
@@ -4708,10 +5030,21 @@
     bindChk("tsShowSem", "tsShowSem", renderTimeSeriesChart);
     bindChk("tsShowPhases", "tsShowPhases", renderTimeSeriesChart);
     bindChk("tsShowStim", "tsShowStim", renderTimeSeriesChart);
-    bindChk("compShowStatsChk", "compShowStats", renderComparisonChart);
+    bindChk("compShowStatsChk", "compShowStats", () => { renderChartToolbars(); renderComparisonChart(); });
 
     const compSel = document.getElementById("compViewSel");
     if (compSel) compSel.addEventListener("change", () => { ui.compView = compSel.value; renderComparisonChart(); });
+    const compTfSel = document.getElementById("compTestFamilySel");
+    if (compTfSel) {
+      compTfSel.addEventListener("change", () => {
+        ui.primaryTestFamily = compTfSel.value === "nonparametric" ? "nonparametric" : "parametric";
+        renderComparisonChart();
+      });
+    }
+
+    window.addEventListener("resize", () => {
+      if (ui.currentPage === "export") updateWellTableScrollHint();
+    });
 
     const xyFreezeInp = document.getElementById("xyFreezeInput");
     if (xyFreezeInp) {

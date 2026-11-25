@@ -21,7 +21,7 @@
         Zantiks MWP Data Prep &amp; Analyzer
         <span class="badge-hw" id="analyzerModeBadge">Offline QC</span>
       </h1>
-      <p>Multi-run QC &amp; cleaning, multi-factor plate maps, behavioral feature extraction, quick screening stats, and Prism / Python handoff — 100% offline.</p>
+      <p>Multi-run QC, multi-factor maps, behavioral features, screening stats &amp; Prism/Python export.</p>
     </div>
     <div class="topbar-actions">
       <div class="az-demo-picker">
@@ -462,6 +462,10 @@
               <button type="button" class="btn btn-xs active" id="plotScopePooledBtn">Pooled (2 runs)</button>
               <button type="button" class="btn btn-xs" id="plotScopeActiveBtn">Active Run</button>
             </div>
+            <div class="maze-seg-toggle" id="plotUnitToggleWrap" role="group" aria-label="Unit of analysis" style="display:none;">
+              <button type="button" class="btn btn-xs active" id="unitWellsBtn" title="Individual wells across pooled plates">n = Wells</button>
+              <button type="button" class="btn btn-xs" id="unitPlatesBtn" title="Per-plate group means (1 observation per biological replicate plate)">Plate Means (n = Plates)</button>
+            </div>
             <label class="az-toggle-pill"><input type="checkbox" id="normControlChk"> <span>Normalize to Control (%)</span></label>
             <div class="az-inline-control" id="normControlGroupWrap" style="display:none;">
               <label for="normControlGroupSel">Control</label>
@@ -558,6 +562,13 @@
                   <select id="compViewSel" class="az-select az-select-sm"></select>
                 </div>
                 <label class="az-toggle-pill"><input type="checkbox" id="compShowStatsChk" checked> <span>Screening Stats</span></label>
+                <div class="az-inline-control" id="compTestFamilyWrap">
+                  <label for="compTestFamilySel">Primary test</label>
+                  <select id="compTestFamilySel" class="az-select az-select-sm">
+                    <option value="parametric" selected>Parametric (Welch / ANOVA)</option>
+                    <option value="nonparametric">Non-Parametric (MWU / Kruskal)</option>
+                  </select>
+                </div>
               </div>
               <div class="az-toolbar-right">
                 <button type="button" class="btn btn-xs" id="downloadCompSvgBtn">Download SVG</button>
@@ -702,6 +713,7 @@
             <div>
               <h3 class="card-title">Per-Well Summary Table</h3>
               <span class="card-hint" id="wellTableCountHint">0 wells</span>
+              <span class="az-table-scroll-hint" id="wellTableScrollHint" style="display:none;">&middot; Scroll horizontally &rarr; for all metrics</span>
             </div>
             <div class="az-toolbar-left">
               <div class="az-inline-control">

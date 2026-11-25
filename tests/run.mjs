@@ -2637,6 +2637,448 @@ try {
         ok ? "" : JSON.stringify({ errors, statsBench, periCheck, habitCheck, aucCheck, statsUiOn, statsUiOff, spatialBefore, spatialAfter }));
       await page.close();
     }
+
+    // 7n. Permanent SciPy 1.16.3 exact parity regression test (18 diverse cases + zero-var/zero-diff guards + matching .py method & Two-Way ANOVA)
+    {
+      const { page, errors } = await openFreshAnalyzer();
+
+      // Exact IEEE-754 reference outputs precomputed with scipy.stats 1.16.3 (zero Python runtime dependency in CI)
+      const SCIPY_1_16_REFS = {
+        welch: [
+          { name: "small_n4_unequal_var", a: [10.2, 11.4, 9.8, 12.1], b: [15.5, 19.2, 14.1, 21.8, 16.9], ref: { t: -4.521060963787666, df: 5.145366772773537, p: 0.00585527435073451 } },
+          { name: "medium_n8v8_equal_var", a: [21.1, 22.4, 20.8, 23.0, 21.9, 22.6, 20.3, 21.5], b: [24.2, 25.6, 23.9, 26.1, 24.8, 25.3, 23.5, 24.7], ref: { t: -6.717643323560393, df: 13.940362969063258, p: 1.0036621933373374e-5 } },
+          {
+            name: "large_n26v26_unequal",
+            a: [15.624, 8.399, 11.956, 9.827, 15.761, 9.604, 14.512, 10.972, 16.29, 11.561, 10.624, 9.426, 12.537, 8.531, 8.873, 10.395, 8.955, 9.749, 10.368, 10.136, 14.643, 11.224, 14.604, 13.009, 11.486, 14.002],
+            b: [15.382, 12.886, 23.552, 17.193, 16.837, 16.382, 17.277, 17.329, 7.533, 18.289, 10.583, 15.052, 16.038, 15.444, 23.366, 18.189, 18.556, 10.035, 21.466, 10.997, 14.01, 18.859, 11.492, 17.67, 10.868, 15.83],
+            ref: { t: -4.542674239832558, df: 41.2754398858169, p: 4.7637316194675455e-5 }
+          }
+        ],
+        mwu: [
+          { name: "exact_n3v4_untied", a: [1.1, 2.3, 4.7], b: [3.2, 5.8, 6.4, 9.1], ref: { U: 1, p: 0.11428571428571428, method: "exact", hasTies: false } },
+          { name: "exact_n8v8_untied", a: [12.1, 14.3, 15.8, 11.2, 16.4, 13.7, 17.5, 12.9], b: [18.2, 16.9, 21.4, 19.6, 15.1, 22.8, 20.3, 17.8], ref: { U: 4, p: 0.0018648018648018648, method: "exact", hasTies: false } },
+          { name: "exact_n12v12_untied", a: [1.2, 2.4, 3.6, 4.8, 5.1, 6.3, 7.5, 8.7, 9.2, 10.4, 11.6, 12.8], b: [6.9, 8.1, 9.8, 11.1, 12.3, 13.5, 14.7, 15.9, 16.2, 17.4, 18.6, 19.8], ref: { U: 17, p: 0.0008579386692187877, method: "exact", hasTies: false } },
+          { name: "asymptotic_n8v8_tied", a: [10, 12, 12, 14, 15, 15, 15, 18], b: [15, 18, 18, 20, 22, 22, 25, 28], ref: { U: 3.5, p: 0.002922196012884838, method: "asymptotic", hasTies: true } },
+          {
+            name: "asymptotic_n26v26_large",
+            a: [15.624, 8.399, 11.956, 9.827, 15.761, 9.604, 14.512, 10.972, 16.29, 11.561, 10.624, 9.426, 12.537, 8.531, 8.873, 10.395, 8.955, 9.749, 10.368, 10.136, 14.643, 11.224, 14.604, 13.009, 11.486, 14.002],
+            b: [15.382, 12.886, 23.552, 17.193, 16.837, 16.382, 17.277, 17.329, 7.533, 18.289, 10.583, 15.052, 16.038, 15.444, 23.366, 18.189, 18.556, 10.035, 21.466, 10.997, 14.01, 18.859, 11.492, 17.67, 10.868, 15.83],
+            ref: { U: 122, p: 8.016491072300717e-5, method: "asymptotic", hasTies: false }
+          }
+        ],
+        paired: [
+          { name: "exact_n8_untied", a: [10.1, 12.4, 11.8, 14.2, 13.5, 15.9, 12.1, 16.3], b: [12.3, 15.1, 11.2, 17.8, 16.4, 19.9, 15.6, 20.8], ref: { t: -5.115805063716018, df: 7, pT: 0.0013751360259365959, W: 1, pW: 0.015625, method: "exact", hasTies: false, nNonZero: 8 } },
+          {
+            name: "exact_n24_untied",
+            a: [20, 20.5, 21, 21.5, 22, 22.5, 23, 23.5, 24, 24.5, 25, 25.5, 26, 26.5, 27, 27.5, 28, 28.5, 29, 29.5, 30, 30.5, 31, 31.5],
+            b: [19.75, 20.92, 21.59, 22.26, 21.07, 23.6, 24.27, 24.94, 22.39, 26.28, 26.95, 27.62, 23.71, 28.96, 29.63, 30.3, 25.03, 31.64, 32.31, 32.98, 26.35, 34.32, 34.99, 35.66],
+            ref: { t: -2.7111823288545684, df: 23, pT: 0.012458546224905998, W: 66, pW: 0.015044927597045898, method: "exact", hasTies: false, nNonZero: 24 }
+          },
+          { name: "exact_n10_with_zeros", a: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28], b: [10, 12, 15.2, 18.5, 17.3, 23.1, 26.4, 28.9, 32.2, 35.8], ref: { t: -3.2422088573513976, df: 9, pT: 0.010122800588851977, W: 1, pW: 0.015625, method: "exact", hasTies: false, nNonZero: 8 } },
+          { name: "approx_n10_tied_abs", a: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28], b: [12, 14, 16, 19, 21, 23, 26, 28, 30, 33], ref: { t: -9.797958971132713, df: 9, pT: 4.239738886259835e-6, W: 0, pW: 0.005540680462065569, method: "approx", hasTies: true, nNonZero: 10 } },
+          {
+            name: "approx_n52_large",
+            a: [10, 10.37, 10.74, 11.11, 11.48, 11.85, 12.22, 12.59, 12.96, 13.33, 13.7, 14.07, 14.44, 14.81, 15.18, 15.55, 15.92, 16.29, 16.66, 17.03, 17.4, 17.77, 18.14, 18.51, 18.88, 19.25, 19.62, 19.99, 20.36, 20.73, 21.1, 21.47, 21.84, 22.21, 22.58, 22.95, 23.32, 23.69, 24.06, 24.43, 24.8, 25.17, 25.54, 25.91, 26.28, 26.65, 27.02, 27.39, 27.76, 28.13, 28.5, 28.87],
+            b: [9.85, 10.603, 11.056, 11.509, 11.962, 11.285, 12.868, 13.321, 13.774, 14.227, 12.72, 15.133, 15.586, 16.039, 16.492, 14.155, 17.398, 17.851, 18.304, 18.757, 15.59, 19.663, 20.116, 20.569, 21.022, 17.025, 21.928, 22.381, 22.834, 23.287, 18.46, 24.193, 24.646, 25.099, 25.552, 19.895, 26.458, 26.911, 27.364, 27.817, 21.33, 28.723, 29.176, 29.629, 30.082, 22.765, 30.988, 31.441, 31.894, 32.347, 24.2, 33.253],
+            ref: { t: -4.260959620955307, df: 51, pT: 8.774289296525023e-5, W: 286, pW: 0.0002468230379143422, method: "approx", hasTies: false, nNonZero: 52 }
+          }
+        ],
+        anova: [
+          { name: "3group_unequal_n", groups: [[11.2, 12.8, 10.5, 13.1, 11.9], [15.4, 16.9, 14.8, 17.5, 15.1, 16.2], [21.3, 23.1, 20.4, 22.8, 21.9, 24.0, 20.9]], ref: { F: 115.0201165774528, p: 7.969002539170423e-10, holmP: [0.00017970611557324988, 1.8737663531671197e-7, 3.2023091872094566e-6] } },
+          { name: "4group_n8_realistic", groups: [[100.1, 97.4, 103.2, 98.8, 101.5, 96.9, 102.3, 99.8], [89.2, 92.5, 86.1, 90.4, 88.7, 91.8, 87.3, 89.9], [61.4, 58.2, 63.7, 59.5, 60.8, 57.6, 62.1, 60.3], [94.6, 91.2, 96.8, 93.4, 95.1, 92.7, 94.0, 93.9]], ref: { F: 596.2909206102296, p: 1.8340254927416065e-25, holmP: [5.116742007099199e-7, 1.9146381299600626e-14, 7.974107002720813e-5, 5.063094926006207e-13, 0.00043426405979193384, 3.6720476254083246e-14] } }
+        ],
+        kruskal: [
+          { name: "3group_untied", groups: [[11.2, 12.8, 10.5, 13.1, 11.9], [15.4, 16.9, 14.8, 17.5, 15.1, 16.2], [21.3, 23.1, 20.4, 22.8, 21.9, 24.0, 20.9]], ref: { H: 15.05263157894737, p: 0.0005387193605816652, holmP: [0.005050505050505051, 0.005050505050505051, 0.0034965034965034965], methods: ["exact", "exact", "exact"] } },
+          { name: "3group_with_ties", groups: [[5, 7, 7, 8, 9, 9], [9, 10, 12, 12, 12, 14], [14, 16, 16, 18, 20, 20]], ref: { H: 14.717345872518289, p: 0.0006370432958980104, holmP: [0.014315465141391348, 0.014315465141391348, 0.014315465141391348], methods: ["asymptotic", "asymptotic", "asymptotic"] } },
+          { name: "4group_n8_realistic", groups: [[100.1, 97.4, 103.2, 98.8, 101.5, 96.9, 102.3, 99.8], [89.2, 92.5, 86.1, 90.4, 88.7, 91.8, 87.3, 89.9], [61.4, 58.2, 63.7, 59.5, 60.8, 57.6, 62.1, 60.3], [94.6, 91.2, 96.8, 93.4, 95.1, 92.7, 94.0, 93.9]], ref: { H: 28.738636363636374, p: 2.5412628328243053e-6, holmP: [0.0009324009324009324, 0.0009324009324009324, 0.0009324009324009324, 0.0009324009324009324, 0.0009324009324009324, 0.0009324009324009324], methods: ["exact", "exact", "exact", "exact", "exact", "exact"] } }
+        ]
+      };
+
+      const parityRes = await page.evaluate((refs) => {
+        const S = window.ZANTIKS_ANALYZER_CORE.stats;
+        const TOL = 1e-10;
+        let maxRelErr = 0;
+        const diffs = [];
+        const checkNum = (label, got, exp) => {
+          if (!Number.isFinite(got)) { diffs.push({ label, got, exp, err: "non-finite" }); return; }
+          const rel = Math.abs(exp) > 1e-30 ? Math.abs(got - exp) / Math.abs(exp) : Math.abs(got - exp);
+          if (rel > maxRelErr) maxRelErr = rel;
+          if (rel >= TOL) diffs.push({ label, got, exp, rel });
+        };
+
+        for (const c of refs.welch) {
+          const r = S.welchTTest(c.a, c.b);
+          checkNum(`welch.${c.name}.t`, r.t, c.ref.t);
+          checkNum(`welch.${c.name}.df`, r.df, c.ref.df);
+          checkNum(`welch.${c.name}.p`, r.p, c.ref.p);
+        }
+        for (const c of refs.mwu) {
+          const r = S.mannWhitneyU(c.a, c.b);
+          checkNum(`mwu.${c.name}.U`, r.U, c.ref.U);
+          checkNum(`mwu.${c.name}.p`, r.p, c.ref.p);
+          if (r.method !== c.ref.method || r.hasTies !== c.ref.hasTies) {
+            diffs.push({ label: `mwu.${c.name}.meta`, got: { method: r.method, hasTies: r.hasTies }, exp: { method: c.ref.method, hasTies: c.ref.hasTies } });
+          }
+        }
+        for (const c of refs.paired) {
+          const r = S.pairedCompare(c.a, c.b);
+          checkNum(`paired.${c.name}.t`, r.pairedT.t, c.ref.t);
+          checkNum(`paired.${c.name}.pT`, r.pairedT.p, c.ref.pT);
+          checkNum(`paired.${c.name}.W`, r.wilcoxon.W, c.ref.W);
+          checkNum(`paired.${c.name}.pW`, r.wilcoxon.p, c.ref.pW);
+          if (r.wilcoxon.method !== c.ref.method || r.wilcoxon.hasTies !== c.ref.hasTies || r.wilcoxon.nNonZero !== c.ref.nNonZero) {
+            diffs.push({ label: `paired.${c.name}.meta`, got: r.wilcoxon, exp: c.ref });
+          }
+        }
+        for (const c of refs.anova) {
+          const r = S.oneWayAnova(c.groups.map((v, i) => ({ group: `G${i + 1}`, values: v })));
+          checkNum(`anova.${c.name}.F`, r.F, c.ref.F);
+          checkNum(`anova.${c.name}.p`, r.p, c.ref.p);
+          c.ref.holmP.forEach((hp, i) => checkNum(`anova.${c.name}.holm[${i}]`, r.pairwise[i]?.pAdj, hp));
+        }
+        for (const c of refs.kruskal) {
+          const r = S.kruskalWallis(c.groups.map((v, i) => ({ group: `G${i + 1}`, values: v })));
+          checkNum(`kw.${c.name}.H`, r.H, c.ref.H);
+          checkNum(`kw.${c.name}.p`, r.p, c.ref.p);
+          c.ref.holmP.forEach((hp, i) => {
+            checkNum(`kw.${c.name}.holm[${i}]`, r.pairwise[i]?.pAdj, hp);
+            if (r.pairwise[i]?.method !== c.ref.methods[i]) {
+              diffs.push({ label: `kw.${c.name}.method[${i}]`, got: r.pairwise[i]?.method, exp: c.ref.methods[i] });
+            }
+          });
+        }
+
+        // Degenerate zero-variance & zero-diff guards (zero NaN / Infinity)
+        const zWelchDiff = S.welchTTest([10, 10, 10], [20, 20, 20]);
+        const zWelchSame = S.welchTTest([10, 10, 10], [10, 10, 10]);
+        const zPairedAllZero = S.pairedCompare([5, 6, 7, 8], [5, 6, 7, 8]);
+        const zAnova = S.oneWayAnova([{ group: "A", values: [10, 10, 10] }, { group: "B", values: [20, 20, 20] }, { group: "C", values: [30, 30, 30] }]);
+        const degenerateOk =
+          zWelchDiff.t === null && zWelchDiff.p === null && Boolean(zWelchDiff.note) &&
+          zWelchSame.t === 0 && zWelchSame.p === 1 &&
+          zPairedAllZero.pairedT.t === 0 && zPairedAllZero.pairedT.p === 1 &&
+          zPairedAllZero.wilcoxon.method === "none" && zPairedAllZero.wilcoxon.p === 1 && zPairedAllZero.wilcoxon.nNonZero === 0 &&
+          zAnova.F === null && zAnova.p === null && Boolean(zAnova.note);
+
+        return { maxRelErr, diffs, degenerateOk };
+      }, SCIPY_1_16_REFS);
+
+      // Verify exported Python script emits matching exact/asymptotic method selectors, unit/family config & statsmodels Two-Way ANOVA
+      await page.selectOption("#demoPresetSelect", "ld_multi_2p");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click("#unitPlatesBtn");
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      await page.selectOption("#compTestFamilySel", "nonparametric");
+      await page.click('#analyzerStepper [data-goto="export"]');
+      const [pyDl] = await Promise.all([
+        page.waitForEvent("download"),
+        page.click("#exportPythonBtn")
+      ]);
+      const pyText = fs.readFileSync(await pyDl.path(), "utf8");
+      const pyParityOk =
+        pyText.includes("method = 'exact' if (not has_ties(combined) and len(a) <= 25 and len(b) <= 25) else 'asymptotic'") &&
+        pyText.includes("method = 'exact' if (not has_ties(np.abs(nz)) and len(nz) <= 50) else 'approx'") &&
+        pyText.includes("method=method") &&
+        pyText.includes('UNIT_OF_ANALYSIS = "plates"') &&
+        pyText.includes('PRIMARY_TEST_FAMILY = "nonparametric"') &&
+        pyText.includes('FACTOR_NAMES = ["genotype","treatment"]') &&
+        pyText.includes("statsmodels") &&
+        pyText.includes("C(Q(");
+
+      const ok =
+        errors.length === 0 &&
+        parityRes.diffs.length === 0 &&
+        parityRes.maxRelErr < 1e-10 &&
+        parityRes.degenerateOk &&
+        pyParityOk;
+      report(ok, "SciPy 1.16.3 parity holds to <1e-10 across 18 exact/asymptotic/tied/untied/multi-group cases, degenerate guards & Python export",
+        ok ? "" : JSON.stringify({ errors, parityRes, pyParityOk }));
+      await page.close();
+    }
+
+    // 7o. Methodological guardrails (Test Family, Plate Means vs Wells, Post-Stats Audit + Section 4 log) & all #58 bug-fix regressions (#1-#8)
+    {
+      const { page, errors } = await openFreshAnalyzer();
+      await page.setViewportSize({ width: 1600, height: 900 });
+
+      const buildCsv = (wells, rows, valFn) => {
+        const lines = [["RUNTIME", "TEMP_C", "PHASE", "TIME_BIN", ...wells.map((w) => "DIST_" + w)].join(",")];
+        for (let i = 0; i < rows; i++) {
+          lines.push([(i + 1) * 10, "28.0", i < rows / 2 ? "LIGHT" : "DARK", i + 1, ...wells.map((w, wi) => valFn(w, wi, i).toFixed(2))].join(","));
+        }
+        return lines.join("\n") + "\n";
+      };
+
+      // 1. Primary Test Family, Unit of Analysis (Wells vs Plate Means), Notices & Post-Stats Audit on ld_multi_2p
+      await page.selectOption("#demoPresetSelect", "ld_multi_2p");
+      const beforeStatsViewed = await page.evaluate(() => window.ZANTIKS_ANALYZER_UI.getState().hasViewedStats);
+      await page.click('#analyzerStepper [data-goto="qc"]');
+      await page.click("#excludeFlaggedAllRunsBtn");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.check("#normControlChk");
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+
+      const wellsParamCheck = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const panel = document.getElementById("compStatsPanel");
+        const cc = panel.querySelector("details.az-stats-crosscheck");
+        const svgText = document.getElementById("compChartSvg").textContent || "";
+        const notices = [...panel.querySelectorAll(".az-stats-notice")].map((el) => el.textContent);
+        return {
+          hasViewedStats: st.hasViewedStats,
+          family: st.primaryTestFamily,
+          unit: st.unitOfAnalysis,
+          ccCollapsed: Boolean(cc && !cc.open),
+          ccHasKruskal: Boolean(cc && cc.textContent.includes("Kruskal-Wallis")),
+          mainHasAnova: panel.querySelector(".az-stats-omnibus")?.textContent.includes("One-way ANOVA"),
+          svgShowsWellsUnit: svgText.includes("n=11 wells"),
+          hasPseudoNotice: notices.some((t) => t.includes("Unit of Analysis")),
+          hasMultiFactorNotice: notices.some((t) => t.includes("Multi-Factor Design"))
+        };
+      });
+
+      // Switch to Non-Parametric + Plate Means (n = plates)
+      await page.selectOption("#compTestFamilySel", "nonparametric");
+      const nonParamWellsCheck = await page.evaluate(() => {
+        const panel = document.getElementById("compStatsPanel");
+        const cc = panel.querySelector("details.az-stats-crosscheck");
+        const methodTags = [...panel.querySelectorAll(".az-method-tag")].map((el) => el.textContent.trim());
+        return {
+          mainHasKruskal: panel.querySelector(".az-stats-omnibus")?.textContent.includes("Kruskal-Wallis"),
+          ccCollapsed: Boolean(cc && !cc.open),
+          ccHasAnova: Boolean(cc && cc.textContent.includes("One-way ANOVA")),
+          hasExactMethodTag: methodTags.includes("exact")
+        };
+      });
+
+      await page.click("#unitPlatesBtn");
+      const platesModeCheck = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const panel = document.getElementById("compStatsPanel");
+        const svgText = document.getElementById("compChartSvg").textContent || "";
+        const notices = [...panel.querySelectorAll(".az-stats-notice")].map((el) => el.textContent);
+        const prismCsv = window.ZANTIKS_ANALYZER_CORE.exportPrismGroupedCsv(window.ZANTIKS_ANALYZER_UI.buildExportPayload(), "total_dist");
+        const prismDataRows = prismCsv.replace(/^\uFEFF/, "").trim().split("\n").length - 1;
+        return {
+          unit: st.unitOfAnalysis,
+          nUnit: st.analysis.nUnit,
+          svgShowsPlatesUnit: svgText.includes("n=2 plates"),
+          hasLowRepNotice: notices.some((t) => t.includes("Low Replicate Count")),
+          hasMultiFactorNotice: notices.some((t) => t.includes("Multi-Factor Design")),
+          prismDataRows
+        };
+      });
+
+      // Post-stats manual exclusion on Step 5 -> badge + amber audit summary + cleaning_log.txt Section 3 & Section 4
+      await page.click('#analyzerStepper [data-goto="export"]');
+      await page.locator('#wellSummaryTable [data-row-excl="A1"]').first().click();
+      const postStatsUi = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          metaFlag: Boolean(st.runs[0].excludeMeta?.A1?.afterStatsViewed),
+          metaTimestamp: Boolean(st.runs[0].excludeMeta?.A1?.afterStatsAt),
+          rowBadges: document.querySelectorAll("#wellSummaryTable .az-poststats-badge").length,
+          auditPill: document.getElementById("cleaningLogAuditSummary")?.textContent.trim() || "",
+          scrollHintExists: Boolean(document.getElementById("wellTableScrollHint"))
+        };
+      });
+
+      const [logDl] = await Promise.all([
+        page.waitForEvent("download"),
+        page.click("#exportCleaningLogBtn")
+      ]);
+      const logTxt = fs.readFileSync(await logDl.path(), "utf8");
+      const logSec4Ok =
+        logTxt.includes("[EXCLUDED AFTER VIEWING STATS") &&
+        logTxt.includes("Post-stats exclusions total : 1") &&
+        logTxt.includes("4. SCREENING STATISTICS & PARAMETER SNAPSHOT") &&
+        logTxt.includes("Non-Parametric") &&
+        logTxt.includes("Plate Means");
+
+      // 2. Bug #3: Renaming active Control group syncs ui.controlGroupName cleanly
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click("#unitWellsBtn");
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click('#groupSwatchList [data-swatch-group="WT · Vehicle"]');
+      await page.fill("#activeGroupNameInput", "BaselineCtrl");
+      await page.press("#activeGroupNameInput", "Enter");
+      await page.click("#copyMapAllRunsBtn");
+      const bug3CtrlRenameOk = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const mean = st.analysis.groups.find((g) => g.group === "BaselineCtrl")?.normalized?.totalDistPctCtrl?.mean;
+        return st.controlGroupName === "BaselineCtrl" && st.analysis.pooledMeta?.controlGroupName === "BaselineCtrl" && Math.abs(mean - 100) < 0.2;
+      });
+
+      // 3. Bug #1: removeRun down to 1 run resets normalizeToControl/unitOfAnalysis/normalized_ctrl; down to 0 resets full state
+      await page.click('#analyzerStepper [data-goto="data"]');
+      const run0Id = await page.evaluate(() => window.ZANTIKS_ANALYZER_UI.getState().runs[0].id);
+      await page.locator(`#loadedRunsList [data-rm-run="${run0Id}"]`).click();
+      const bug1AfterOne = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          runCount: st.runs.length,
+          norm: st.normalizeToControl,
+          unit: st.unitOfAnalysis,
+          scope: st.scope,
+          compViewNotNorm: st.compView !== "normalized_ctrl"
+        };
+      });
+      const lastId = await page.evaluate(() => window.ZANTIKS_ANALYZER_UI.getState().runs[0].id);
+      await page.locator(`#loadedRunsList [data-rm-run="${lastId}"]`).click();
+      const bug1AfterZero = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return st.runs.length === 0 && !st.normalizeToControl && !st.hasViewedStats && st.trimWindow.trimStartSec === 0 && st.windowAuc.startSec === null;
+      });
+
+      // 4. Bug #7: Demo switch from Spatial tab with custom xyFreezeSpeedMmS exits empty tab & resets xyFreezeSpeedMmS
+      await page.selectOption("#demoPresetSelect", "ld_multi_2p");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="spatial"]');
+      await page.fill("#xyFreezeInput", "4.2");
+      await page.dispatchEvent("#xyFreezeInput", "change");
+      await page.selectOption("#demoPresetSelect", "ppi_24w");
+      const bug7DemoSwitchOk = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return st.activeChartTab === "timeseries" && st.xyFreezeSpeedMmS === 0.5 && !st.hasViewedStats;
+      });
+
+      // 5. Bug #2: Workspace replace via file upload resets Trim, Window AUC, Normalize & xyFreezeSpeedMmS
+      await page.selectOption("#demoPresetSelect", "ld_multi_2p");
+      await page.click('#analyzerStepper [data-goto="qc"]');
+      await page.fill("#qcTrimStartInput", "200");
+      await page.dispatchEvent("#qcTrimStartInput", "change");
+      await page.fill("#qcTrimEndInput", "800");
+      await page.dispatchEvent("#qcTrimEndInput", "change");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.check("#normControlChk");
+      await page.fill("#tsWinStartInput", "200");
+      await page.dispatchEvent("#tsWinStartInput", "change");
+      await page.fill("#tsWinEndInput", "500");
+      await page.dispatchEvent("#tsWinEndInput", "change");
+      // Upload zero-variance 6-well CSV (also verifies Bug #4!)
+      const zeroVarCsv = buildCsv(["A1", "A2", "A3", "B1", "B2", "B3"], 6, (w) => (w.startsWith("A") ? 10 : 20));
+      await page.setInputFiles("#analyzerFileInput", {
+        name: "zero_var_replace_6w.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(zeroVarCsv, "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "zero_var_replace_6w.csv");
+      const bug2ReplaceOk = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return !st.normalizeToControl &&
+          st.trimWindow.trimStartSec === 0 &&
+          st.trimWindow.trimEndSec === null &&
+          st.windowAuc.startSec === null &&
+          st.xyFreezeSpeedMmS === 0.5 &&
+          !st.hasViewedStats &&
+          document.getElementById("tsWinStartInput").value === "";
+      });
+
+      // Bug #4: Zero-variance groups never render Infinity or NaN in #compStatsPanel
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click("#addGroupBtn");
+      await page.click("#addGroupBtn");
+      await page.click("#autoAssignRowsBtn");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      const bug4ZeroVarOk = await page.evaluate(() => {
+        const txt = document.getElementById("compStatsPanel").textContent || "";
+        return !/Infinity|NaN/.test(txt) && txt.length > 0;
+      });
+
+      // 6. Bug #5: Inverted Trim & Window AUC show .is-invalid + .az-inline-warn; blank QC input restores on blur
+      await page.click('#analyzerStepper [data-goto="qc"]');
+      await page.fill("#qcTrimStartInput", "800");
+      await page.dispatchEvent("#qcTrimStartInput", "change");
+      await page.fill("#qcTrimEndInput", "200");
+      await page.dispatchEvent("#qcTrimEndInput", "change");
+      await page.fill("#qcMadMultInput", "");
+      await page.locator("#qcMadMultInput").blur();
+      const bug5QcOk = await page.evaluate(() =>
+        document.getElementById("qcTrimStartInput").classList.contains("is-invalid") &&
+        document.getElementById("qcThresholdHint").classList.contains("az-inline-warn") &&
+        Number(document.getElementById("qcMadMultInput").value) > 0
+      );
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="timeseries"]');
+      await page.fill("#tsWinStartInput", "500");
+      await page.dispatchEvent("#tsWinStartInput", "change");
+      await page.fill("#tsWinEndInput", "100");
+      await page.dispatchEvent("#tsWinEndInput", "change");
+      const bug5AucOk = await page.evaluate(() =>
+        document.getElementById("tsWinStartInput").classList.contains("is-invalid") &&
+        document.getElementById("tsWinAucReadout").classList.contains("az-inline-warn")
+      );
+
+      // 7. Bug #6: Mixed 24w + 96w plates -> zero phantom keys on Copy Map to All Runs & mixed layout summary
+      await page.click("#clearAllBtn");
+      const w24 = [], w96 = [];
+      for (let r = 0; r < 4; r++) for (let c = 1; c <= 6; c++) w24.push(String.fromCharCode(65 + r) + c);
+      for (let r = 0; r < 8; r++) for (let c = 1; c <= 12; c++) w96.push(String.fromCharCode(65 + r) + c);
+      await page.setInputFiles("#analyzerFileInput", { name: "2026-11-01_p24.csv", mimeType: "text/csv", buffer: Buffer.from(buildCsv(w24, 6, (_, wi) => 10 + (wi % 5)), "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.length === 1);
+      await page.setInputFiles("#addRunFileInput", { name: "2026-11-02_p96.csv", mimeType: "text/csv", buffer: Buffer.from(buildCsv(w96, 6, (_, wi) => 12 + (wi % 5)), "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.length === 2);
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click("#autoAssignColsBtn");
+      await page.click("#copyMapAllRunsBtn");
+      const bug6MixedOk = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const r24 = st.runs[0];
+        const validSet = new Set(r24.summaryParsed.wells);
+        const phantomKeys = Object.keys(r24.groups).filter((w) => !validSet.has(w));
+        const ovTxt = document.getElementById("loadedOverviewGrid")?.textContent || "";
+        return phantomKeys.length === 0 && Boolean(st.analysis.pooledMeta?.hasMixedLayouts) && !ovTxt.includes("2 × 96-Well");
+      });
+
+      // 8. Bug #8: Exact topbar height & width parity vs Script Builder at 1600x900 + zero input[placeholder]
+      const analyzerTopbar = await page.evaluate(() => {
+        const tb = document.querySelector(".topbar-inner").getBoundingClientRect();
+        return { h: Math.round(tb.height * 10) / 10, w: Math.round(tb.width * 10) / 10, placeholders: document.querySelectorAll("input[placeholder]").length };
+      });
+      await page.click('.suite-nav a[href="zantiks_script_generator.html"]');
+      await page.waitForFunction(() => location.pathname.endsWith("zantiks_script_generator.html") && window.refreshAll && window.refreshAll._latestBundle);
+      const builderTopbar = await page.evaluate(() => {
+        const tb = document.querySelector(".topbar-inner").getBoundingClientRect();
+        return { h: Math.round(tb.height * 10) / 10, w: Math.round(tb.width * 10) / 10, placeholders: document.querySelectorAll("input[placeholder]").length };
+      });
+      const bug8TopbarParityOk =
+        Math.abs(analyzerTopbar.h - builderTopbar.h) < 1 &&
+        Math.abs(analyzerTopbar.w - builderTopbar.w) < 1 &&
+        analyzerTopbar.placeholders === 0 &&
+        builderTopbar.placeholders === 0;
+
+      const ok =
+        errors.length === 0 &&
+        !beforeStatsViewed &&
+        Object.values(wellsParamCheck).every(Boolean) &&
+        Object.values(nonParamWellsCheck).every(Boolean) &&
+        platesModeCheck.unit === "plates" &&
+        platesModeCheck.nUnit === "plates" &&
+        platesModeCheck.svgShowsPlatesUnit &&
+        platesModeCheck.hasLowRepNotice &&
+        platesModeCheck.hasMultiFactorNotice &&
+        platesModeCheck.prismDataRows === 2 &&
+        postStatsUi.metaFlag &&
+        postStatsUi.metaTimestamp &&
+        postStatsUi.rowBadges >= 1 &&
+        postStatsUi.auditPill.includes("1 post-stats") &&
+        postStatsUi.scrollHintExists &&
+        logSec4Ok &&
+        bug3CtrlRenameOk &&
+        bug1AfterOne.runCount === 1 && !bug1AfterOne.norm && bug1AfterOne.unit === "wells" && bug1AfterOne.scope === "active" && bug1AfterOne.compViewNotNorm &&
+        bug1AfterZero &&
+        bug7DemoSwitchOk &&
+        bug2ReplaceOk &&
+        bug4ZeroVarOk &&
+        bug5QcOk &&
+        bug5AucOk &&
+        bug6MixedOk &&
+        bug8TopbarParityOk;
+      report(ok, "Methodological guardrails (Test Family, Plate Means vs Wells, Post-Stats Audit + Section 4 log) & all #58 bug fixes (#1-#8) pass cleanly",
+        ok ? "" : JSON.stringify({ errors, beforeStatsViewed, wellsParamCheck, nonParamWellsCheck, platesModeCheck, postStatsUi, logSec4Ok, bug3CtrlRenameOk, bug1AfterOne, bug1AfterZero, bug7DemoSwitchOk, bug2ReplaceOk, bug4ZeroVarOk, bug5QcOk, bug5AucOk, bug6MixedOk, analyzerTopbar, builderTopbar }));
+      await page.close();
+    }
   }
 } finally {
   await browser.close();
