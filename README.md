@@ -1,8 +1,8 @@
 # Zanscript-Builder
 
-**Zanscript-Builder** (*Zantiks MWP Script Builder & CSV Analyzer*) is a standalone, zero-dependency browser suite for designing behavioral tracking experiments and analyzing exported CSV data on **Zantiks MWP** systems (**MWP Z3** and **MWP Z2 / Z2S**). **Script Builder** (`zantiks_script_generator.html`) generates ready-to-compile **Zanscript (`.zs`)** files for camera calibration, multi-well plate arena/zone asset creation, tracking parameter verification, and full stimulus-driven assays; the companion **CSV Analyzer** (`zantiks_csv_analyzer.html`) provides closed-loop 10-second QC, interactive plate-map treatment grouping, pure-SVG charting, and one-click GraphPad Prism / Python exports—completely offline.
+**Zanscript-Builder** (*Zantiks MWP Script Builder & Data Prep Analyzer*) is a standalone, zero-dependency browser suite for designing behavioral tracking experiments and cleaning/analyzing exported CSV data on **Zantiks MWP** systems (**MWP Z3** and **MWP Z2 / Z2S**). **Script Builder** (`zantiks_script_generator.html`) generates ready-to-compile **Zanscript (`.zs`)** files for camera calibration, multi-well plate arena/zone asset creation, tracking parameter verification, and full stimulus-driven assays; the companion **Zantiks MWP Data Prep & Analyzer** (`zantiks_csv_analyzer.html`) is a 100% offline **Data Prep, Behavioral Feature Extraction & Quick Screening Stats Workbench** with multi-run pooling, organism-aware QC & `cleaning_log.txt` audit trails, multi-factor plate maps, pure-SVG charts (`_ZCHANGE` & `_XY` heatmaps), and Excel-ready GraphPad Prism / `scipy.stats` Python handoff.
 
-**Live Web Builder:** [https://tigerqu.github.io/Zanscript-Builder/](https://tigerqu.github.io/Zanscript-Builder/) · **Live CSV Analyzer:** [https://tigerqu.github.io/Zanscript-Builder/zantiks_csv_analyzer.html](https://tigerqu.github.io/Zanscript-Builder/zantiks_csv_analyzer.html)
+**Live Web Builder:** [https://tigerqu.github.io/Zanscript-Builder/](https://tigerqu.github.io/Zanscript-Builder/) · **Live Data Prep & Analyzer:** [https://tigerqu.github.io/Zanscript-Builder/zantiks_csv_analyzer.html](https://tigerqu.github.io/Zanscript-Builder/zantiks_csv_analyzer.html)
 
 > [!IMPORTANT]
 > **Unofficial Community Tool — Use at Your Own Risk**
@@ -32,8 +32,8 @@ Review **Pre-flight Checks**, inspect syntax-highlighted Zanscripts and CSV colu
 
 ![Script tabs and ZIP bundle export](assets/demo_script_export.gif)
 
-### 5. Companion 5-Step CSV Analyzer & Closed-Loop QC
-Switch seamlessly from **Script Builder** to **CSV Analyzer** in the top bar and walk through **Data → QC → Groups → Plots → Export** with 1-click anomaly exclusion, interactive plate-map painting, pure-SVG charts, and GraphPad Prism / Python exports:
+### 5. Companion 5-Step Data Prep & Analyzer Workbench
+Switch seamlessly from **Script Builder** to **CSV Analyzer** (*Zantiks MWP Data Prep & Analyzer*) in the top bar and walk through **Data → QC → Groups → Plots → Export** with single- or multi-plate pooling, organism-aware QC & anomaly exclusion, interactive multi-factor plate painting, pure-SVG feature charts with quick screening stats, and Excel-ready Prism / `cleaning_log.txt` / Python exports:
 
 ![5-step CSV Analyzer workflow](assets/demo_csv_analyzer.gif)
 
@@ -53,7 +53,7 @@ Switch seamlessly from **Script Builder** to **CSV Analyzer** in the top bar and
 - **Zantiks-Safe Naming**: Automatically extracts researcher surnames and sanitizes study tags into space-free ASCII identifiers accepted by the Zantiks Control Console compiler.
 - **Save, Share & Reopen Experiments**: Every choice auto-saves in your browser. **Save as file** downloads the whole design as `*_experiment.json`; **Open…** loads that file — or a scripts `.zip` downloaded from the app, which now includes `experiment.json` — to restore it exactly. Plate calibration offsets always stay with your own unit.
 - **Pre-flight Checks**: The Export page lists warnings and notes before you download (heater range, short pulses vs. time bin, Z3-only features on Z2 units, UV LEDs, very large video / XY files, factory plate offsets, and more), each with a button that jumps to the page where it can be fixed.
-- **Companion 5-Step CSV Analyzer & Closed-Loop QC (`zantiks_csv_analyzer.html`)**: Switch seamlessly between **Script Builder** and **CSV Analyzer** via the width-aligned (`1380 px`) top-bar suite switcher. Walk through the same calm 5-step wizard (`Data` → `QC` → `Groups` → `Plots` → `Export`) with a persistent **Dataset Summary** sidebar: drop Zantiks Summary, `_ZCHANGE`, or `_XY` CSVs alongside a Builder `.zip` / `experiment.json` (or click **Use Latest Builder Config**), exclude empty/dead wells and reflection-glitch spikes in one click, paint treatment groups (`Fill by Column` / `Fill by Row` / `Toggle Exclude Brush`) on a true-scale interactive SVG plate/maze map, inspect Mean ± SEM time-series, VMR, Thigmotaxis, `% PPI`, and Y-Maze `SAB %` pure-SVG charts, and export **Prism Grouped CSV**, **Tidy Long CSV**, **Well Summary CSV**, or a ready-to-run **Python Script (`.py`)**.
+- **Companion 5-Step Data Prep & Analyzer Workbench (`zantiks_csv_analyzer.html`)**: Switch seamlessly between **Script Builder** and **CSV Analyzer** (*Zantiks MWP Data Prep & Analyzer*) via the width-aligned (`1380 px`) top-bar suite switcher. Walk through the same calm 5-step wizard (`Data` → `QC` → `Groups` → `Plots` → `Export`) with a persistent **Dataset Summary** sidebar: pool single or multiple replicate plate runs (`run_id`, `date`, `Copy Map to All Runs`, per-plate **`% of Control`** batch normalization) alongside Builder `.zip` / `experiment.json` (or click **Use Latest Builder Config**), apply **organism-aware & adjustable QC thresholds** (*C. elegans* `15 mm/s` through *Drosophila* `180 mm/s`) and non-destructive **Trim Windows** with auto/manual **`qc_reason`** tracking, paint **multi-factor plate layers** (`genotype × treatment`, `treatment × dose`, etc.) with **Combine Factors → Groups**, extract **Peri-Stimulus Aligned**, **Trial Habituation**, **Custom Window AUC**, **`_XY` 2D Occupancy Heatmaps + Immobility % / P95 Burst Speed**, VMR, Thigmotaxis, `% PPI`, and Y-Maze `SAB %` features alongside transparent **Quick Screening Stats** (Welch *t*, Mann-Whitney *U*, One-way ANOVA + Holm-Bonferroni, Kruskal-Wallis), and export UTF-8 BOM Excel-ready **Prism Grouped CSV** / **Tidy Long CSV** / **Well Summary CSV**, BOM-free **Copy Prism Table**, a Methods-ready **`cleaning_log.txt`**, and a runnable **`scipy.stats` Python Script (`.py`)**.
 
 ---
 
@@ -63,11 +63,11 @@ Switch seamlessly from **Script Builder** to **CSV Analyzer** in the top bar and
 Zanscript-Builder/
 ├── index.html                      # Redirect entry point for GitHub Pages
 ├── zantiks_script_generator.html   # Script Builder app: page markup; loads css/ and js/
-├── zantiks_csv_analyzer.html       # Companion 5-step CSV Analyzer app: offline QC, plate map & SVG charts
+├── zantiks_csv_analyzer.html       # Companion 5-step Data Prep & Analyzer workbench (offline)
 ├── css/                            # Styles, one file per area:
 │   ├── base.css                    #   design tokens (1380px unified layout), shared topbar & wizard shell
 │   ├── components.css, stimulus.css, data.css, export.css, modal.css
-│   └── analyzer.css                #   5-step CSV Analyzer wizard, plate map & chart styles
+│   └── analyzer.css                #   5-step Data Prep & Analyzer wizard, multi-factor painter & chart styles
 ├── js/                             # App code as plain scripts, loaded in order:
 │   ├── catalogs.js                 #   organisms, plates, mazes, LEDs, protocols
 │   ├── maze-editor.js              #   official maze presets & 3D-printed maze SVG canvas editor
@@ -82,10 +82,10 @@ Zanscript-Builder/
 │   ├── experiment-io.js            #   save / open / auto-save experiments & ZIP reader
 │   ├── preflight.js                #   Export-page checks
 │   ├── main.js                     #   Script Builder start-up (must load last on Builder page)
-│   ├── analyzer-core.js            #   CSV parser, QC engine, protocol metrics, demos & exporters
-│   └── analyzer-ui.js              #   5-step CSV Analyzer wizard, plate painter, SVG charts & UI wiring
+│   ├── analyzer-core.js            #   v2 engine: multi-run pooling, organism QC, features, stats & exporters
+│   └── analyzer-ui.js              #   5-step Data Prep & Analyzer wizard, factor painter & SVG charts
 ├── zantiks_plate_config.js         # External plate geometry calibration profile (mm)
-├── tests/                          # Automated Playwright tests (73 checks: 14 golden scenarios + Analyzer)
+├── tests/                          # Automated Playwright tests (78 checks: 14 golden scenarios + 13 Analyzer suites)
 ├── package.json                    # Test tooling only (the app needs no install or build)
 ├── .github/workflows/tests.yml     # Runs the tests on every push and pull request
 ├── assets/                         # 5 walkthrough GIFs for documentation
@@ -119,7 +119,7 @@ Zanscript-Builder/
    - *Tip:* Click **Copy Slot Name** (or the filename badge) to copy the `.zs`-stripped service name (e.g. `04_qu_24w`) for pasting once into Zantiks **Settings → Zanscript shortcuts (Slots 1–20)**. Rebuilding the same slot script updates it in place without re-entering Settings, while `LOGFILE(0, ...)` tags every exported CSV with full protocol details.
    - Read the **Pre-flight Checks** at the top of the page first.
 4. **Keep or share the design**: it auto-saves in this browser. Use **Save as file** in the Run Summary to share it, and **Open…** to load an `experiment.json` or a downloaded scripts `.zip`.
-5. **Analyze your exported CSVs**: click **CSV Analyzer** in the top-bar suite switcher (or open `zantiks_csv_analyzer.html`) and walk through its 5-step wizard (**Data** → **QC** → **Groups** → **Plots** → **Export**) while the persistent **Dataset Summary** sidebar tracks active wells, duration, groups, and QC flags—drop your `.csv` exports + Builder `.zip` / `experiment.json` (or click **Use Latest Builder Config** / pick a built-in demo), exclude flagged anomalies, paint treatment groups, inspect pure-SVG charts, and export GraphPad Prism, Tidy CSV, Well Summary CSV, or Python (`.py`) outputs.
+5. **Clean & analyze your exported CSVs**: click **CSV Analyzer** in the top-bar suite switcher (or open `zantiks_csv_analyzer.html`) to open **Zantiks MWP Data Prep & Analyzer** and walk through its 5-step wizard (**Data** → **QC** → **Groups** → **Plots** → **Export**) with the persistent **Dataset Summary** sidebar—drop one or multiple replicate `.csv` runs (Summary, `_ZCHANGE`, `_XY`) + Builder `.zip` / `experiment.json` (or click **Use Latest Builder Config** / pick one of 4 built-in demos), tune organism-aware QC thresholds & Trim Windows, paint multi-factor plate layers, inspect behavioral features (`Peri-Stimulus`, `Habituation`, `Window AUC`, `_XY` 2D heatmaps) with quick screening stats, and export Excel-ready UTF-8 BOM CSVs, GraphPad Prism tables, `cleaning_log.txt`, or a runnable `scipy.stats` Python (`.py`) script.
 
 ---
 
@@ -273,33 +273,43 @@ Single-channel illumination protocols (`baseline`, `ld_transitions`, `light_off_
 
 ---
 
-## Companion CSV Analyzer (Closed-Loop QC & Export)
+## Companion Data Prep & Analyzer (Multi-Run QC, Feature Extraction & Screening Stats)
 
-Switch between **Script Builder** and **CSV Analyzer** at any time using the top-bar pill switcher (`zantiks_script_generator.html` ↔ `zantiks_csv_analyzer.html`). Both pages share a unified **`1380 px`** suite layout (`scrollbar-gutter: stable`, zero horizontal shift on switch) and the same calm step-by-step wizard shell—complete with a sticky **Back / Next** bar, URL hash routes (`#data`–`#export`), and a persistent **Dataset Summary** right sidebar displaying live **Active Wells**, **Duration**, **Groups**, and **QC Flagged** stats with clickable rows to jump to any step. Like the Script Builder, the CSV Analyzer runs 100% locally in your browser over `https://` or `file://` with zero external libraries or cloud uploads.
+Switch between **Script Builder** and **CSV Analyzer** (*Zantiks MWP Data Prep & Analyzer*) at any time using the top-bar pill switcher (`zantiks_script_generator.html` ↔ `zantiks_csv_analyzer.html`). Designed as an offline **Zantiks Data Prep, Behavioral Feature Extraction & Quick Screening Stats Workbench**, it shares Script Builder's unified **`1380 px`** layout (`scrollbar-gutter: stable`, zero horizontal shift on switch), calm 5-step wizard shell (`#data`–`#export`), sticky **Back / Next** bar, and persistent **Dataset Summary** right sidebar. Everything runs 100% locally in your browser over `https://` or `file://` with zero external libraries or cloud uploads.
 
-### 1. Data (`#data`) — Closed-Loop CSV & Context Import
-- **Multi-File Dropzone**: Drag-and-drop or browse for Zantiks Summary CSVs (`DIST_*`, `MSD_*`, `ZD_*_Z#`, `ZC_*_Z#`, `ZT_*_Z#`), companion `_ZCHANGE` zone-transition event logs, `_XY` coordinate files, saved plate maps, and Builder `experiment.json` / `.zip` bundles. Automatically handles UTF-8 BOM, CRLF/LF, pre-header Zantiks system metadata lines, trailing commas, single-arena Petri dishes, 6–96-well plates, and multi-zone official/3D-printed mazes (`Z1–Z8`).
-- **Automatic Builder Context & Dataset Overview**: Click **Use Latest Builder Config** to pull your auto-saved Script Builder design from `localStorage` (or drop a Builder `.zip` / `experiment.json`) to attach plate/maze geometry, protocol phase schedules, and target thermostat temperature, summarized immediately in the **Loaded Dataset Overview** card.
-- **Built-in Demo Datasets**: Explore the entire 5-step workflow immediately via three one-click demo cards (also switchable from the top bar while staying on your current step): **L/D 24-Well** (3 dose groups + empty well `D5` & spike-glitch well `D6`), **PPI 24-Well** (`PULSE_ALONE` vs. `PPI_TRIAL` startle attenuation), and **Y-Maze 15** (`Z1–Z4` Summary + companion `_ZCHANGE` event log).
+### 1. Data (`#data`) — Single-Run or Multi-Plate Pooling & Context Import
+- **Single or Multi-Run Dropzone**: Drag-and-drop or browse for Zantiks Summary CSVs (`DIST_*`, `MSD_*`, `ZD_*_Z#`, `ZC_*_Z#`, `ZT_*_Z#`), companion `_ZCHANGE` zone-transition logs, `_XY` per-frame coordinate files, saved plate maps, and Builder `experiment.json` / `.zip` bundles—or click **`+ Add Run (CSV)`** to pool multiple replicate plates together. Automatically handles UTF-8 BOM, CRLF/LF, pre-header Zantiks metadata lines, trailing commas, single-arena Petri dishes, 6–96-well plates, and multi-zone official/3D-printed mazes (`Z1–Z8`), and infers editable **`run_id`** and **`date`** (`YYYY-MM-DD`) metadata per run in **Loaded Dataset & Runs**.
+- **Automatic Builder Context**: Click **Use Latest Builder Config** to pull your auto-saved Script Builder design from `localStorage` (or drop a Builder `.zip` / `experiment.json`) to attach plate/maze geometry, protocol phase schedules, target thermostat temperature, and auto-synced organism QC thresholds.
+- **4 Built-in Demo Datasets**: Explore single-run and multi-plate workflows immediately via four one-click demo cards (also switchable from the top bar while staying on your current step):
+  - **L/D 24-Well** (`ld_24w`): 3 dose groups + empty well `D5` & spike-glitch well `D6` (`DIST` + `MSD` + `Z1/Z2` + `TEMP_C`).
+  - **PPI 24-Well** (`ppi_24w`): alternating `PULSE_ALONE` vs. `PPI_TRIAL` blocks demonstrating `% PPI`, peri-stimulus alignment, and trial habituation.
+  - **Y-Maze 15** (`ymaze_15`): 15-arena `Z1–Z4` Summary CSV paired with companion `_ZCHANGE` events for transition matrices & `SAB %`.
+  - **L/D 2-Plate Pool** (`ld_multi_2p`): 2 replicate 24-well plates across consecutive dates (`+17%` inter-plate batch drift), `genotype × treatment` multi-factor layers, per-plate QC flags, and `_XY` frame trajectories for 2D spatial heatmaps.
 
-### 2. QC (`#qc`) — 10-Second Quality Control & Diagnostics
-- **4-Card QC KPI Strip**: Summarizes **Active Wells**, **Empty / Dead** wells (`totalDist < 0.1 mm` or zero active bins), **Spike Glitches** (reflection/tracking jump outliers) with one-click **Exclude Flagged** / **Include All**, and **Chamber Temp (`TEMP_C`)** min–max range.
-- **Plate / Maze QC Heatmap**: Large true-scale interactive SVG coloring every well/arena by the selected metric while marking empty wells, spike glitches, and excluded wells; click any well to inspect details or `Shift+click` to toggle exclusion.
-- **Chamber Temperature (`TEMP_C`) & QC Diagnostics Table**: Pure-SVG `TEMP_C` trace plotted against the Builder target thermostat reference line (with **Download SVG**), paired with a filterable/sortable **QC Diagnostics & Anomaly Table** offering 1-click exclude checkboxes.
+### 2. QC (`#qc`) — Organism-Aware Thresholds, Trim Window & Exclusion Audit
+- **Multi-Run Switcher & 4-Card QC KPI Strip**: Switch across pooled runs (with one-click **Exclude Flagged** / **Exclude Flagged (All Runs)** and **Include All**) while monitoring **Active Wells**, **Empty / Dead**, **Spike Glitches**, and **Chamber Temp (`TEMP_C`)**.
+- **Organism-Aware & Adjustable QC Thresholds**: Pick a physiologically calibrated organism preset—**Default** (`150 mm/s`), **Zebrafish Larvae** (`120 mm/s`), **Daphnia magna** (`80 mm/s`), **Drosophila (Adult)** (`180 mm/s`), **C. elegans** (`15 mm/s`), **Planaria** (`20 mm/s`), or **Custom**—or fine-tune `Empty < (mm)`, `Max Speed (mm/s)`, `Spike Min (mm)`, and `MAD ×` live without mutating raw CSV data.
+- **Non-Destructive Trim Window**: Set **Trim Start (s)** and **Keep Until (s)** to exclude acclimation periods or broken tail segments cleanly while preserving raw measurements.
+- **Plate / Maze QC Heatmap, `TEMP_C` Trace & Audit Table**: Inspect per-well metrics on a large true-scale interactive SVG (`Shift+click` to exclude), plot measured `TEMP_C` against the Builder target reference (with **Download SVG**), and audit auto vs. manual exclusions in the **QC Diagnostics & Anomaly Table** with explicit **`qc_reason`** codes (`ok`, `empty_well`, `spike_glitch`, `empty_well+spike_glitch`, `manual_exclude`, `auto_flagged_kept`).
 
-### 3. Groups (`#groups`) — Treatment Group Painter & Plate Map
-- **Interactive Plate / Maze Painter**: Spacious side-by-side true-scale SVG where you click or drag across wells to paint treatment groups while excluded wells remain clearly dimmed and crossed out.
-- **Group Manager**: Manage group color swatches, add/rename/remove groups, switch to the **Toggle Exclude Brush**, auto-assign grids with **Fill by Column** or **Fill by Row**, and reuse plate layouts across replicates via **Save Map (`.json`)** and **Load Map (`.json`)**.
+### 3. Groups (`#groups`) — Multi-Factor Plate Map Painter
+- **Interactive Plate / Maze Painter**: Click or drag across wells on a spacious true-scale SVG while excluded wells stay clearly dimmed and crossed out; in multi-run pools, switch runs or click **`Copy Map to All Runs`** to replicate a plate layout instantly.
+- **Multi-Factor Layers & Group Manager**: Paint primary groups or add arbitrary experimental factor layers (`genotype`, `treatment`, `dose`, etc., with quick **`+ genotype × treatment`** and **`+ treatment × dose`** presets). Use **Fill by Column**, **Fill by Row**, and **Toggle Exclude Brush**, click **`Combine Factors → Groups`** to synthesize composite treatment arms, and reuse multi-factor maps across replicates via **Save Map (`.json`)** and **Load Map (`.json`)**.
 
-### 4. Plots (`#plots`) — 3-Tab Pure-SVG Charting Studio
-- **01 · Trace — Time Series (Mean ± SEM)**: Group mean traces with toggleable `± SEM` ribbons, automatic `Phases` background shading, `Stimuli` onset markers, metric selector (`Distance`, `MSD`, `Z1 %`, `Z2 %`), bin-smoothing (`1x`, `5x`, `10x`, `30x`), hover tooltips, and **Download SVG**.
-- **02 · Protocol Stats — Phase & Group Comparison**: Grouped Mean ± SEM bars overlaid with jittered individual-well scatter dots across **Phase Totals**, **VMR** (Visual Motor Response: Dark vs. Light & dark-onset burst), **Thigmotaxis / Zone Preference** (`Z1–Zk %` & Preference Index `(Z2 - Z1) / (Z1 + Z2)`), **Startle & `% PPI`** (`(1 - meanPPI / meanPulseAlone) × 100`), and **Y-Maze `SAB %`**, with **Download SVG**.
-- **03 · Transitions — Zone Events (`_ZCHANGE`)**: Zone-to-zone transition heatmap matrix, per-arena transition counts & 3-arm **Spontaneous Alternation (`SAB %`)**, and **Download SVG**.
+### 4. Plots (`#plots`) — 4-Tab Behavioral Feature Extraction & Quick Screening Stats
+- **Multi-Run Scope & Batch Normalization Bar**: Toggle **`Pooled`** vs. **`Active Run`**, enable per-plate **`Normalize to Control (%)`** (scales each well's scalar metrics to that plate's active Control mean = `100%` to remove inter-plate batch drift), and inspect the live `Plate shift %` diagnostic badge.
+- **01 · Trace — Time Series**: Switch between **Full Trace**, **Peri-Stimulus (`t = 0`)** aligned trial traces, and **Trial Habituation (`T1..TN`)** (computing Habituation Index `(1 - meanLast2 / meanFirst2) × 100%`), define a **Custom Window AUC (`Start`–`End` s)** with shaded overlay and trapezoidal AUC / mean readout, toggle `± SEM`, `Phases`, `Stimuli`, `1x`–`30x` binning, and **Download SVG**.
+- **02 · Protocol Stats — Phase & Group Comparison + Quick Screening Stats**: Grouped Mean ± SEM bars overlaid with jittered well scatter dots across **Phase Totals**, **VMR** (Dark vs. Light & dark-onset burst), **Thigmotaxis / Zone Preference** (`Z1–Zk %` & `(Z2 - Z1) / (Z1 + Z2)`), **Startle & `% PPI`**, **Trial Habituation**, **Custom Window AUC**, **`% of Control` Normalized**, and **`_XY` Spatial** metrics. Toggle **Screening Stats** for pure-JS **Welch *t*-test**, **Mann-Whitney *U***, **One-way ANOVA + Holm-Bonferroni** pairwise tests, **Kruskal-Wallis**, and paired comparisons rendered as non-overlapping significance brackets and a transparent stats summary card—intended for rapid exploratory screening, with one-click handoff to GraphPad Prism, R, or the exported `scipy.stats` Python script for publication statistics.
+- **03 · Transitions — Zone Events (`_ZCHANGE`)**: Zone-to-zone transition heatmap matrix, per-arena entry counts & 3-arm **Spontaneous Alternation (`SAB %`)**, and **Download SVG**.
+- **04 · Spatial (`_XY`) — Spatial Heatmaps & Kinematics**: Multi-panel 2D normalized occupancy heatmaps per group from `_XY` frame coordinates with live-adjustable **Immobility `< (mm/s)`** threshold (default `0.5 mm/s`), mean speed, **P95 burst speed**, radial center vs. wall proximity, and **Download SVG**.
 
-### 5. Export (`#export`) — 2-Column Export Hub & Per-Well Summary Table
-- **GraphPad Prism Grouped Table**: Choose any protocol/summary metric and download **Prism Grouped CSV** or click **Copy Prism Table** for direct side-by-side paste into GraphPad Prism Column tables (excluded wells automatically omitted).
-- **Analysis Tables & Reproducible Code**: Download **Tidy Long CSV** (normalized well × time-bin rows for R / `seaborn`), **Well Summary CSV** (per-well Distance, MSD, phase totals, Zone %, VMR, `% PPI`, `SAB %`, and QC flags), or a runnable **Python Script (`.py`)** (`pandas` + `matplotlib`) pre-wired with your active groups and exclusions.
-- **Per-Well Summary Table**: Audit every well below the Export Hub with Group and Status (`All`, `Active`, `Excluded`, `QC Flagged`) filters and inline exclusion checkboxes.
+### 5. Export (`#export`) — Excel-Ready Exports, `cleaning_log.txt` & Python Verification
+- **GraphPad Prism Grouped Table**: Pick any protocol/feature metric and download **Prism Grouped CSV** (UTF-8 BOM `\uFEFF` so Excel and Prism render non-ASCII / Chinese group names cleanly) or click **Copy Prism Table** (clean BOM-free tab-separated text ready to paste directly into Prism Column tables; excluded wells omitted automatically).
+- **Cleaned Tables, Audit Log & Python Verification**:
+  - **Tidy Long CSV** & **Well Summary CSV**: Non-destructive UTF-8 BOM (`\uFEFF`) CSVs carrying `run_id`, `date`, all factor columns, `excluded`, `qc_status`, and `qc_reason` for R / `pandas` / `seaborn`.
+  - **Cleaning Log (`.txt`)**: Methods-ready `cleaning_log.txt` audit trail logging analyzer version, organism QC preset & thresholds, trim window, loaded filenames, and per-well auto/manual exclusion evidence.
+  - **Python Script (`.py`)**: Standalone runnable script reading CSVs with `encoding="utf-8-sig"` and reproducing group screening tests with `scipy.stats` + `pandas` + `matplotlib`.
+- **Per-Well Summary Table**: Audit every well across single or pooled runs (`Run` column, factor tags, `QC Reason`, Window AUC, Immobility %) with Group/Status filters and inline exclusion checkboxes.
 
 ---
 
@@ -325,7 +335,7 @@ Different MWP units or plate manufacturers can exhibit slight positional shifts 
 
 The app is plain HTML, CSS and JavaScript with no build step: edit the files in `css/` and `js/` and reload the page.
 
-Automated tests (`73` Playwright checks across `65` Script Builder tests and `8` CSV Analyzer suites) make sure changes never silently alter generated scripts or break the UI. Each file in `tests/scenarios/` is an experiment saved by the app (`14` scenarios covering every protocol, both hardware revisions, and multiple plates); the tests load each one and compare all four `.zs` scripts and `README_STEPS.txt` byte-for-byte with `tests/golden/`. They also verify that every Builder page loads without errors, open → save and `.zip` round trips are lossless, auto-save and `#resetBtn` behave cleanly across reloads, Pre-flight Checks, Z3 port gates / RGB channel maps, official & custom 3D mazes, PWM curves, and multi-stream outputs stay in sync, and that the 5-step `zantiks_csv_analyzer.html` wizard loads cleanly over `file://`, matches Script Builder's `1380 px` layout parity (`0 px` shift), parses CSV edge cases, computes demo QC/protocol metrics, imports Builder `.zip` / `localStorage` context, and produces valid CSV/Prism/Python exports.
+Automated Playwright tests (`78` checks total) cover both **Script Builder** (`65` tests across `14` golden scenarios, all 6 pages, lossless JSON/ZIP round trips, auto-save/reset, Pre-flight Checks, Z3 port gates / RGB channel maps, official & custom 3D mazes, PWM curves, and multi-stream outputs) and the 5-step **Data Prep & Analyzer** (`13` suites covering `file://` loading, `1380 px` layout parity with `0 px` shift, CSV edge cases, multi-run pooling & `% of Control` batch normalization, organism-aware QC thresholds & non-destructive Trim Window, multi-factor plate layers & `.json` round-trip, UTF-8 BOM / CJK group names / `cleaning_log.txt` / BOM-free Prism TSV, pure-JS screening stats numerical benchmarks, peri-stimulus / habituation / Window AUC, `_XY` spatial heatmaps, Builder `.zip` / `localStorage` handoff, and `scipy.stats` Python exports). Each file in `tests/scenarios/` is compared byte-for-byte across all four `.zs` scripts and `README_STEPS.txt` against `tests/golden/`.
 
 ```bash
 npm install                          # once: installs Playwright (test tool only)

@@ -1737,6 +1737,7 @@ try {
         const dlPath = await download.path();
         return {
           filename: download.suggestedFilename(),
+          rawBuf: fs.readFileSync(dlPath),
           text: fs.readFileSync(dlPath, "utf8")
         };
       };
@@ -1746,25 +1747,52 @@ try {
       const prismDl = await captureDownloadText("#exportPrismBtn");
       const pyDl = await captureDownloadText("#exportPythonBtn");
 
-      const tidyLines = tidyDl.text.trim().split("\n");
-      const summaryLines = summaryDl.text.trim().split("\n");
-      const prismLines = prismDl.text.trim().split("\n");
+      // Verify BOM-free Prism TSV clipboard export via both UI button & core helper
+      const copiedTsv = await page.evaluate(async () => {
+        let captured = null;
+        try {
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText: async (t) => { captured = String(t); } }
+          });
+        } catch (_) {}
+        document.getElementById("copyPrismBtn").click();
+        await new Promise((r) => setTimeout(r, 30));
+        const directTsv = window.ZANTIKS_ANALYZER_CORE.exportPrismGroupedTsv(
+          window.ZANTIKS_ANALYZER_UI.buildExportPayload(),
+          window.ZANTIKS_ANALYZER_UI.getState().prismMetric
+        );
+        return { captured, directTsv };
+      });
+
+      const stripBom = (s) => s.replace(/^\uFEFF/, "");
+      const tidyLines = stripBom(tidyDl.text).trim().split("\n");
+      const summaryLines = stripBom(summaryDl.text).trim().split("\n");
+      const prismLines = stripBom(prismDl.text).trim().split("\n");
       const prismHeaders = prismLines[0].split(",");
       const vehColIdx = prismHeaders.indexOf("Vehicle");
       const vehPrismVals = prismLines.slice(1).map((l) => l.split(",")[vehColIdx]).filter((v) => v && v.trim() !== "");
 
       const exportsOk = {
+        tidyBom: tidyDl.text.startsWith("\uFEFF") && tidyDl.rawBuf[0] === 0xef && tidyDl.rawBuf[1] === 0xbb && tidyDl.rawBuf[2] === 0xbf,
+        summaryBom: summaryDl.text.startsWith("\uFEFF"),
+        prismBom: prismDl.text.startsWith("\uFEFF"),
+        tsvNoBom: !copiedTsv.directTsv.startsWith("\uFEFF") &&
+          copiedTsv.directTsv.includes("\t") &&
+          copiedTsv.directTsv.split("\n")[0].split("\t").includes("Vehicle") &&
+          (copiedTsv.captured === null || (!copiedTsv.captured.startsWith("\uFEFF") && copiedTsv.captured === copiedTsv.directTsv)),
         tidyValid: tidyDl.filename.endsWith("_tidy_long.csv") &&
-          tidyLines[0].includes("runtime_s") && tidyLines[0].includes("well,group,excluded,qc_status,dist_mm") &&
+          tidyLines[0].startsWith("run_id,date,runtime_s,") &&
+          tidyLines[0].includes("well,group,excluded,qc_status,qc_reason,dist_mm") &&
           tidyLines.length === 120 * 24 + 1 &&
-          tidyDl.text.includes(",A1,Vehicle,TRUE,") &&
-          tidyDl.text.includes(",A2,Vehicle,FALSE,"),
+          tidyDl.text.includes(",A1,Vehicle,TRUE,ok,ok,") &&
+          tidyDl.text.includes(",A2,Vehicle,FALSE,ok,ok,"),
         summaryValid: summaryDl.filename.endsWith("_well_summary.csv") &&
-          summaryLines[0].includes("well,group,excluded,qc_status") &&
+          summaryLines[0].startsWith("run_id,date,well,group,excluded,qc_status,qc_reason,exclude_source,") &&
           summaryLines[0].includes("vmr_dark_minus_light") &&
           summaryLines[0].includes("zone_preference_index") &&
           summaryLines.length === 25 &&
-          summaryDl.text.includes("A1,Vehicle,TRUE,"),
+          summaryDl.text.includes(",A1,Vehicle,TRUE,ok,ok,manual,"),
         prismValid: prismDl.filename.endsWith(".csv") &&
           vehColIdx >= 0 &&
           prismHeaders.includes("Control") &&
@@ -1772,6 +1800,9 @@ try {
           Math.abs(Number(vehPrismVals[0]) - afterExclA1.a2Dist) < 0.1,
         pyValid: pyDl.filename.endsWith("_analysis.py") &&
           pyDl.text.includes("import pandas as pd") &&
+          pyDl.text.includes("from scipy import stats") &&
+          pyDl.text.includes("scipy.stats") &&
+          /encoding=['"]utf-8-sig['"]/.test(pyDl.text) &&
           pyDl.text.includes("WELL_GROUPS = {") &&
           pyDl.text.includes('"Vehicle"') &&
           pyDl.text.includes('EXCLUDED_WELLS = {"A1"}') &&
@@ -1789,7 +1820,7 @@ try {
         Math.abs(afterExclA1.vehMean - afterExclA1.a2Dist) < 0.05 &&
         Math.abs(afterExclA1.vehMean - afterPaint.vehMean) > 1 &&
         Object.values(exportsOk).every(Boolean);
-      report(ok, "Step 3 interactive group painting, Step 5 well exclusion stats update, and Tidy/Summary/Prism/Python exports all work cleanly",
+      report(ok, "Step 3 interactive group painting, Step 5 well exclusion stats update, and v2 UTF-8 BOM / BOM-free TSV / scipy Python exports all work cleanly",
         ok ? "" : JSON.stringify({ errors, afterPaint, afterExclA1, exportsOk }));
       await page.close();
     }
@@ -1850,6 +1881,760 @@ try {
         analyzerLoadedBox.noOverflow;
       report(ok, "Script Builder and CSV Analyzer share identical 1380px wizard shell, topbar & sidebar alignment at 1600x900 with zero shift",
         ok ? "" : JSON.stringify({ errors, builderBox, analyzerEmptyBox, analyzerLoadedBox }));
+      await page.close();
+    }
+
+    // 7i. Multi-run pooling (ld_multi_2p demo & 2 uploaded CSVs), editable run_id/date, Copy Map to All Runs, Pooled vs Active toggle, Normalize to Control (%) CV reduction & pooled CSV export
+    {
+      const { page, errors } = await openFreshAnalyzer();
+      const captureDownloadText = async (selector) => {
+        const [download] = await Promise.all([
+          page.waitForEvent("download"),
+          page.click(selector)
+        ]);
+        const dlPath = await download.path();
+        return { filename: download.suggestedFilename(), text: fs.readFileSync(dlPath, "utf8") };
+      };
+
+      // Part A: ld_multi_2p 2-plate demo
+      await page.click('#step1DemoCards [data-demo="ld_multi_2p"]');
+      const initialMulti = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          runCount: st.runs.length,
+          scope: st.scope,
+          runIds: st.runs.map((r) => r.runId),
+          dates: st.runs.map((r) => r.date),
+          hasPlate1Xy: Boolean(st.runs[0]?.xyParsed),
+          totalWells: st.analysis.kpis.totalWells,
+          listRows: document.querySelectorAll("#loadedRunsList .az-run-item").length,
+          placeholders: document.querySelectorAll("input[placeholder]").length
+        };
+      });
+
+      // Edit Plate 1's run_id and date inline on Step 1
+      const firstIdInput = page.locator("#loadedRunsList [data-run-id-edit]").first();
+      await firstIdInput.fill("Batch_A");
+      await firstIdInput.dispatchEvent("change");
+      const firstDateInput = page.locator("#loadedRunsList [data-run-date-edit]").first();
+      await firstDateInput.fill("2026-11-10");
+      await firstDateInput.dispatchEvent("change");
+
+      const afterMetaEdit = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return { run0Id: st.runs[0]?.runId, run0Date: st.runs[0]?.date };
+      });
+
+      // Step 2: Exclude flagged across ALL runs (B3/D6 on Plate 1, C1/A6 on Plate 2 -> 44/48 active)
+      await page.click('#analyzerStepper [data-goto="qc"]');
+      await page.click("#excludeFlaggedAllRunsBtn");
+      const afterExclAll = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        return { activeWells: a.kpis.activeWells, excludedWells: a.kpis.excludedWells };
+      });
+
+      // Step 4: Scope toggle (Active vs Pooled) + Normalize to Control (%) CV reduction
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      const pooledBeforeNorm = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        const wtVeh = a.groups.find((g) => g.group === "WT · Vehicle");
+        const mutDrug = a.groups.find((g) => g.group === "Mutant · Drug");
+        const cv = (s) => (s && s.mean > 0 ? s.sd / s.mean : null);
+        return {
+          scope: a.scope,
+          wellCount: a.wells.length,
+          wtVehN: wtVeh ? wtVeh.n : 0,
+          rawWtVehCv: cv(wtVeh?.totalDist),
+          rawMutDrugCv: cv(mutDrug?.totalDist),
+          plateShiftPct: a.pooledMeta?.batchDiagnostics?.plateShiftPct ?? 0,
+          shiftBadgeText: document.getElementById("batchShiftBadge")?.textContent.trim() || ""
+        };
+      });
+
+      await page.click("#plotScopeActiveBtn");
+      const activeScopeCheck = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        const wtVeh = a.groups.find((g) => g.group === "WT · Vehicle");
+        return { scope: a.scope, wellCount: a.wells.length, wtVehN: wtVeh ? wtVeh.n : 0 };
+      });
+
+      await page.click("#plotScopePooledBtn");
+      await page.check("#normControlChk");
+      const pooledAfterNorm = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        const wtVeh = a.groups.find((g) => g.group === "WT · Vehicle");
+        const mutDrug = a.groups.find((g) => g.group === "Mutant · Drug");
+        const cv = (s) => (s && s.mean > 0 ? s.sd / s.mean : null);
+        return {
+          normalizeToControl: Boolean(a.pooledMeta?.normalizeToControl),
+          wtVehNormMean: wtVeh?.normalized?.totalDistPctCtrl?.mean ?? null,
+          normWtVehCv: cv(wtVeh?.normalized?.totalDistPctCtrl),
+          normMutDrugCv: cv(mutDrug?.normalized?.totalDistPctCtrl),
+          tsUnit: a.timeSeries.unit
+        };
+      });
+
+      // Step 5: Pooled CSV exports contain BOTH Batch_A (2026-11-10) and Plate_2 (2026-11-21) + normalized column
+      await page.click('#analyzerStepper [data-goto="export"]');
+      const sumDl = await captureDownloadText("#exportSummaryBtn");
+      const tidyDl = await captureDownloadText("#exportTidyBtn");
+      const sumClean = sumDl.text.replace(/^\uFEFF/, "");
+      const tidyClean = tidyDl.text.replace(/^\uFEFF/, "");
+      const pooledExportOk =
+        sumDl.text.startsWith("\uFEFF") &&
+        sumClean.split("\n")[0].includes("norm_total_dist_pct_ctrl") &&
+        sumClean.includes("Batch_A,2026-11-10,") &&
+        sumClean.includes("Plate_2,2026-11-21,") &&
+        sumClean.trim().split("\n").length === 49 &&
+        tidyDl.text.startsWith("\uFEFF") &&
+        tidyClean.includes("Batch_A,2026-11-10,") &&
+        tidyClean.includes("Plate_2,2026-11-21,");
+
+      // Part B: Upload 2 separate Summary CSVs + Copy Map to All Runs
+      await page.click("#clearAllBtn");
+      const build6wCsv = (scale) => {
+        const ws = ["A1", "A2", "A3", "B1", "B2", "B3"];
+        const lines = [["RUNTIME", "TEMP_C", "PHASE", "TIME_BIN", ...ws.map((w) => "DIST_" + w)].join(",")];
+        for (let i = 0; i < 6; i++) {
+          const vals = ws.map((_, wi) => ((10 + wi * 1.5 + i * 0.4) * scale).toFixed(2));
+          lines.push([(i + 1) * 10, "28.0", i < 3 ? "LIGHT" : "DARK", i + 1, ...vals].join(","));
+        }
+        return lines.join("\n") + "\n";
+      };
+      await page.setInputFiles("#analyzerFileInput", {
+        name: "2026-11-01_ExpA_6w.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(build6wCsv(1.0), "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.length === 1);
+      await page.setInputFiles("#addRunFileInput", {
+        name: "2026-11-02_ExpB_6w.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(build6wCsv(1.25), "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.length === 2);
+
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      // Select Run 1 in #groupsRunSwitcher, create 2 groups ("Ctrl", "Treated"), auto-fill columns, then Copy Map to All Runs
+      await page.locator("#groupsRunSwitcher [data-grp-sw-run]").first().click();
+      await page.click("#addGroupBtn");
+      await page.fill("#activeGroupNameInput", "Ctrl");
+      await page.press("#activeGroupNameInput", "Enter");
+      await page.click("#addGroupBtn");
+      await page.fill("#activeGroupNameInput", "Treated");
+      await page.press("#activeGroupNameInput", "Enter");
+      await page.click("#autoAssignColsBtn");
+
+      const beforeCopyMap = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          run0Meta: { runId: st.runs[0].runId, date: st.runs[0].date },
+          run1Meta: { runId: st.runs[1].runId, date: st.runs[1].date },
+          run0A1: st.runs[0].groups.A1 || null,
+          run0A3: st.runs[0].groups.A3 || null,
+          run1A3: st.runs[1].groups.A3 || null
+        };
+      });
+
+      await page.click("#copyMapAllRunsBtn");
+      const afterCopyMap = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          sameGroups: JSON.stringify(st.runs[0].groups) === JSON.stringify(st.runs[1].groups),
+          run1A1: st.runs[1].groups.A1 || null,
+          run1A3: st.runs[1].groups.A3 || null
+        };
+      });
+
+      const ok =
+        errors.length === 0 &&
+        initialMulti.runCount === 2 &&
+        initialMulti.scope === "pooled" &&
+        initialMulti.hasPlate1Xy &&
+        initialMulti.totalWells === 48 &&
+        initialMulti.listRows === 2 &&
+        initialMulti.placeholders === 0 &&
+        afterMetaEdit.run0Id === "Batch_A" &&
+        afterMetaEdit.run0Date === "2026-11-10" &&
+        afterExclAll.activeWells === 44 &&
+        afterExclAll.excludedWells === 4 &&
+        pooledBeforeNorm.scope === "pooled" &&
+        pooledBeforeNorm.wellCount === 48 &&
+        pooledBeforeNorm.plateShiftPct > 10 &&
+        pooledBeforeNorm.shiftBadgeText.includes("%") &&
+        activeScopeCheck.scope === "active" &&
+        activeScopeCheck.wellCount === 24 &&
+        activeScopeCheck.wtVehN < pooledBeforeNorm.wtVehN &&
+        pooledAfterNorm.normalizeToControl &&
+        Math.abs(pooledAfterNorm.wtVehNormMean - 100) < 0.2 &&
+        pooledAfterNorm.normWtVehCv < pooledBeforeNorm.rawWtVehCv &&
+        pooledAfterNorm.normMutDrugCv < pooledBeforeNorm.rawMutDrugCv &&
+        pooledAfterNorm.tsUnit === "% Ctrl" &&
+        pooledExportOk &&
+        beforeCopyMap.run0Meta.date === "2026-11-01" &&
+        beforeCopyMap.run1Meta.date === "2026-11-02" &&
+        beforeCopyMap.run0A1 === "Ctrl" &&
+        beforeCopyMap.run0A3 === "Treated" &&
+        beforeCopyMap.run1A3 === null &&
+        afterCopyMap.sameGroups &&
+        afterCopyMap.run1A1 === "Ctrl" &&
+        afterCopyMap.run1A3 === "Treated";
+      report(ok, "Multi-run pooling (ld_multi_2p + 2 uploaded CSVs), inline run_id/date edit, Copy Map to All Runs, Pooled/Active toggle, % Control CV reduction & pooled exports work",
+        ok ? "" : JSON.stringify({ errors, initialMulti, afterMetaEdit, afterExclAll, pooledBeforeNorm, activeScopeCheck, pooledAfterNorm, pooledExportOk, beforeCopyMap, afterCopyMap }));
+      await page.close();
+    }
+
+    // 7j. Organism-aware & adjustable QC thresholds (celegans vs drosophila, custom Max Speed & Empty Dist, non-destructive Trim Window) + Builder organism auto-sync
+    {
+      const { page, errors } = await openFreshAnalyzer();
+
+      // Synthetic 6-well 1s-bin CSV (40 rows, relTime 0..39):
+      // A1: healthy 5 mm/s; A2: low-activity 0.06 mm/bin (total 2.4 mm -> empty when emptyDistMm=5);
+      // B1: 25 mm/s bursts at rows 15 & 25 -> flagged under celegans (15 mm/s), OK under drosophila (180 mm/s), re-flagged at custom Max Speed=10;
+      // B2: single 300 mm early artifact at row 1 (relTime=1s) -> cleared by Trim Window 5..35s without mutating raw CSV!
+      const ws = ["A1", "A2", "A3", "B1", "B2", "B3"];
+      const csvLines = [["RUNTIME", "TEMP_C", "PHASE", "TIME_BIN", ...ws.map((w) => "DIST_" + w)].join(",")];
+      for (let i = 0; i < 40; i++) {
+        const dA1 = (5.0 + (i % 3) * 0.2).toFixed(2);
+        const dA2 = "0.06";
+        const dA3 = (6.0 + (i % 2) * 0.3).toFixed(2);
+        const dB1 = (i === 15 || i === 25) ? "25.00" : (5.0 + (i % 4) * 0.4).toFixed(2);
+        const dB2 = (i === 1) ? "300.00" : (5.0 + (i % 3) * 0.2).toFixed(2);
+        const dB3 = (5.5 + (i % 3) * 0.2).toFixed(2);
+        csvLines.push([(i + 1).toFixed(1), "22.0", "BASELINE", i + 1, dA1, dA2, dA3, dB1, dB2, dB3].join(","));
+      }
+
+      await page.setInputFiles("#analyzerFileInput", {
+        name: "qc_thresholds_6w.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(csvLines.join("\n") + "\n", "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "qc_thresholds_6w.csv");
+      await page.click('#analyzerStepper [data-goto="qc"]');
+
+      // 1. Switch organism preset to celegans (15 mm/s, spikeMin 20 mm)
+      await page.selectOption("#qcOrganismPresetSel", "celegans");
+      const celegansRes = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        return {
+          presetId: a.qcThresholds.presetId,
+          maxSpeedInput: Number(document.getElementById("qcMaxSpeedInput").value),
+          b1Spike: Boolean(a.wellsById.B1.qc.isSpikeGlitch),
+          b1Reason: a.wellsById.B1.qcReason,
+          b2Spike: Boolean(a.wellsById.B2.qc.isSpikeGlitch),
+          a2Empty: Boolean(a.wellsById.A2.qc.isEmpty)
+        };
+      });
+
+      // 2. Switch organism preset to drosophila (180 mm/s, spikeMin 60 mm) -> B1 clears, B2 still flagged
+      await page.selectOption("#qcOrganismPresetSel", "drosophila");
+      const drosophilaRes = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        return {
+          presetId: a.qcThresholds.presetId,
+          maxSpeedInput: Number(document.getElementById("qcMaxSpeedInput").value),
+          b1Spike: Boolean(a.wellsById.B1.qc.isSpikeGlitch),
+          b1Reason: a.wellsById.B1.qcReason,
+          b2Spike: Boolean(a.wellsById.B2.qc.isSpikeGlitch),
+          a2Empty: Boolean(a.wellsById.A2.qc.isEmpty)
+        };
+      });
+
+      // 3. Custom Max Speed = 10 mm/s and Empty Dist = 5 mm -> live re-flags B1 (spike) & A2 (empty)
+      await page.fill("#qcMaxSpeedInput", "10");
+      await page.dispatchEvent("#qcMaxSpeedInput", "change");
+      await page.fill("#qcEmptyDistInput", "5");
+      await page.dispatchEvent("#qcEmptyDistInput", "change");
+      const customRes = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        return {
+          presetId: a.qcThresholds.presetId,
+          b1Spike: Boolean(a.wellsById.B1.qc.isSpikeGlitch),
+          a2Empty: Boolean(a.wellsById.A2.qc.isEmpty),
+          a2Reason: a.wellsById.A2.qcReason
+        };
+      });
+
+      // 4. Reset to drosophila & apply non-destructive Trim Window (5s..35s) -> clears B2 early spike without mutating raw parsed rows or Tidy Long CSV
+      await page.selectOption("#qcOrganismPresetSel", "drosophila");
+      await page.fill("#qcTrimStartInput", "5");
+      await page.dispatchEvent("#qcTrimStartInput", "change");
+      await page.fill("#qcTrimEndInput", "35");
+      await page.dispatchEvent("#qcTrimEndInput", "change");
+      const trimRes = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const a = st.analysis;
+        return {
+          trimActive: Boolean(a.trimInfo && a.trimInfo.active),
+          keptRows: a.kpis.rowCount,
+          rawRowCount: st.summaryParsed.rows.length,
+          rawB2Row1Dist: st.summaryParsed.rows[1].dist.B2,
+          b2SpikeAfterTrim: Boolean(a.wellsById.B2.qc.isSpikeGlitch),
+          b2ReasonAfterTrim: a.wellsById.B2.qcReason
+        };
+      });
+
+      await page.click('#analyzerStepper [data-goto="export"]');
+      const [tidyDl] = await Promise.all([
+        page.waitForEvent("download"),
+        page.click("#exportTidyBtn")
+      ]);
+      const tidyText = fs.readFileSync(await tidyDl.path(), "utf8").replace(/^\uFEFF/, "");
+      const tidyPreservesRaw = tidyText.trim().split("\n").length === 40 * 6 + 1 && tidyText.includes("300.000");
+      await page.close();
+
+      // 5. Auto-sync organism QC preset from Builder context (celegans -> 15 mm/s)
+      const { page: bPage, errors: bErrors } = await openFreshPage("#study");
+      await bPage.setViewportSize({ width: 1280, height: 900 });
+      await bPage.evaluate(() => {
+        state.organism = "celegans";
+        state.plateId = "24well";
+        refreshAll();
+      });
+      await bPage.waitForTimeout(550);
+      await bPage.click('.suite-nav a[href="zantiks_csv_analyzer.html"]');
+      await bPage.waitForFunction(() => location.pathname.endsWith("zantiks_csv_analyzer.html") && window.ZANTIKS_ANALYZER_UI);
+      await bPage.click("#useBuilderConfigBtn");
+      await bPage.setInputFiles("#analyzerFileInput", {
+        name: "qc_sync_6w.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(csvLines.join("\n") + "\n", "utf8")
+      });
+      await bPage.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "qc_sync_6w.csv");
+      await bPage.click('#analyzerStepper [data-goto="qc"]');
+      const syncRes = await bPage.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          contextOrg: st.context?.organismId,
+          qcPresetId: st.qcThresholds?.presetId,
+          qcMaxSpeed: st.qcThresholds?.spikeMaxSpeedMmS,
+          selVal: document.getElementById("qcOrganismPresetSel").value,
+          inpMaxSpeed: Number(document.getElementById("qcMaxSpeedInput").value),
+          b1FlaggedBySync: Boolean(st.analysis.wellsById.B1.qc.isSpikeGlitch)
+        };
+      });
+      await bPage.close();
+
+      const ok =
+        errors.length === 0 &&
+        bErrors.length === 0 &&
+        celegansRes.presetId === "celegans" &&
+        celegansRes.maxSpeedInput === 15 &&
+        celegansRes.b1Spike &&
+        celegansRes.b1Reason === "spike_glitch" &&
+        celegansRes.b2Spike &&
+        !celegansRes.a2Empty &&
+        drosophilaRes.presetId === "drosophila" &&
+        drosophilaRes.maxSpeedInput === 180 &&
+        !drosophilaRes.b1Spike &&
+        drosophilaRes.b1Reason === "ok" &&
+        drosophilaRes.b2Spike &&
+        customRes.presetId === "custom" &&
+        customRes.b1Spike &&
+        customRes.a2Empty &&
+        customRes.a2Reason === "empty_well" &&
+        trimRes.trimActive &&
+        trimRes.keptRows === 31 &&
+        trimRes.rawRowCount === 40 &&
+        trimRes.rawB2Row1Dist === 300 &&
+        !trimRes.b2SpikeAfterTrim &&
+        trimRes.b2ReasonAfterTrim === "ok" &&
+        tidyPreservesRaw &&
+        syncRes.contextOrg === "celegans" &&
+        syncRes.qcPresetId === "celegans" &&
+        syncRes.qcMaxSpeed === 15 &&
+        syncRes.selVal === "celegans" &&
+        syncRes.inpMaxSpeed === 15 &&
+        syncRes.b1FlaggedBySync;
+      report(ok, "Organism-aware QC presets (celegans vs drosophila), custom Max Speed/Empty Dist, non-destructive Trim Window & Builder context auto-sync work",
+        ok ? "" : JSON.stringify({ errors, bErrors, celegansRes, drosophilaRes, customRes, trimRes, tidyPreservesRaw, syncRes }));
+    }
+
+    // 7k. Multi-factor plate layers (genotype + treatment), Fill by Row/Column, Combine Factors -> Groups, .json round-trip & factor CSV columns
+    {
+      const { page, errors } = await openFreshAnalyzer();
+      await page.selectOption("#demoPresetSelect", "ld_24w");
+      await page.click('#analyzerStepper [data-goto="groups"]');
+
+      // Add genotype x treatment preset, fill genotype by Row, fill treatment by Column, then Combine Factors -> Groups
+      await page.click("#presetGenoTreatBtn");
+      await page.click("#autoAssignRowsBtn");
+      await page.click('#factorLayerBar [data-factor-layer="treatment"]');
+      await page.click("#autoAssignColsBtn");
+      await page.click("#combineFactorsBtn");
+
+      const afterCombine = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          factorNames: [...st.factorNames],
+          groupOrder: [...st.groupOrder],
+          a1Group: st.groups.A1,
+          a6Group: st.groups.A6,
+          d1Group: st.groups.D1,
+          d6Group: st.groups.D6,
+          a1Geno: st.wellFactors.genotype?.A1,
+          d6Geno: st.wellFactors.genotype?.D6,
+          a1Treat: st.wellFactors.treatment?.A1,
+          d6Treat: st.wellFactors.treatment?.D6,
+          placeholders: document.querySelectorAll("input[placeholder]").length
+        };
+      });
+
+      // Save plate map (.json), remove both factors, then reload .json to verify round-trip
+      const [mapDl] = await Promise.all([
+        page.waitForEvent("download"),
+        page.click("#savePlateMapBtn")
+      ]);
+      const mapJsonText = fs.readFileSync(await mapDl.path(), "utf8");
+      const mapObj = JSON.parse(mapJsonText);
+
+      await page.click('#factorLayerBar [data-rm-factor="genotype"]');
+      await page.click('#factorLayerBar [data-rm-factor="treatment"]');
+      const afterRemove = await page.evaluate(() => window.ZANTIKS_ANALYZER_UI.getState().factorNames.length);
+
+      await page.setInputFiles("#plateMapFileInput", {
+        name: mapDl.suggestedFilename() || "plate_map.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(mapJsonText, "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().factorNames.length === 2);
+
+      const afterReload = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          factorNames: [...st.factorNames],
+          a1Group: st.groups.A1,
+          d6Group: st.groups.D6,
+          a1Geno: st.wellFactors.genotype?.A1,
+          d6Treat: st.wellFactors.treatment?.D6
+        };
+      });
+
+      // Step 5: Export Well Summary & Tidy Long CSVs and verify factor columns + values
+      await page.click('#analyzerStepper [data-goto="export"]');
+      const [sumDl] = await Promise.all([page.waitForEvent("download"), page.click("#exportSummaryBtn")]);
+      const [tidyDl] = await Promise.all([page.waitForEvent("download"), page.click("#exportTidyBtn")]);
+      const sumText = fs.readFileSync(await sumDl.path(), "utf8").replace(/^\uFEFF/, "");
+      const tidyText = fs.readFileSync(await tidyDl.path(), "utf8").replace(/^\uFEFF/, "");
+
+      const ok =
+        errors.length === 0 &&
+        JSON.stringify(afterCombine.factorNames) === '["genotype","treatment"]' &&
+        afterCombine.groupOrder.length === 4 &&
+        afterCombine.a1Group === "WT · Vehicle" &&
+        afterCombine.a6Group === "WT · Drug" &&
+        afterCombine.d1Group === "Mutant · Vehicle" &&
+        afterCombine.d6Group === "Mutant · Drug" &&
+        afterCombine.a1Geno === "WT" &&
+        afterCombine.d6Geno === "Mutant" &&
+        afterCombine.a1Treat === "Vehicle" &&
+        afterCombine.d6Treat === "Drug" &&
+        afterCombine.placeholders === 0 &&
+        mapObj.format === "zantiks-plate-map" &&
+        JSON.stringify(mapObj.factorNames) === '["genotype","treatment"]' &&
+        mapObj.wellFactors?.genotype?.A1 === "WT" &&
+        mapObj.wellFactors?.treatment?.D6 === "Drug" &&
+        afterRemove === 0 &&
+        JSON.stringify(afterReload.factorNames) === '["genotype","treatment"]' &&
+        afterReload.a1Group === "WT · Vehicle" &&
+        afterReload.d6Group === "Mutant · Drug" &&
+        afterReload.a1Geno === "WT" &&
+        afterReload.d6Treat === "Drug" &&
+        sumText.split("\n")[0].includes(",well,group,genotype,treatment,excluded,") &&
+        sumText.includes(",A1,WT · Vehicle,WT,Vehicle,FALSE,") &&
+        tidyText.split("\n")[0].includes(",well,group,genotype,treatment,excluded,qc_status,qc_reason,") &&
+        tidyText.includes(",D6,Mutant · Drug,Mutant,Drug,FALSE,");
+      report(ok, "Multi-factor plate layers (genotype x treatment), Fill by Row/Column, Combine Factors -> Groups, .json round-trip & factor CSV columns work",
+        ok ? "" : JSON.stringify({ errors, afterCombine, afterRemove, afterReload }));
+      await page.close();
+    }
+
+    // 7l. UTF-8 BOM + Chinese group names in CSV exports vs BOM-free Prism TSV copy, auto/manual/flagged-kept audit & cleaning_log.txt
+    {
+      const { page, errors } = await openFreshAnalyzer();
+      const captureDownload = async (selector) => {
+        const [download] = await Promise.all([
+          page.waitForEvent("download"),
+          page.click(selector)
+        ]);
+        const dlPath = await download.path();
+        return {
+          filename: download.suggestedFilename(),
+          rawBuf: fs.readFileSync(dlPath),
+          text: fs.readFileSync(dlPath, "utf8")
+        };
+      };
+
+      await page.selectOption("#demoPresetSelect", "ld_24w");
+
+      // Rename Control -> 对照组, Drug 1uM -> 给药组 on Step 3
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click('#groupSwatchList [data-swatch-group="Control"]');
+      await page.fill("#activeGroupNameInput", "对照组");
+      await page.press("#activeGroupNameInput", "Enter");
+      await page.click('#groupSwatchList [data-swatch-group="Drug 1uM"]');
+      await page.fill("#activeGroupNameInput", "给药组");
+      await page.press("#activeGroupNameInput", "Enter");
+
+      // Step 2: Auto-exclude flagged wells (D5 empty + D6 spike)
+      await page.click('#analyzerStepper [data-goto="qc"]');
+      await page.click("#excludeFlaggedBtn");
+
+      // Step 5: Restore D6 (becomes auto-flagged-but-kept!) and manually exclude healthy well A1
+      await page.click('#analyzerStepper [data-goto="export"]');
+      await page.click('#wellSummaryTable [data-row-excl="D6"]');
+      await page.click('#wellSummaryTable [data-row-excl="A1"]');
+
+      const auditPreview = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        return {
+          pill: document.getElementById("cleaningLogAuditSummary")?.textContent.trim() || "",
+          a1Source: st.analysis.wellsById.A1.excludeSource,
+          d5Source: st.analysis.wellsById.D5.excludeSource,
+          d6Excluded: st.analysis.wellsById.D6.excluded,
+          d6Flagged: Boolean(st.analysis.wellsById.D6.qc.isSpikeGlitch),
+          a1Group: st.groups.A1,
+          a3Group: st.groups.A3
+        };
+      });
+
+      const tidyDl = await captureDownload("#exportTidyBtn");
+      const summaryDl = await captureDownload("#exportSummaryBtn");
+      const prismDl = await captureDownload("#exportPrismBtn");
+      const logDl = await captureDownload("#exportCleaningLogBtn");
+
+      // Intercept clipboard writeText for #copyPrismBtn and verify NO UTF-8 BOM + Chinese headers intact
+      const prismTsv = await page.evaluate(async () => {
+        let captured = null;
+        try {
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText: async (t) => { captured = String(t); } }
+          });
+        } catch (_) {}
+        document.getElementById("copyPrismBtn").click();
+        await new Promise((r) => setTimeout(r, 30));
+        const direct = window.ZANTIKS_ANALYZER_CORE.exportPrismGroupedTsv(
+          window.ZANTIKS_ANALYZER_UI.buildExportPayload(),
+          window.ZANTIKS_ANALYZER_UI.getState().prismMetric
+        );
+        return { captured, direct };
+      });
+
+      const hasUtf8BomBytes = (buf) => buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
+      const csvChecks = {
+        tidyBomZh: hasUtf8BomBytes(tidyDl.rawBuf) && tidyDl.text.startsWith("\uFEFF") && tidyDl.text.includes(",对照组,") && tidyDl.text.includes(",给药组,"),
+        summaryBomZh: hasUtf8BomBytes(summaryDl.rawBuf) && summaryDl.text.startsWith("\uFEFF") &&
+          summaryDl.text.includes(",A1,对照组,TRUE,ok,ok,manual,") &&
+          summaryDl.text.includes(",D5,Drug 10uM,TRUE,empty,empty_well,auto,") &&
+          summaryDl.text.includes(",D6,Drug 10uM,FALSE,spike,spike_glitch,,") &&
+          summaryDl.text.includes(",给药组,"),
+        prismBomZh: hasUtf8BomBytes(prismDl.rawBuf) && prismDl.text.startsWith("\uFEFF") &&
+          prismDl.text.replace(/^\uFEFF/, "").split("\n")[0].includes("对照组") &&
+          prismDl.text.replace(/^\uFEFF/, "").split("\n")[0].includes("给药组"),
+        tsvNoBomZh: !prismTsv.direct.startsWith("\uFEFF") &&
+          prismTsv.direct.includes("\t") &&
+          prismTsv.direct.split("\n")[0].includes("对照组") &&
+          prismTsv.direct.split("\n")[0].includes("给药组") &&
+          (prismTsv.captured === null || (!prismTsv.captured.startsWith("\uFEFF") && prismTsv.captured === prismTsv.direct))
+      };
+
+      const logTxt = logDl.text;
+      const logChecks = {
+        filename: logDl.filename.endsWith("_cleaning_log.txt"),
+        version: logTxt.includes("v2.0.0"),
+        thresholds: logTxt.includes("Zebrafish Larvae") && logTxt.includes("0.1 mm") && logTxt.includes("120 mm/s") && logTxt.includes("MAD"),
+        sourceFile: logTxt.includes("demo_vmr_ld_2x300s_24w.csv"),
+        autoExcluded: logTxt.includes("Auto-excluded wells:") && logTxt.includes("D5") && logTxt.includes("empty_well") && logTxt.includes("totalDist=0.00 mm"),
+        manualExcluded: logTxt.includes("Manually-excluded wells:") && logTxt.includes("A1 (对照组)") && logTxt.includes("manual_exclude"),
+        flaggedKept: logTxt.includes("Flagged-but-kept: 1") && logTxt.includes("Auto-flagged wells KEPT by analyst:") && logTxt.includes("D6") && logTxt.includes("spike_glitch") && logTxt.includes("4 spikes")
+      };
+
+      const ok =
+        errors.length === 0 &&
+        auditPreview.a1Group === "对照组" &&
+        auditPreview.a3Group === "给药组" &&
+        auditPreview.a1Source === "manual" &&
+        auditPreview.d5Source === "auto" &&
+        !auditPreview.d6Excluded &&
+        auditPreview.d6Flagged &&
+        auditPreview.pill.includes("1 auto-excl") &&
+        auditPreview.pill.includes("1 manual-excl") &&
+        auditPreview.pill.includes("UTF-8 BOM") &&
+        Object.values(csvChecks).every(Boolean) &&
+        Object.values(logChecks).every(Boolean);
+      report(ok, "UTF-8 BOM + Chinese group names in CSVs, BOM-free Prism TSV copy, auto/manual/flagged-kept audit & cleaning_log.txt work accurately",
+        ok ? "" : JSON.stringify({ errors, auditPreview, csvChecks, logChecks }));
+      await page.close();
+    }
+
+    // 7m. Pure-JS screening stats numerical benchmarks, #compStatsPanel & .az-sig-bracket, ppi_24w Peri-Stimulus/Habituation/Window AUC & ld_multi_2p Spatial (_XY) heatmaps
+    {
+      const { page, errors } = await openFreshAnalyzer();
+
+      // Part A: Pure-JS screening stats numerical accuracy benchmarks
+      const statsBench = await page.evaluate(() => {
+        const S = window.ZANTIKS_ANALYZER_CORE.stats;
+        const pTcrit = S.tTwoTailedP(2.22813885, 10);
+        const pFcrit = S.fUpperTailP(3.3541308, 2, 27);
+        const pChiCrit = S.chi2UpperTailP(5.9914645, 2);
+        const pZcrit = S.normalTwoTailedP(1.95996398);
+
+        const wtDiff = S.welchTTest([10, 12, 11, 13, 12], [20, 22, 21, 23, 22]);
+        const wtSame = S.welchTTest([5, 6, 7, 8], [5, 6, 7, 8]);
+        const mw = S.mannWhitneyU([1, 2, 3, 4, 5], [6, 7, 8, 9, 10]);
+        const anova = S.oneWayAnova([
+          { group: "G1", values: [1, 2, 3, 2, 2] },
+          { group: "G2", values: [10, 11, 12, 11, 11] },
+          { group: "G3", values: [20, 21, 22, 21, 21] }
+        ]);
+        const kw = S.kruskalWallis([
+          { group: "G1", values: [1, 2, 3, 2, 2] },
+          { group: "G2", values: [10, 11, 12, 11, 11] },
+          { group: "G3", values: [20, 21, 22, 21, 21] }
+        ]);
+        const paired = S.pairedCompare([10, 12, 14, 15, 18, 21], [14, 17, 18, 20, 24, 25]);
+        return {
+          critOk: Math.abs(pTcrit - 0.05) < 1e-4 &&
+            Math.abs(pFcrit - 0.05) < 1e-4 &&
+            Math.abs(pChiCrit - 0.05) < 1e-4 &&
+            Math.abs(pZcrit - 0.05) < 1e-4,
+          welchOk: wtDiff.meanDiff === -10 && Math.abs(wtDiff.t - (-13.8675)) < 0.01 && Math.abs(wtDiff.cohensD - (-8.771)) < 0.01 && wtDiff.df === 8 && wtDiff.p < 1e-4 && wtDiff.sig === "***" &&
+            wtSame.t === 0 && wtSame.p === 1 && wtSame.sig === "ns",
+          mwOk: mw.U === 0 && mw.p < 0.02 && Math.abs(Math.abs(mw.rEffect) - 1) < 1e-6,
+          anovaOk: anova.df1 === 2 && anova.df2 === 12 && anova.F > 500 && anova.p < 1e-4 && anova.etaSq > 0.98 &&
+            anova.pairwise.length === 3 && anova.pairwise.every((pw) => pw.pAdj >= pw.p && pw.sig === "***"),
+          kwOk: kw.df === 2 && kw.H > 12 && kw.p < 0.005,
+          pairedOk: paired.n === 6 && paired.pairedT.df === 5 && paired.pairedT.p < 0.001 && paired.wilcoxon.W === 0 && paired.wilcoxon.p < 0.05
+        };
+      });
+
+      // Part B: ppi_24w -> Peri-Stimulus (t=0), Trial Habituation, Custom Window AUC & Screening Stats UI + brackets
+      await page.selectOption("#demoPresetSelect", "ppi_24w");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+
+      await page.selectOption("#tsTraceViewSel", "peri");
+      const periCheck = await page.evaluate(() => ({
+        svgText: document.getElementById("tsChartSvg").textContent || "",
+        paths: document.querySelectorAll("#tsChartSvg path").length,
+        periTypeVisible: getComputedStyle(document.getElementById("tsPeriTypeWrap")).display !== "none"
+      }));
+
+      await page.selectOption("#tsTraceViewSel", "habituation");
+      const habitCheck = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        const svgText = document.getElementById("tsChartSvg").textContent || "";
+        return {
+          hasHabituation: Boolean(a.periStimulus && a.periStimulus.hasHabituation),
+          trialCount: a.periStimulus?.trialCount || 0,
+          hasTrialLabels: svgText.includes("T1") && svgText.includes("T5"),
+          paths: document.querySelectorAll("#tsChartSvg path").length
+        };
+      });
+
+      await page.selectOption("#tsTraceViewSel", "full");
+      await page.fill("#tsWinStartInput", "20");
+      await page.dispatchEvent("#tsWinStartInput", "change");
+      await page.fill("#tsWinEndInput", "100");
+      await page.dispatchEvent("#tsWinEndInput", "change");
+      const aucCheck = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        const viewVals = [...document.getElementById("compViewSel").options].map((o) => o.value);
+        return {
+          hasWindowAuc: Boolean(a.capabilities.hasWindowAuc),
+          readout: document.getElementById("tsWinAucReadout")?.textContent.trim() || "",
+          svgHasAucBand: (document.getElementById("tsChartSvg").textContent || "").includes("AUC 20"),
+          hasWindowView: viewVals.includes("window_auc"),
+          hasHabitView: viewVals.includes("habituation"),
+          ctrlAuc: a.groups.find((g) => g.group === "Control")?.windowAuc?.auc?.mean ?? null
+        };
+      });
+
+      // Tab 2: Comparison screening stats panel & significance brackets toggle
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      await page.selectOption("#compViewSel", "ppi");
+      const statsUiOn = await page.evaluate(() => {
+        const panel = document.getElementById("compStatsPanel");
+        const txt = panel?.textContent || "";
+        return {
+          visible: panel ? getComputedStyle(panel).display !== "none" : false,
+          brackets: document.querySelectorAll("#compChartSvg .az-sig-bracket").length,
+          hasAnova: txt.includes("One-way ANOVA"),
+          hasKruskal: txt.includes("Kruskal-Wallis"),
+          hasHolm: txt.includes("Holm"),
+          hasDisclaimer: txt.includes("Quick screening stats")
+        };
+      });
+      await page.uncheck("#compShowStatsChk");
+      const statsUiOff = await page.evaluate(() => ({
+        hidden: getComputedStyle(document.getElementById("compStatsPanel")).display === "none",
+        brackets: document.querySelectorAll("#compChartSvg .az-sig-bracket").length
+      }));
+
+      // Part C: ld_multi_2p -> Tab 4 Spatial (_XY) 2D Heatmaps & #xyFreezeInput live update
+      await page.selectOption("#demoPresetSelect", "ld_multi_2p");
+      await page.click('#chartTabsBar [data-chart-tab="spatial"]');
+      const spatialBefore = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        const wtVeh = a.xyAnalysis?.groups?.["WT · Vehicle"];
+        return {
+          emptyHidden: getComputedStyle(document.getElementById("spatialEmptyHint")).display === "none",
+          contentVisible: getComputedStyle(document.getElementById("spatialContent")).display !== "none",
+          clipPaths: document.querySelectorAll("#spatialHeatmapSvg clipPath").length,
+          heatRects: document.querySelectorAll("#spatialHeatmapSvg rect").length,
+          stripCards: document.querySelectorAll("#spatialSummaryStrip .az-stat-mini").length,
+          freezeSpeed: a.xyAnalysis?.freezeSpeedMmS ?? null,
+          wtImmob: wtVeh?.immobilityPct?.mean ?? null,
+          placeholders: document.querySelectorAll("input[placeholder]").length
+        };
+      });
+
+      await page.fill("#xyFreezeInput", "3.5");
+      await page.dispatchEvent("#xyFreezeInput", "change");
+      const spatialAfter = await page.evaluate(() => {
+        const a = window.ZANTIKS_ANALYZER_UI.getState().analysis;
+        const wtVeh = a.xyAnalysis?.groups?.["WT · Vehicle"];
+        return {
+          freezeSpeed: a.xyAnalysis?.freezeSpeedMmS ?? null,
+          wtImmob: wtVeh?.immobilityPct?.mean ?? null
+        };
+      });
+
+      const ok =
+        errors.length === 0 &&
+        Object.values(statsBench).every(Boolean) &&
+        periCheck.svgText.includes("Stimulus t = 0s") &&
+        periCheck.paths >= 3 &&
+        periCheck.periTypeVisible &&
+        habitCheck.hasHabituation &&
+        habitCheck.trialCount >= 5 &&
+        habitCheck.hasTrialLabels &&
+        habitCheck.paths >= 3 &&
+        aucCheck.hasWindowAuc &&
+        aucCheck.readout.includes("20") &&
+        aucCheck.svgHasAucBand &&
+        aucCheck.hasWindowView &&
+        aucCheck.hasHabitView &&
+        aucCheck.ctrlAuc > 0 &&
+        statsUiOn.visible &&
+        statsUiOn.brackets >= 1 &&
+        statsUiOn.hasAnova &&
+        statsUiOn.hasKruskal &&
+        statsUiOn.hasHolm &&
+        statsUiOn.hasDisclaimer &&
+        statsUiOff.hidden &&
+        statsUiOff.brackets === 0 &&
+        spatialBefore.emptyHidden &&
+        spatialBefore.contentVisible &&
+        spatialBefore.clipPaths === 4 &&
+        spatialBefore.heatRects > 200 &&
+        spatialBefore.stripCards === 4 &&
+        spatialBefore.freezeSpeed === 0.5 &&
+        spatialBefore.placeholders === 0 &&
+        spatialAfter.freezeSpeed === 3.5 &&
+        spatialAfter.wtImmob > spatialBefore.wtImmob + 5;
+      report(ok, "Pure-JS screening stats benchmarks, #compStatsPanel/.az-sig-bracket, ppi_24w Peri-Stimulus/Habituation/Window AUC & ld_multi_2p Spatial (_XY) heatmaps work",
+        ok ? "" : JSON.stringify({ errors, statsBench, periCheck, habitCheck, aucCheck, statsUiOn, statsUiOff, spatialBefore, spatialAfter }));
       await page.close();
     }
   }

@@ -1,10 +1,11 @@
-// Zantiks MWP CSV Analyzer - 5-Step Wizard UI, Plate/Maze Maps, Pure-SVG Charts, Per-Well Table & Exporters
+// Zantiks MWP Data Prep & Analyzer - 5-Step Wizard UI, Multi-Run Pooling, Multi-Factor Painter, Route C Plots, Quick Screening Stats & v2 Exporters
 // Classic script: depends on js/analyzer-core.js (window.ZANTIKS_ANALYZER_CORE), js/helpers.js, js/export-utils.js.
 "use strict";
 
 (function () {
   const UNASSIGNED = "Unassigned";
   const ALL_WELLS = "All Wells";
+  const PRIMARY_LAYER = "__PRIMARY__";
   const DEFAULT_PALETTE = [
     "#0969da", "#1a7f37", "#bf8700", "#8250df",
     "#cf222e", "#0e7490", "#bf3989", "#57606a"
@@ -30,56 +31,144 @@
       : DEFAULT_PALETTE;
   }
 
+  let _runSeq = 1;
+  function nextRunInternalId() {
+    return `run_${_runSeq++}`;
+  }
+
   // ---------------------------------------------------------------------------
-  // 1. UI State
+  // 1. Unified Multi-Run UI State (mirrors active run on legacy top-level keys)
   // ---------------------------------------------------------------------------
   const ui = {
     currentPage: "data",
+
+    // v2 Multi-run & Data Prep state
+    runs: [],                  // Array<RunRecord>
+    activeRunId: null,         // internal run.id
+    scope: "active",           // "active" | "pooled"
+    normalizeToControl: false,
+    controlGroupName: "",
+    qcThresholds: null,        // { presetId, emptyDistMm, spikeMaxSpeedMmS, spikeMinMm, spikeMadMult }
+    trimWindow: { trimStartSec: 0, trimEndSec: null },
+    windowAuc: { startSec: null, endSec: null },
+    xyFreezeSpeedMmS: 0.5,
+
+    // Pending context/companions attached before any Summary CSV is dropped
+    pendingContext: null,
+    pendingContextFilename: "",
+    pendingZchange: null,
+    pendingXy: null,
+
+    // Legacy v1 top-level mirrors (always synced to active run for backward compat)
     summaryParsed: null,
     zchangeParsed: null,
     xyParsed: null,
     context: null,
     contextFilename: "",
     activeDemoId: "",
-
-    groups: {},          // { [wellId]: groupName } (omitted when unassigned)
-    groupOrder: [],      // ordered named groups (excluding UNASSIGNED)
-    groupColors: {},     // { [groupName]: hex }
+    groups: {},
+    groupOrder: [],
+    groupColors: {},
+    factorNames: [],
+    wellFactors: {},
     excludedWells: new Set(),
+    excludeMeta: {},
+
     hiddenGroups: new Set(),
 
+    // Step 2 / Step 3 UI controls
     plateMetric: "totalDist",
+    activeFactorLayer: PRIMARY_LAYER, // PRIMARY_LAYER or factorName
     activeBrushGroup: UNASSIGNED,
-    brushTool: "group",        // "group" | "exclude"
+    activeBrushFactorVal: UNASSIGNED,
+    brushTool: "group",               // "group" | "exclude"
     selectedWell: null,
 
-    activeChartTab: "timeseries", // "timeseries" | "comparison" | "zchange"
+    // Step 4 Plots controls
+    activeChartTab: "timeseries",     // "timeseries" | "comparison" | "zchange" | "spatial"
     tsMetric: "dist",
     tsBinGroupSize: 1,
+    tsTraceView: "full",              // "full" | "peri" | "habituation"
+    tsPeriType: "ALL",
     tsShowSem: true,
     tsShowPhases: true,
     tsShowStim: true,
 
     compView: "",
+    compShowStats: true,
     qcFilter: "flagged",
     qcSort: "severity",
 
+    // Step 5 Table & Export controls
     tableGroupFilter: "__ALL__",
     tableStatusFilter: "all",
     tableSortKey: "well",
     tableSortDir: 1,
-
     prismMetric: "total_dist",
+
     analysis: null
   };
 
-  // Drag-painting interaction state for Step 3 Group Painter SVG
   let _painting = false;
   let _paintExcludeValue = true;
   let _paintedInStroke = new Set();
 
+  function getActiveRun() {
+    if (!ui.runs.length) return null;
+    const hit = ui.runs.find(r => r.id === ui.activeRunId || r.runId === ui.activeRunId);
+    return hit || ui.runs[0];
+  }
+
+  function getRunByIdOrLabel(idOrLabel) {
+    if (!idOrLabel) return getActiveRun();
+    return ui.runs.find(r => r.id === idOrLabel || r.runId === idOrLabel) || getActiveRun();
+  }
+
+  function getActiveRunAnalysis() {
+    const a = ui.analysis;
+    if (!a) return null;
+    if (a.scope === "pooled" && Array.isArray(a.runAnalyses) && a.runAnalyses.length) {
+      const hit = a.runAnalyses.find(x => x.id === ui.activeRunId || x.runId === ui.activeRunId);
+      return (hit && hit.analysis) || a.runAnalyses[0].analysis;
+    }
+    return a;
+  }
+
+  function syncLegacyStateAliases() {
+    const run = getActiveRun();
+    if (run) {
+      ui.activeRunId = run.id;
+      ui.summaryParsed = run.summaryParsed || null;
+      ui.zchangeParsed = run.zchangeParsed || null;
+      ui.xyParsed = run.xyParsed || null;
+      ui.context = run.context || ui.pendingContext || null;
+      ui.contextFilename = run.contextFilename || ui.pendingContextFilename || "";
+      ui.groups = run.groups;
+      ui.groupOrder = run.groupOrder;
+      ui.groupColors = run.groupColors;
+      ui.factorNames = run.factorNames;
+      ui.wellFactors = run.wellFactors;
+      ui.excludedWells = run.excludedWells;
+      ui.excludeMeta = run.excludeMeta;
+    } else {
+      ui.activeRunId = null;
+      ui.summaryParsed = null;
+      ui.zchangeParsed = ui.pendingZchange || null;
+      ui.xyParsed = ui.pendingXy || null;
+      ui.context = ui.pendingContext || null;
+      ui.contextFilename = ui.pendingContextFilename || "";
+      ui.groups = {};
+      ui.groupOrder = [];
+      ui.groupColors = {};
+      ui.factorNames = [];
+      ui.wellFactors = {};
+      ui.excludedWells = new Set();
+      ui.excludeMeta = {};
+    }
+  }
+
   // ---------------------------------------------------------------------------
-  // 2. Formatting & Color Helpers
+  // 2. Formatting, Sexagesimal Time Axis & Color Helpers
   // ---------------------------------------------------------------------------
   function esc(str) {
     return String(str == null ? "" : str)
@@ -102,6 +191,13 @@
     return n.toFixed(d);
   }
 
+  function fmtPVal(p) {
+    if (!Number.isFinite(p)) return "—";
+    if (p < 0.0001) return "< 0.0001";
+    if (p < 0.001) return p.toFixed(4);
+    return p.toFixed(3);
+  }
+
   function fmtDurationNice(sec) {
     const core = getCore();
     if (core && typeof core.formatDuration === "function") return core.formatDuration(sec);
@@ -112,6 +208,7 @@
     return `${m}m ${String(r).padStart(2, "0")}s`;
   }
 
+  // Sexagesimal Elapsed Time tick formatter (preserved verbatim: 0m, 5m, 10m, 15m, 20m — never clock-like ":")
   function fmtAxisTime(sec, maxSec, stepSec) {
     const s = Math.max(0, Math.round(Number(sec) || 0));
     if (s === 0) {
@@ -181,13 +278,32 @@
   function getGroupColor(name) {
     if (!name || name === UNASSIGNED) return UNASSIGNED_COLOR;
     if (name === ALL_WELLS) return "#0969da";
-    if (ui.groupColors[name]) return ui.groupColors[name];
+    const run = getActiveRun();
+    if (run && run.groupColors && run.groupColors[name]) return run.groupColors[name];
+    for (const r of ui.runs) {
+      if (r.groupColors && r.groupColors[name]) return r.groupColors[name];
+    }
     const pal = getPalette();
-    let idx = ui.groupOrder.indexOf(name);
-    if (idx < 0) idx = Object.keys(ui.groupColors).length;
+    let idx = (run && run.groupOrder) ? run.groupOrder.indexOf(name) : -1;
+    if (idx < 0) {
+      let h = 0;
+      for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+      idx = h % pal.length;
+    }
     const col = pal[idx % pal.length];
-    ui.groupColors[name] = col;
+    if (run && run.groupColors) run.groupColors[name] = col;
     return col;
+  }
+
+  function getFactorLevelColor(factorName, levelVal, levelOrder) {
+    if (!levelVal || levelVal === UNASSIGNED) return UNASSIGNED_COLOR;
+    const pal = getPalette();
+    const idx = Array.isArray(levelOrder) ? levelOrder.indexOf(levelVal) : -1;
+    if (idx >= 0) return pal[idx % pal.length];
+    let h = 0;
+    const s = `${factorName}:${levelVal}`;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return pal[h % pal.length];
   }
 
   function hexToRgba(hex, alpha) {
@@ -202,7 +318,6 @@
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
-  // Smooth scientific sequential ramp on light background (#eff6ff -> #93c5fd -> #2563eb -> #1e3a8a)
   function heatColor(tRaw) {
     const t = Math.max(0, Math.min(1, Number.isFinite(tRaw) ? tRaw : 0));
     const stops = [
@@ -219,32 +334,44 @@
         const r = Math.round(c0[0] + (c1[0] - c0[0]) * f);
         const g = Math.round(c0[1] + (c1[1] - c0[1]) * f);
         const b = Math.round(c0[2] + (c1[2] - c0[2]) * f);
-        return {
-          fill: `rgb(${r}, ${g}, ${b})`,
-          text: t >= 0.52 ? "#ffffff" : "#1f2328"
-        };
+        return { fill: `rgb(${r}, ${g}, ${b})`, text: t >= 0.52 ? "#ffffff" : "#1f2328" };
       }
     }
     return { fill: "rgb(30, 58, 138)", text: "#ffffff" };
   }
 
+  // High-contrast scientific ramp for 2D _XY occupancy heatmaps (slate -> sky -> blue -> amber -> crimson)
+  function spatialHeatColor(tRaw) {
+    const t = Math.max(0, Math.min(1, Number.isFinite(tRaw) ? tRaw : 0));
+    if (t <= 0.005) return "#f8fafc";
+    const stops = [
+      [0.00, [241, 245, 249]],
+      [0.22, [147, 197, 253]],
+      [0.50, [37, 99, 235]],
+      [0.78, [245, 158, 11]],
+      [1.00, [220, 38, 38]]
+    ];
+    for (let i = 0; i < stops.length - 1; i++) {
+      const [t0, c0] = stops[i];
+      const [t1, c1] = stops[i + 1];
+      if (t <= t1) {
+        const f = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
+        const r = Math.round(c0[0] + (c1[0] - c0[0]) * f);
+        const g = Math.round(c0[1] + (c1[1] - c0[1]) * f);
+        const b = Math.round(c0[2] + (c1[2] - c0[2]) * f);
+        return `rgb(${r},${g},${b})`;
+      }
+    }
+    return "rgb(220,38,38)";
+  }
+
   function phaseBandStyle(span, idx) {
     const hint = String(span.colorHint || span.kind || span.phase || "").toLowerCase();
-    if (hint.includes("acclim") || hint.includes("baseline")) {
-      return { fill: "rgba(226, 232, 240, 0.42)", text: "#475569" };
-    }
-    if (hint.includes("dark") || hint === "night") {
-      return { fill: "rgba(148, 163, 184, 0.23)", text: "#334155" };
-    }
-    if (hint.includes("light") || hint.includes("white") || hint === "day") {
-      return { fill: "rgba(254, 240, 138, 0.36)", text: "#854d0e" };
-    }
-    if (hint.includes("ppi")) {
-      return { fill: "rgba(221, 214, 254, 0.34)", text: "#5b21b6" };
-    }
-    if (hint.includes("pulse") || hint.includes("startle") || hint.includes("vib") || hint.includes("tap")) {
-      return { fill: "rgba(254, 215, 170, 0.36)", text: "#9a3412" };
-    }
+    if (hint.includes("acclim") || hint.includes("baseline")) return { fill: "rgba(226, 232, 240, 0.42)", text: "#475569" };
+    if (hint.includes("dark") || hint === "night") return { fill: "rgba(148, 163, 184, 0.23)", text: "#334155" };
+    if (hint.includes("light") || hint.includes("white") || hint === "day") return { fill: "rgba(254, 240, 138, 0.36)", text: "#854d0e" };
+    if (hint.includes("ppi")) return { fill: "rgba(221, 214, 254, 0.34)", text: "#5b21b6" };
+    if (hint.includes("pulse") || hint.includes("startle") || hint.includes("vib") || hint.includes("tap")) return { fill: "rgba(254, 215, 170, 0.36)", text: "#9a3412" };
     if (hint.includes("blue")) return { fill: "rgba(191, 219, 254, 0.34)", text: "#1e40af" };
     if (hint.includes("green")) return { fill: "rgba(187, 247, 208, 0.34)", text: "#166534" };
     if (hint.includes("red")) return { fill: "rgba(254, 202, 202, 0.30)", text: "#991b1b" };
@@ -260,9 +387,7 @@
     let lo = Number.isFinite(minVal) ? minVal : 0;
     let hi = Number.isFinite(maxVal) ? maxVal : 1;
     if (hi < lo) { const tmp = lo; lo = hi; hi = tmp; }
-    if (Math.abs(hi - lo) < 1e-9) {
-      hi = lo === 0 ? 1 : lo * 1.2 + 1;
-    }
+    if (Math.abs(hi - lo) < 1e-9) hi = lo === 0 ? 1 : lo * 1.2 + 1;
     const rawStep = (hi - lo) / count;
     const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
     const norm = rawStep / mag;
@@ -290,8 +415,8 @@
     return v.toFixed(2);
   }
 
-  function deterministicJitter(wellId, span) {
-    const s = String(wellId || "");
+  function deterministicJitter(keyStr, span) {
+    const s = String(keyStr || "");
     let h = 2166136261;
     for (let i = 0; i < s.length; i++) {
       h ^= s.charCodeAt(i);
@@ -352,9 +477,9 @@
     if (!svgEl) return;
     const clone = svgEl.cloneNode(true);
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    const vb = (clone.getAttribute("viewBox") || "0 0 880 380").split(/\s+/).map(Number);
+    const vb = (clone.getAttribute("viewBox") || "0 0 880 320").split(/\s+/).map(Number);
     const w = vb[2] || 880;
-    const h = vb[3] || 380;
+    const h = vb[3] || 320;
     clone.setAttribute("width", String(w));
     clone.setAttribute("height", String(h));
     clone.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
@@ -381,13 +506,9 @@
     const ttRect = tooltipEl.getBoundingClientRect();
     let left = clientX - stageRect.left + 12;
     let top = clientY - stageRect.top - 12;
-    if (left + ttRect.width > stageRect.width - 6) {
-      left = clientX - stageRect.left - ttRect.width - 12;
-    }
+    if (left + ttRect.width > stageRect.width - 6) left = clientX - stageRect.left - ttRect.width - 12;
     if (left < 6) left = 6;
-    if (top + ttRect.height > stageRect.height - 6) {
-      top = stageRect.height - ttRect.height - 6;
-    }
+    if (top + ttRect.height > stageRect.height - 6) top = stageRect.height - ttRect.height - 6;
     if (top < 6) top = 6;
     tooltipEl.style.left = `${Math.round(left)}px`;
     tooltipEl.style.top = `${Math.round(top)}px`;
@@ -398,8 +519,12 @@
   }
 
   function getExportBasename() {
-    if (ui.summaryParsed && ui.summaryParsed.filename) {
-      return ui.summaryParsed.filename.replace(/\.csv$/i, "").replace(/[^A-Za-z0-9_-]+/g, "_");
+    if (ui.runs.length > 1 && ui.scope === "pooled") {
+      return `zantiks_pooled_${ui.runs.length}runs`;
+    }
+    const run = getActiveRun();
+    if (run && run.filename) {
+      return run.filename.replace(/\.csv$/i, "").replace(/[^A-Za-z0-9_-]+/g, "_");
     }
     return "zantiks_analysis";
   }
@@ -423,7 +548,7 @@
     if (nextBtn) {
       if (idx === last) {
         nextBtn.textContent = "Export Prism CSV";
-        nextBtn.disabled = !ui.summaryParsed;
+        nextBtn.disabled = ui.runs.length === 0;
       } else {
         nextBtn.textContent = `Next: ${ANALYZER_PAGES[idx + 1].label} \u2192`;
         nextBtn.disabled = false;
@@ -457,17 +582,40 @@
       if (location.hash !== "#" + id) history.replaceState(null, "", "#" + id);
     } catch (_) {}
 
-    if (changed && !(opts && opts.initial)) {
-      window.scrollTo(0, 0);
-    }
+    if (changed && !(opts && opts.initial)) window.scrollTo(0, 0);
   }
 
   // ---------------------------------------------------------------------------
-  // 4. Data & Context Loaders
+  // 4. Run Creation, Multi-Factor Registry & Demo / File Loaders
   // ---------------------------------------------------------------------------
-  function syncGroupRegistryFromMap(groupMap, paletteOverride) {
+  function buildFactorLevelOrder(factorNames, wellFactors) {
+    const out = {};
+    for (const fn of (factorNames || [])) {
+      const seen = [];
+      const set = new Set();
+      const map = (wellFactors && wellFactors[fn]) || {};
+      for (const v of Object.values(map)) {
+        const clean = String(v || "").trim();
+        if (clean && clean !== UNASSIGNED && !set.has(clean)) {
+          set.add(clean);
+          seen.push(clean);
+        }
+      }
+      out[fn] = seen;
+    }
+    return out;
+  }
+
+  function buildGroupRegistryForRun(groupMap, explicitOrder, paletteOverride) {
     const seen = [];
     const set = new Set();
+    for (const g of (explicitOrder || [])) {
+      const name = String(g || "").trim();
+      if (name && name !== UNASSIGNED && name !== ALL_WELLS && !set.has(name)) {
+        set.add(name);
+        seen.push(name);
+      }
+    }
     if (groupMap && typeof groupMap === "object") {
       for (const g of Object.values(groupMap)) {
         const name = String(g || "").trim();
@@ -477,38 +625,86 @@
         }
       }
     }
-    ui.groupOrder = seen;
-    ui.groupColors = {};
+    const colors = {};
     const pal = getPalette();
     seen.forEach((name, idx) => {
-      ui.groupColors[name] = (paletteOverride && paletteOverride[name]) || pal[idx % pal.length];
+      colors[name] = (paletteOverride && paletteOverride[name]) || pal[idx % pal.length];
     });
-    ui.activeBrushGroup = seen.length > 0 ? seen[0] : UNASSIGNED;
-    ui.brushTool = "group";
-    ui.hiddenGroups.clear();
+    return { groupOrder: seen, groupColors: colors };
   }
 
-  function applyLoadedSummary(parsed, opts) {
-    ui.summaryParsed = parsed;
+  function ensureUniqueRunLabel(baseLabel, excludeInternalId) {
+    const existing = new Set(ui.runs.filter(r => r.id !== excludeInternalId).map(r => r.runId));
+    let cand = String(baseLabel || "Run_1").trim() || "Run_1";
+    if (!existing.has(cand)) return cand;
+    let n = 2;
+    while (existing.has(`${cand}_${n}`)) n++;
+    return `${cand}_${n}`;
+  }
+
+  function createRunRecord(opts) {
+    const core = getCore();
+    const sp = opts.summaryParsed;
+    const filename = opts.filename || (sp && sp.filename) || "data.csv";
+    const inferred = (core && typeof core.inferRunMeta === "function")
+      ? core.inferRunMeta(filename, sp, opts.lastModifiedMs)
+      : { runId: filename.replace(/\.csv$/i, ""), date: new Date().toISOString().slice(0, 10) };
+
+    const groups = {};
+    if (opts.groups && typeof opts.groups === "object") {
+      for (const [w, g] of Object.entries(opts.groups)) {
+        const clean = String(g || "").trim();
+        if (clean && clean !== UNASSIGNED && clean !== ALL_WELLS) groups[w] = clean;
+      }
+    }
+    const reg = buildGroupRegistryForRun(groups, opts.groupOrder, opts.groupPalette || opts.groupColors);
+    const factorNames = Array.isArray(opts.factorNames) ? opts.factorNames.map(s => String(s).trim()).filter(Boolean) : [];
+    const wellFactors = {};
+    for (const fn of factorNames) {
+      wellFactors[fn] = (opts.wellFactors && opts.wellFactors[fn]) ? { ...opts.wellFactors[fn] } : {};
+    }
+
+    const internalId = opts.id || nextRunInternalId();
+    const runId = opts.runId || ensureUniqueRunLabel(inferred.runId, internalId);
+    const date = opts.date || inferred.date || new Date().toISOString().slice(0, 10);
+
+    return {
+      id: internalId,
+      runId,
+      date,
+      filename,
+      summaryParsed: sp,
+      zchangeParsed: opts.zchangeParsed || null,
+      xyParsed: opts.xyParsed || null,
+      context: opts.context || null,
+      contextFilename: opts.contextFilename || "",
+      groups,
+      groupOrder: reg.groupOrder,
+      groupColors: reg.groupColors,
+      factorNames,
+      wellFactors,
+      factorLevelOrder: buildFactorLevelOrder(factorNames, wellFactors),
+      excludedWells: new Set(opts.excludedWells || []),
+      excludeMeta: opts.excludeMeta ? { ...opts.excludeMeta } : {}
+    };
+  }
+
+  function syncQcPresetFromContext(ctx) {
+    const core = getCore();
+    if (!core || typeof core.normalizeQcThresholds !== "function") return;
+    if (ctx && ctx.organismId && core.ORGANISM_QC_PRESETS && core.ORGANISM_QC_PRESETS[ctx.organismId]) {
+      ui.qcThresholds = core.normalizeQcThresholds(ctx.organismId, ctx);
+    } else if (!ui.qcThresholds) {
+      ui.qcThresholds = core.normalizeQcThresholds("default", ctx);
+    }
+  }
+
+  function resetMetricDefaultsForActiveRun() {
+    const run = getActiveRun();
+    const parsed = run ? run.summaryParsed : null;
+    if (!parsed) return;
     ui.selectedWell = parsed.wells && parsed.wells.length ? parsed.wells[0] : null;
     ui.hiddenGroups.clear();
-
-    if (opts && opts.preserveGroups) {
-      const nextGroups = {};
-      for (const w of parsed.wells) {
-        if (ui.groups[w] && ui.groups[w] !== UNASSIGNED && ui.groups[w] !== ALL_WELLS) {
-          nextGroups[w] = ui.groups[w];
-        }
-      }
-      ui.groups = nextGroups;
-      ui.excludedWells = new Set([...ui.excludedWells].filter(w => parsed.wells.includes(w)));
-    } else if (!opts || !opts.keepExplicitGroups) {
-      ui.groups = {};
-      ui.groupOrder = [];
-      ui.groupColors = {};
-      ui.activeBrushGroup = UNASSIGNED;
-      ui.excludedWells = new Set();
-    }
 
     if (parsed.hasDist || parsed.hasZoneDist) ui.tsMetric = "dist";
     else if (parsed.hasMsd) ui.tsMetric = "msd";
@@ -517,11 +713,16 @@
 
     ui.plateMetric = (parsed.hasDist || parsed.hasZoneDist) ? "totalDist" : (parsed.hasMsd ? "meanMsd" : "totalDist");
     ui.tsBinGroupSize = 1;
+    ui.tsTraceView = "full";
+    ui.tsPeriType = "ALL";
     const smoothSel = document.getElementById("tsSmoothSel");
     if (smoothSel) smoothSel.value = "1";
     ui.compView = "";
     ui.tableGroupFilter = "__ALL__";
     ui.tableStatusFilter = "all";
+    ui.activeFactorLayer = PRIMARY_LAYER;
+    ui.activeBrushGroup = run.groupOrder.length ? run.groupOrder[0] : UNASSIGNED;
+    ui.brushTool = "group";
   }
 
   function loadDemoDataset(presetId) {
@@ -537,28 +738,79 @@
     }
 
     ui.activeDemoId = presetId;
-    ui.xyParsed = null;
-    ui.zchangeParsed = null;
+    ui.pendingContext = null;
+    ui.pendingContextFilename = "";
+    ui.pendingZchange = null;
+    ui.pendingXy = null;
+    ui.trimWindow = { trimStartSec: 0, trimEndSec: null };
+    ui.windowAuc = { startSec: null, endSec: null };
+    ui.normalizeToControl = false;
+    ui.controlGroupName = demo.defaultControlGroup || "";
 
-    const parsedSummary = core.parseZantiksCsv(demo.summaryCsvText, demo.summaryFilename || `${presetId}.csv`);
-    if (demo.zchangeCsvText) {
-      ui.zchangeParsed = core.parseZantiksCsv(demo.zchangeCsvText, demo.zchangeFilename || `${presetId}_ZCHANGE.csv`);
+    if (demo.isMultiRun && Array.isArray(demo.runs) && demo.runs.length > 0) {
+      ui.runs = [];
+      for (const dr of demo.runs) {
+        const sp = core.parseZantiksCsv(dr.summaryCsvText, dr.summaryFilename || `${dr.runId}.csv`);
+        const zc = dr.zchangeCsvText ? core.parseZantiksCsv(dr.zchangeCsvText, dr.zchangeFilename || `${dr.runId}_ZCHANGE.csv`) : null;
+        const xy = dr.xyCsvText ? core.parseZantiksCsv(dr.xyCsvText, dr.xyFilename || `${dr.runId}_XY.csv`) : null;
+        const ctx = dr.experimentContext || (dr.experimentPayload ? core.parseExperimentContext(dr.experimentPayload) : null);
+        ui.runs.push(createRunRecord({
+          id: dr.id,
+          runId: dr.runId,
+          date: dr.date,
+          filename: dr.summaryFilename || `${dr.runId}.csv`,
+          summaryParsed: sp,
+          zchangeParsed: zc,
+          xyParsed: xy,
+          context: ctx,
+          contextFilename: ctx ? `${dr.runId} (Demo Context)` : "",
+          groups: dr.defaultGroups,
+          groupOrder: dr.groupOrder,
+          groupPalette: dr.groupPalette,
+          factorNames: dr.factorNames,
+          wellFactors: dr.wellFactors,
+          excludedWells: dr.defaultExcluded || []
+        }));
+      }
+      ui.activeRunId = ui.runs[0].id;
+      ui.scope = "pooled";
+    } else {
+      const sp = core.parseZantiksCsv(demo.summaryCsvText, demo.summaryFilename || `${presetId}.csv`);
+      const zc = demo.zchangeCsvText ? core.parseZantiksCsv(demo.zchangeCsvText, demo.zchangeFilename || `${presetId}_ZCHANGE.csv`) : null;
+      const xy = demo.xyCsvText ? core.parseZantiksCsv(demo.xyCsvText, demo.xyFilename || `${presetId}_XY.csv`) : null;
+      const ctx = demo.experimentContext || (demo.experimentPayload ? core.parseExperimentContext(demo.experimentPayload) : null);
+      const rec = createRunRecord({
+        filename: demo.summaryFilename || `${presetId}.csv`,
+        summaryParsed: sp,
+        zchangeParsed: zc,
+        xyParsed: xy,
+        context: ctx,
+        contextFilename: ctx ? `${demo.name || presetId} (Demo Context)` : "",
+        groups: demo.defaultGroups,
+        groupOrder: demo.groupOrder,
+        groupPalette: demo.groupPalette,
+        factorNames: demo.factorNames,
+        wellFactors: demo.wellFactors,
+        excludedWells: demo.defaultExcluded || []
+      });
+      ui.runs = [rec];
+      ui.activeRunId = rec.id;
+      ui.scope = "active";
     }
-    ui.context = demo.experimentContext || (demo.experimentPayload ? core.parseExperimentContext(demo.experimentPayload) : null);
-    ui.contextFilename = ui.context ? `${demo.name || presetId} (Demo Context)` : "";
 
-    ui.groups = {};
-    for (const w of parsedSummary.wells) {
-      const g = demo.defaultGroups && demo.defaultGroups[w];
-      if (g && g !== UNASSIGNED && g !== ALL_WELLS) ui.groups[w] = g;
-    }
-    syncGroupRegistryFromMap(ui.groups, demo.groupPalette);
-    ui.excludedWells = new Set(demo.defaultExcluded || []);
-
-    applyLoadedSummary(parsedSummary, { keepExplicitGroups: true });
+    syncLegacyStateAliases();
+    ui.qcThresholds = core.normalizeQcThresholds(
+      (ui.context && ui.context.organismId) ? ui.context.organismId : "default",
+      ui.context
+    );
+    resetMetricDefaultsForActiveRun();
 
     const sel = document.getElementById("demoPresetSelect");
     if (sel) sel.value = presetId;
+    const winS = document.getElementById("tsWinStartInput");
+    const winE = document.getElementById("tsWinEndInput");
+    if (winS) winS.value = "";
+    if (winE) winE.value = "";
 
     recomputeAndRender();
     toast(`Loaded demo: ${demo.name || presetId}`);
@@ -572,50 +824,91 @@
       toast("No saved Script Builder config found in this browser yet.");
       return;
     }
-    ui.context = ctx;
-    ui.contextFilename = "Latest Builder Config (localStorage)";
-    if (ui.summaryParsed) recomputeAndRender();
+    const run = getActiveRun();
+    if (run) {
+      run.context = ctx;
+      run.contextFilename = "Latest Builder Config (localStorage)";
+    } else {
+      ui.pendingContext = ctx;
+      ui.pendingContextFilename = "Latest Builder Config (localStorage)";
+    }
+    syncLegacyStateAliases();
+    syncQcPresetFromContext(ctx);
+    if (ui.runs.length) recomputeAndRender();
     else renderAll();
     toast(`Attached Builder config: ${ctx.plateName || ctx.plateId} · ${ctx.stimName || ctx.stimId}`);
   }
 
   function clearAllData() {
-    ui.summaryParsed = null;
-    ui.zchangeParsed = null;
-    ui.xyParsed = null;
-    ui.context = null;
-    ui.contextFilename = "";
+    const core = getCore();
+    ui.runs = [];
+    ui.activeRunId = null;
+    ui.scope = "active";
+    ui.normalizeToControl = false;
+    ui.controlGroupName = "";
+    ui.trimWindow = { trimStartSec: 0, trimEndSec: null };
+    ui.windowAuc = { startSec: null, endSec: null };
+    ui.qcThresholds = core ? core.normalizeQcThresholds("default", null) : null;
+    ui.pendingContext = null;
+    ui.pendingContextFilename = "";
+    ui.pendingZchange = null;
+    ui.pendingXy = null;
     ui.activeDemoId = "";
-    ui.groups = {};
-    ui.groupOrder = [];
-    ui.groupColors = {};
-    ui.excludedWells = new Set();
     ui.hiddenGroups = new Set();
     ui.selectedWell = null;
     ui.analysis = null;
     ui.compView = "";
     ui.brushTool = "group";
+    ui.activeFactorLayer = PRIMARY_LAYER;
     ui.activeBrushGroup = UNASSIGNED;
+    ui.activeBrushFactorVal = UNASSIGNED;
+    ui.tsTraceView = "full";
+    ui.tsBinGroupSize = 1;
+
+    syncLegacyStateAliases();
 
     const sel = document.getElementById("demoPresetSelect");
     if (sel) sel.value = "";
     const smoothSel = document.getElementById("tsSmoothSel");
     if (smoothSel) smoothSel.value = "1";
-    ui.tsBinGroupSize = 1;
+    const winS = document.getElementById("tsWinStartInput");
+    const winE = document.getElementById("tsWinEndInput");
+    if (winS) winS.value = "";
+    if (winE) winE.value = "";
 
     goToPage("data");
     renderAll();
     toast("Cleared analyzer workspace");
   }
 
-  async function handleIncomingFiles(fileList) {
+  function matchCompanionToRun(filename) {
+    if (!ui.runs.length) return null;
+    const normStem = String(filename || "")
+      .replace(/\.[^.]+$/, "")
+      .replace(/(_ZCHANGE|_XY|_SUMMARY)$/i, "")
+      .toLowerCase();
+    for (const r of ui.runs) {
+      const rStem = String(r.filename || "").replace(/\.[^.]+$/, "").toLowerCase();
+      if (rStem && (normStem === rStem || normStem.startsWith(rStem) || rStem.startsWith(normStem))) {
+        return r;
+      }
+      const rId = String(r.runId || "").toLowerCase();
+      if (rId && normStem.includes(rId)) return r;
+    }
+    return getActiveRun();
+  }
+
+  async function handleIncomingFiles(fileList, opts) {
     const core = getCore();
     if (!core) return;
     const files = Array.from(fileList || []);
     if (!files.length) return;
+    const appendMode = Boolean(opts && opts.appendMode);
 
-    let loadedAny = false;
-    const msgs = [];
+    // Pre-read & classify files so Summary CSVs are ingested first before companion _ZCHANGE/_XY/.zip
+    const summaries = [];
+    const companions = [];
+    const plateMaps = [];
 
     for (const file of files) {
       const name = file.name || "file";
@@ -623,49 +916,26 @@
         if (/\.zip$/i.test(name)) {
           const buf = await file.arrayBuffer();
           const ctx = await core.loadContextFromZip(buf);
-          ui.context = ctx;
-          ui.contextFilename = name;
-          loadedAny = true;
-          msgs.push(`Context (${name})`);
+          companions.push({ kind: "context", name, data: ctx });
         } else if (/\.json$/i.test(name)) {
           const text = await file.text();
           const obj = JSON.parse(text);
           if (obj && (obj.format === "zantiks-plate-map" || (obj.groups && !obj.experiment))) {
-            applyPlateMapObject(obj);
-            loadedAny = true;
-            msgs.push(`Plate Map (${name})`);
+            plateMaps.push({ name, data: obj });
           } else {
             const ctx = core.parseExperimentContext(obj);
-            if (ctx && ctx.valid) {
-              ui.context = ctx;
-              ui.contextFilename = name;
-              loadedAny = true;
-              msgs.push(`Context (${name})`);
-            } else {
-              toast(`Unrecognized JSON format in ${name}`);
-            }
+            if (ctx && ctx.valid) companions.push({ kind: "context", name, data: ctx });
+            else toast(`Unrecognized JSON format in ${name}`);
           }
         } else {
           const text = await file.text();
           const parsed = core.parseZantiksCsv(text, name);
           if (parsed.kind === "summary") {
-            const hadSameWells = ui.summaryParsed &&
-              ui.summaryParsed.wells.length === parsed.wells.length &&
-              ui.summaryParsed.wells.every((w, i) => w === parsed.wells[i]);
-            ui.activeDemoId = "";
-            const demoSel = document.getElementById("demoPresetSelect");
-            if (demoSel) demoSel.value = "";
-            applyLoadedSummary(parsed, { preserveGroups: hadSameWells });
-            loadedAny = true;
-            msgs.push(`Summary CSV (${parsed.wells.length} wells)`);
+            summaries.push({ name, parsed, lastModified: file.lastModified });
           } else if (parsed.kind === "zchange") {
-            ui.zchangeParsed = parsed;
-            loadedAny = true;
-            msgs.push(`_ZCHANGE (${parsed.events ? parsed.events.length : parsed.rowCount} events)`);
+            companions.push({ kind: "zchange", name, data: parsed });
           } else if (parsed.kind === "xy") {
-            ui.xyParsed = parsed;
-            loadedAny = true;
-            msgs.push(`_XY CSV (${parsed.rowCount} frames)`);
+            companions.push({ kind: "xy", name, data: parsed });
           } else {
             toast(`Could not parse ${name}: missing Zantiks RUNTIME/TIME & metric columns.`);
           }
@@ -675,8 +945,120 @@
       }
     }
 
+    let loadedAny = false;
+    const msgs = [];
+
+    if (summaries.length > 0) {
+      const activeRun = getActiveRun();
+      const firstNew = summaries[0];
+      const sameWellSetAsActive = activeRun && activeRun.summaryParsed &&
+        activeRun.summaryParsed.wells.length === firstNew.parsed.wells.length &&
+        activeRun.summaryParsed.wells.every((w, i) => w === firstNew.parsed.wells[i]);
+      const differentName = activeRun && activeRun.filename !== firstNew.name;
+
+      // Replace existing runs when starting from empty, replacing a demo (unless appendMode),
+      // or dropping a single CSV with a different plate layout on the main dropzone.
+      const shouldReplace = !appendMode && (
+        ui.runs.length === 0 ||
+        Boolean(ui.activeDemoId) ||
+        summaries.length >= 2 ||
+        (!sameWellSetAsActive) ||
+        (!differentName && ui.runs.length === 1)
+      );
+
+      const preservedGroups = (!shouldReplace && activeRun) ? activeRun.groups : (sameWellSetAsActive && !ui.activeDemoId && activeRun ? activeRun.groups : null);
+      const preservedOrder = (!shouldReplace && activeRun) ? activeRun.groupOrder : (sameWellSetAsActive && !ui.activeDemoId && activeRun ? activeRun.groupOrder : null);
+      const preservedColors = (!shouldReplace && activeRun) ? activeRun.groupColors : (sameWellSetAsActive && !ui.activeDemoId && activeRun ? activeRun.groupColors : null);
+      const preservedFactors = (!shouldReplace && activeRun) ? activeRun.factorNames : null;
+      const preservedWellFactors = (!shouldReplace && activeRun) ? activeRun.wellFactors : null;
+
+      if (shouldReplace) {
+        ui.runs = [];
+        ui.activeDemoId = "";
+        const demoSel = document.getElementById("demoPresetSelect");
+        if (demoSel) demoSel.value = "";
+      } else {
+        ui.activeDemoId = "";
+        const demoSel = document.getElementById("demoPresetSelect");
+        if (demoSel) demoSel.value = "";
+      }
+
+      for (let i = 0; i < summaries.length; i++) {
+        const s = summaries[i];
+        const useCtx = (i === 0 && ui.pendingContext) ? ui.pendingContext : null;
+        const useCtxName = (i === 0 && ui.pendingContext) ? ui.pendingContextFilename : "";
+        const useZc = (i === 0 && ui.pendingZchange) ? ui.pendingZchange : null;
+        const useXy = (i === 0 && ui.pendingXy) ? ui.pendingXy : null;
+
+        const rec = createRunRecord({
+          filename: s.name,
+          summaryParsed: s.parsed,
+          lastModifiedMs: s.lastModified,
+          zchangeParsed: useZc,
+          xyParsed: useXy,
+          context: useCtx,
+          contextFilename: useCtxName,
+          groups: preservedGroups || {},
+          groupOrder: preservedOrder || [],
+          groupColors: preservedColors || {},
+          factorNames: preservedFactors || [],
+          wellFactors: preservedWellFactors || {}
+        });
+        ui.runs.push(rec);
+        if (i === 0) {
+          ui.pendingContext = null;
+          ui.pendingContextFilename = "";
+          ui.pendingZchange = null;
+          ui.pendingXy = null;
+        }
+        msgs.push(`${rec.runId} (${s.parsed.wells.length}w)`);
+      }
+
+      ui.activeRunId = ui.runs[ui.runs.length - 1].id;
+      if (ui.runs.length > 1) ui.scope = "pooled";
+      else ui.scope = "active";
+
+      syncLegacyStateAliases();
+      syncQcPresetFromContext(ui.context);
+      resetMetricDefaultsForActiveRun();
+      loadedAny = true;
+    }
+
+    for (const comp of companions) {
+      const targetRun = matchCompanionToRun(comp.name);
+      if (comp.kind === "context") {
+        if (targetRun) {
+          targetRun.context = comp.data;
+          targetRun.contextFilename = comp.name;
+        } else {
+          ui.pendingContext = comp.data;
+          ui.pendingContextFilename = comp.name;
+        }
+        syncQcPresetFromContext(comp.data);
+        msgs.push(`Context (${comp.name})`);
+        loadedAny = true;
+      } else if (comp.kind === "zchange") {
+        if (targetRun) targetRun.zchangeParsed = comp.data;
+        else ui.pendingZchange = comp.data;
+        msgs.push(`_ZCHANGE (${comp.data.events ? comp.data.events.length : comp.data.rowCount} events)`);
+        loadedAny = true;
+      } else if (comp.kind === "xy") {
+        if (targetRun) targetRun.xyParsed = comp.data;
+        else ui.pendingXy = comp.data;
+        msgs.push(`_XY (${comp.data.rowCount} frames)`);
+        loadedAny = true;
+      }
+    }
+
+    for (const pm of plateMaps) {
+      applyPlateMapObject(pm.data);
+      msgs.push(`Plate Map (${pm.name})`);
+      loadedAny = true;
+    }
+
     if (loadedAny) {
-      if (ui.summaryParsed) recomputeAndRender();
+      syncLegacyStateAliases();
+      if (ui.runs.length > 0) recomputeAndRender();
       else renderAll();
       if (msgs.length) toast(`Loaded: ${msgs.join(" · ")}`);
     }
@@ -684,72 +1066,162 @@
 
   function applyPlateMapObject(obj) {
     if (!obj || typeof obj !== "object") return;
+    const run = getActiveRun();
+    if (!run) return;
     const rawGroups = obj.groups && typeof obj.groups === "object" ? obj.groups : {};
-    const nextGroups = { ...ui.groups };
+    const nextGroups = {};
     for (const [w, g] of Object.entries(rawGroups)) {
       const clean = String(g || "").trim();
       if (clean && clean !== UNASSIGNED && clean !== ALL_WELLS) nextGroups[w] = clean;
-      else delete nextGroups[w];
     }
-    ui.groups = nextGroups;
-    syncGroupRegistryFromMap(ui.groups, obj.groupColors || obj.groupPalette);
+    run.groups = nextGroups;
+    const reg = buildGroupRegistryForRun(nextGroups, obj.groupOrder, obj.groupColors || obj.groupPalette);
+    run.groupOrder = reg.groupOrder;
+    run.groupColors = reg.groupColors;
+
+    if (Array.isArray(obj.factorNames) && obj.wellFactors && typeof obj.wellFactors === "object") {
+      run.factorNames = obj.factorNames.map(s => String(s).trim()).filter(Boolean);
+      run.wellFactors = {};
+      for (const fn of run.factorNames) {
+        run.wellFactors[fn] = (obj.wellFactors[fn] && typeof obj.wellFactors[fn] === "object")
+          ? { ...obj.wellFactors[fn] }
+          : {};
+      }
+      run.factorLevelOrder = buildFactorLevelOrder(run.factorNames, run.wellFactors);
+    }
+
     if (Array.isArray(obj.excludedWells)) {
-      ui.excludedWells = new Set(obj.excludedWells.map(String));
+      run.excludedWells = new Set(obj.excludedWells.map(String));
     }
+    if (obj.excludeMeta && typeof obj.excludeMeta === "object") {
+      run.excludeMeta = { ...obj.excludeMeta };
+    }
+    ui.activeFactorLayer = PRIMARY_LAYER;
+    ui.activeBrushGroup = run.groupOrder.length ? run.groupOrder[0] : UNASSIGNED;
+    syncLegacyStateAliases();
   }
 
   function savePlateMapJson() {
-    if (!ui.summaryParsed) return;
+    const run = getActiveRun();
+    if (!run) return;
     const payload = {
       format: "zantiks-plate-map",
-      version: 1,
+      version: 2,
       savedAt: new Date().toISOString(),
       plateId: (ui.analysis && ui.analysis.layout && ui.analysis.layout.id) || "custom",
-      groupOrder: [...ui.groupOrder],
-      groupColors: { ...ui.groupColors },
-      groups: { ...ui.groups },
-      excludedWells: [...ui.excludedWells]
+      groupOrder: [...run.groupOrder],
+      groupColors: { ...run.groupColors },
+      groups: { ...run.groups },
+      factorNames: [...run.factorNames],
+      wellFactors: JSON.parse(JSON.stringify(run.wellFactors || {})),
+      excludedWells: [...run.excludedWells],
+      excludeMeta: { ...run.excludeMeta }
     };
     downloadTextFile(
       JSON.stringify(payload, null, 2) + "\n",
       `${getExportBasename()}_plate_map.json`,
       "application/json;charset=utf-8"
     );
-    toast("Saved plate map (.json)");
+    toast("Saved plate map (.json) with factors");
   }
 
   // ---------------------------------------------------------------------------
   // 5. Core Analysis Recompute & Master Render
   // ---------------------------------------------------------------------------
+  function getActiveWindowAucConfig() {
+    const s = ui.windowAuc && ui.windowAuc.startSec;
+    const e = ui.windowAuc && ui.windowAuc.endSec;
+    if (Number.isFinite(s) && Number.isFinite(e) && e > s) {
+      return { startSec: s, endSec: e };
+    }
+    return null;
+  }
+
+  function collectUnionGroupOrder() {
+    const out = [];
+    const set = new Set();
+    for (const r of ui.runs) {
+      for (const g of (r.groupOrder || [])) {
+        if (g && !set.has(g)) { set.add(g); out.push(g); }
+      }
+    }
+    return out;
+  }
+
+  function buildExportPayload() {
+    return {
+      analysis: ui.analysis,
+      scope: ui.runs.length > 1 ? ui.scope : "active",
+      activeRunId: ui.activeRunId,
+      runs: ui.runs,
+      parsed: ui.summaryParsed,
+      summaryParsed: ui.summaryParsed,
+      zchangeParsed: ui.zchangeParsed,
+      xyParsed: ui.xyParsed,
+      context: ui.context,
+      groups: ui.groups,
+      factorNames: ui.factorNames,
+      wellFactors: ui.wellFactors,
+      excludedWells: [...ui.excludedWells],
+      excludeMeta: ui.excludeMeta,
+      qcThresholds: ui.qcThresholds,
+      trimWindow: ui.trimWindow,
+      windowAuc: getActiveWindowAucConfig()
+    };
+  }
+
   function recomputeAndRender() {
     const core = getCore();
-    if (!core || !ui.summaryParsed) {
+    syncLegacyStateAliases();
+
+    if (!core || ui.runs.length === 0) {
       ui.analysis = null;
       renderAll();
       return;
     }
 
-    ui.analysis = core.computeAnalysis({
-      parsed: ui.summaryParsed,
-      zchange: ui.zchangeParsed,
-      context: ui.context,
-      groups: ui.groups,
-      excludedWells: ui.excludedWells,
-      metric: ui.tsMetric,
-      binGroupSize: ui.tsBinGroupSize,
-      groupOrder: ui.groupOrder
+    const effectiveScope = ui.runs.length > 1 ? ui.scope : "active";
+    if (!ui.qcThresholds) {
+      ui.qcThresholds = core.normalizeQcThresholds("default", ui.context);
+    }
+
+    ui.analysis = core.analyzePooledRuns(ui.runs, {
+      scope: effectiveScope,
+      activeRunId: ui.activeRunId,
+      normalizeToControl: ui.normalizeToControl,
+      controlGroupName: ui.controlGroupName || undefined,
+      qcThresholds: ui.qcThresholds,
+      trimWindow: ui.trimWindow,
+      windowAuc: getActiveWindowAucConfig(),
+      tsMetric: ui.tsMetric,
+      tsBinGroupSize: ui.tsBinGroupSize,
+      xyFreezeSpeedMmS: ui.xyFreezeSpeedMmS,
+      groupOrder: collectUnionGroupOrder()
     });
 
     if (ui.analysis && ui.analysis.activeMetric) {
       ui.tsMetric = ui.analysis.activeMetric;
     }
+    if (ui.analysis && ui.analysis.pooledMeta && ui.analysis.pooledMeta.controlGroupName && !ui.controlGroupName) {
+      ui.controlGroupName = ui.analysis.pooledMeta.controlGroupName;
+    }
 
+    // Validate trace view (if no periStimulus, fall back to full)
+    if (ui.tsTraceView !== "full") {
+      const ps = ui.analysis && ui.analysis.periStimulus;
+      if (!ps) ui.tsTraceView = "full";
+      else if (ui.tsTraceView === "habituation" && !ps.hasHabituation) ui.tsTraceView = "peri";
+    }
+
+    // Validate comparison view
     const views = (ui.analysis && ui.analysis.comparisonViews) || [];
     if (!views.some(v => v.id === ui.compView)) {
       if (ui.activeDemoId === "ppi_24w" && views.some(v => v.id === "ppi")) {
         ui.compView = "ppi";
       } else if (ui.activeDemoId === "ymaze_15" && views.some(v => v.id === "sab")) {
         ui.compView = "sab";
+      } else if (ui.normalizeToControl && views.some(v => v.id === "normalized_ctrl")) {
+        ui.compView = "normalized_ctrl";
       } else if (views.length) {
         ui.compView = views[0].id;
       } else {
@@ -768,9 +1240,8 @@
   }
 
   function renderAll() {
-    const hasSummary = Boolean(ui.summaryParsed && ui.analysis);
+    const hasSummary = Boolean(ui.runs.length > 0 && ui.analysis);
 
-    // Toggle empty-state vs content on Steps 2-5
     document.querySelectorAll("[data-requires-csv-empty]").forEach(el => {
       el.style.display = hasSummary ? "none" : "";
     });
@@ -778,10 +1249,11 @@
       el.style.display = hasSummary ? "" : "none";
     });
 
-    // Topbar badge
     const modeBadge = document.getElementById("analyzerModeBadge");
     if (modeBadge) {
-      if (hasSummary && ui.analysis.layout) {
+      if (hasSummary && ui.runs.length > 1) {
+        modeBadge.textContent = `${ui.runs.length} Runs · ${ui.analysis.layout.name || "Pool"}`;
+      } else if (hasSummary && ui.analysis.layout) {
         modeBadge.textContent = ui.analysis.layout.name || `${ui.summaryParsed.wells.length} Wells`;
       } else if (ui.context && ui.context.plateName) {
         modeBadge.textContent = ui.context.plateName;
@@ -796,26 +1268,28 @@
 
     if (!hasSummary) return;
 
+    renderRunSwitchers();
     renderKpiStrip();
+    renderQcThresholdsCard();
     renderPlateControls();
     renderAllPlateMaps();
     renderWellInspector();
     renderTempAndQcDiagnostics();
+    renderPlotScopeBar();
     renderChartToolbars();
     renderAllPlotTabs();
+    renderExportAuditSummary();
     renderWellTable();
   }
 
   // ---------------------------------------------------------------------------
-  // 6. Step 1: Data & Context Overview + Right Sidebar Dataset Summary
+  // 6. Step 1: Data, Multi-Run List & Right Sidebar Dataset Summary
   // ---------------------------------------------------------------------------
   function renderStep1Data() {
-    // Active demo card highlight
     document.querySelectorAll("#step1DemoCards [data-demo]").forEach(btn => {
       btn.classList.toggle("active", Boolean(ui.activeDemoId) && btn.getAttribute("data-demo") === ui.activeDemoId);
     });
 
-    // Context badge
     const badge = document.getElementById("contextBadge");
     const badgeText = document.getElementById("contextBadgeText");
     const clearCtxBtn = document.getElementById("clearContextBtn");
@@ -838,68 +1312,72 @@
         const hasLocal = Boolean(core && core.loadLatestBuilderContext && core.loadLatestBuilderContext());
         badgeText.textContent = hasLocal
           ? "Builder config available in browser"
-          : (ui.summaryParsed ? "Auto-detected from CSV" : "No Builder context attached");
+          : (ui.runs.length ? "Auto-detected from CSV" : "No Builder context attached");
         badge.title = "";
         if (clearCtxBtn) clearCtxBtn.style.display = "none";
       }
     }
 
-    // File chips
+    // Loaded file chips (for active run / quick visibility)
     const chipsWrap = document.getElementById("loadedFileChips");
     if (chipsWrap) {
       const chips = [];
-      if (ui.summaryParsed) {
-        const p = ui.summaryParsed;
-        chips.push(
-          `<span class="az-file-chip">` +
-            `<span class="az-file-chip-kind">CSV</span>` +
-            `<span class="az-file-chip-name" title="${esc(p.filename)}">${esc(p.filename)}</span>` +
-            `<span class="az-file-chip-meta">${p.wells.length}w · ${p.rowCount} rows</span>` +
-            `<button type="button" class="az-file-chip-rm" data-rm-file="summary" aria-label="Remove summary CSV">&times;</button>` +
-          `</span>`
-        );
+      for (const r of ui.runs) {
+        const p = r.summaryParsed;
+        if (p) {
+          chips.push(
+            `<span class="az-file-chip">` +
+              `<span class="az-file-chip-kind">${ui.runs.length > 1 ? esc(r.runId) : "CSV"}</span>` +
+              `<span class="az-file-chip-name" title="${esc(r.filename)}">${esc(r.filename)}</span>` +
+              `<span class="az-file-chip-meta">${p.wells.length}w · ${p.rowCount} rows</span>` +
+              `<button type="button" class="az-file-chip-rm" data-rm-file="summary" data-rm-run="${esc(r.id)}" aria-label="Remove ${esc(r.runId)}">&times;</button>` +
+            `</span>`
+          );
+        }
+        if (r.zchangeParsed) {
+          const z = r.zchangeParsed;
+          chips.push(
+            `<span class="az-file-chip">` +
+              `<span class="az-file-chip-kind is-zchange">ZCHANGE</span>` +
+              `<span class="az-file-chip-name" title="${esc(z.filename)}">${esc(z.filename)}</span>` +
+              `<span class="az-file-chip-meta">${z.events ? z.events.length : z.rowCount} events</span>` +
+              `<button type="button" class="az-file-chip-rm" data-rm-file="zchange" data-rm-comp="zchange" data-comp-run="${esc(r.id)}" aria-label="Remove ZCHANGE CSV">&times;</button>` +
+            `</span>`
+          );
+        }
+        if (r.xyParsed) {
+          const xy = r.xyParsed;
+          chips.push(
+            `<span class="az-file-chip">` +
+              `<span class="az-file-chip-kind is-xy">XY</span>` +
+              `<span class="az-file-chip-name" title="${esc(xy.filename)}">${esc(xy.filename)}</span>` +
+              `<span class="az-file-chip-meta">${xy.rowCount} frames</span>` +
+              `<button type="button" class="az-file-chip-rm" data-rm-file="xy" data-rm-comp="xy" data-comp-run="${esc(r.id)}" aria-label="Remove XY CSV">&times;</button>` +
+            `</span>`
+          );
+        }
       }
-      if (ui.zchangeParsed) {
-        const z = ui.zchangeParsed;
-        const evCount = z.events ? z.events.length : z.rowCount;
-        chips.push(
-          `<span class="az-file-chip">` +
-            `<span class="az-file-chip-kind is-zchange">ZCHANGE</span>` +
-            `<span class="az-file-chip-name" title="${esc(z.filename)}">${esc(z.filename)}</span>` +
-            `<span class="az-file-chip-meta">${evCount} events</span>` +
-            `<button type="button" class="az-file-chip-rm" data-rm-file="zchange" aria-label="Remove ZCHANGE CSV">&times;</button>` +
-          `</span>`
-        );
+      if (!ui.runs.length && ui.pendingZchange) {
+        chips.push(`<span class="az-file-chip"><span class="az-file-chip-kind is-zchange">ZCHANGE</span><span class="az-file-chip-name">${esc(ui.pendingZchange.filename)}</span></span>`);
       }
-      if (ui.xyParsed) {
-        const xy = ui.xyParsed;
-        chips.push(
-          `<span class="az-file-chip">` +
-            `<span class="az-file-chip-kind is-xy">XY</span>` +
-            `<span class="az-file-chip-name" title="${esc(xy.filename)}">${esc(xy.filename)}</span>` +
-            `<span class="az-file-chip-meta">${xy.rowCount} frames</span>` +
-            `<button type="button" class="az-file-chip-rm" data-rm-file="xy" aria-label="Remove XY CSV">&times;</button>` +
-          `</span>`
-        );
+      if (!ui.runs.length && ui.pendingXy) {
+        chips.push(`<span class="az-file-chip"><span class="az-file-chip-kind is-xy">XY</span><span class="az-file-chip-name">${esc(ui.pendingXy.filename)}</span></span>`);
       }
 
       if (chips.length) {
         chipsWrap.innerHTML = chips.join("");
-        chipsWrap.querySelectorAll("[data-rm-file]").forEach(btn => {
+        chipsWrap.querySelectorAll("[data-rm-run]").forEach(btn => {
+          btn.addEventListener("click", () => removeRun(btn.getAttribute("data-rm-run")));
+        });
+        chipsWrap.querySelectorAll("[data-rm-comp]").forEach(btn => {
           btn.addEventListener("click", () => {
-            const k = btn.getAttribute("data-rm-file");
-            if (k === "summary") {
-              ui.summaryParsed = null;
-              ui.analysis = null;
-              ui.activeDemoId = "";
-              const dsel = document.getElementById("demoPresetSelect");
-              if (dsel) dsel.value = "";
-            } else if (k === "zchange") {
-              ui.zchangeParsed = null;
-            } else if (k === "xy") {
-              ui.xyParsed = null;
+            const kind = btn.getAttribute("data-rm-comp");
+            const r = getRunByIdOrLabel(btn.getAttribute("data-comp-run"));
+            if (r) {
+              if (kind === "zchange") r.zchangeParsed = null;
+              if (kind === "xy") r.xyParsed = null;
+              recomputeAndRender();
             }
-            recomputeAndRender();
           });
         });
       } else {
@@ -907,9 +1385,64 @@
       }
     }
 
+    // Editable Loaded Runs list (shown cleanly whenever >= 1 run is loaded)
+    const runsWrap = document.getElementById("loadedRunsList");
+    if (runsWrap) {
+      if (ui.runs.length > 0) {
+        runsWrap.style.display = "";
+        runsWrap.innerHTML = ui.runs.map((r, idx) => {
+          const isAct = r.id === ui.activeRunId;
+          const sp = r.summaryParsed;
+          const tags = [];
+          if (r.zchangeParsed) tags.push(`<span class="az-file-chip-kind is-zchange">ZCHANGE</span>`);
+          if (r.xyParsed) tags.push(`<span class="az-file-chip-kind is-xy">XY</span>`);
+          return (
+            `<div class="az-run-item${isAct ? " is-active" : ""}" data-run-row="${esc(r.id)}">` +
+              `<div class="az-run-item-left">` +
+                `<button type="button" class="az-run-select-btn" data-select-run="${esc(r.id)}">${isAct ? "Active" : `Run ${idx + 1}`}</button>` +
+                `<div class="az-run-field"><label for="runId_${idx}">Run ID</label><input type="text" id="runId_${idx}" data-run-id-edit="${esc(r.id)}" value="${esc(r.runId)}" maxlength="32" autocomplete="off"></div>` +
+                `<div class="az-run-field"><label for="runDate_${idx}">Date</label><input type="date" id="runDate_${idx}" data-run-date-edit="${esc(r.id)}" value="${esc(r.date)}"></div>` +
+              `</div>` +
+              `<div class="az-run-item-right">` +
+                tags.join("") +
+                `<span>${sp ? `${sp.wells.length}w · ${sp.rowCount} rows` : ""}</span>` +
+                `<button type="button" class="az-file-chip-rm" data-rm-run="${esc(r.id)}" title="Remove run">&times;</button>` +
+              `</div>` +
+            `</div>`
+          );
+        }).join("");
+
+        runsWrap.querySelectorAll("[data-select-run]").forEach(btn => {
+          btn.addEventListener("click", () => switchActiveRun(btn.getAttribute("data-select-run")));
+        });
+        runsWrap.querySelectorAll("[data-run-id-edit]").forEach(inp => {
+          inp.addEventListener("change", () => {
+            const r = getRunByIdOrLabel(inp.getAttribute("data-run-id-edit"));
+            if (!r) return;
+            const next = String(inp.value || "").trim().slice(0, 32);
+            if (next) { r.runId = ensureUniqueRunLabel(next, r.id); recomputeAndRender(); }
+          });
+        });
+        runsWrap.querySelectorAll("[data-run-date-edit]").forEach(inp => {
+          inp.addEventListener("change", () => {
+            const r = getRunByIdOrLabel(inp.getAttribute("data-run-date-edit"));
+            if (!r) return;
+            r.date = inp.value || r.date;
+            recomputeAndRender();
+          });
+        });
+        runsWrap.querySelectorAll("[data-rm-run]").forEach(btn => {
+          btn.addEventListener("click", () => removeRun(btn.getAttribute("data-rm-run")));
+        });
+      } else {
+        runsWrap.style.display = "none";
+        runsWrap.innerHTML = "";
+      }
+    }
+
     // Overview grid
     const ovGrid = document.getElementById("loadedOverviewGrid");
-    if (ui.summaryParsed && ui.analysis) {
+    if (ui.runs.length > 0 && ui.analysis) {
       const a = ui.analysis;
       const k = a.kpis;
       const caps = a.capabilities || {};
@@ -918,26 +1451,62 @@
       if (caps.hasMsd) metricTags.push("MSD");
       if (caps.hasZones) metricTags.push(`Z1–Z${caps.maxZone || 2}`);
       if (caps.hasZchange) metricTags.push("ZCHANGE");
+      if (caps.hasXy) metricTags.push("XY");
 
       const first = a.layout.wells[0] || "";
       const last = a.layout.wells[a.layout.wells.length - 1] || "";
       const range = a.layout.wells.length > 1 ? `${first}–${last}` : first;
+      const runLbl = ui.runs.length > 1 ? `${ui.runs.length} runs pooled · ` : "";
 
-      setText("loadedOverviewHint", `${a.layout.name || "Plate"} · ${k.rowCount} rows · ${fmtDurationNice(k.durationSec)}`);
+      setText("loadedOverviewHint", `${runLbl}${a.layout.name || "Plate"} · ${k.rowCount} rows · ${fmtDurationNice(k.durationSec)}`);
       if (ovGrid) {
         ovGrid.style.display = "";
         const phaseTxt = a.phases && a.phases.length ? a.phases.slice(0, 3).join(", ") + (a.phases.length > 3 ? "…" : "") : "Single phase";
         const tempTxt = caps.hasTemp && Number.isFinite(k.tempMean) ? `Temp ${k.tempMean.toFixed(1)} °C` : "No TEMP_C";
+        const readyTags = [];
+        if (caps.hasVmr) readyTags.push("VMR");
+        if (caps.hasPpi) readyTags.push("% PPI");
+        if (caps.hasHabituation) readyTags.push("Habit");
+        if (caps.hasSab) readyTags.push("SAB %");
+        if (caps.hasXy) readyTags.push("Spatial");
         ovGrid.innerHTML =
-          `<div class="az-ov-cell"><div class="az-ov-label">Plate / Maze</div><div class="az-ov-val">${esc(a.layout.name || "Plate")}</div><div class="az-ov-sub">${k.totalWells} arena${k.totalWells === 1 ? "" : "s"} (${esc(range)})</div></div>` +
+          `<div class="az-ov-cell"><div class="az-ov-label">${ui.runs.length > 1 ? "Pooled Plates" : "Plate / Maze"}</div><div class="az-ov-val">${ui.runs.length > 1 ? `${ui.runs.length} × ${esc(a.layout.name || "Plate")}` : esc(a.layout.name || "Plate")}</div><div class="az-ov-sub">${k.totalWells} total wells (${esc(range)})</div></div>` +
           `<div class="az-ov-cell"><div class="az-ov-label">Rows &amp; Duration</div><div class="az-ov-val">${k.rowCount} rows · ${esc(fmtDurationNice(k.durationSec))}</div><div class="az-ov-sub">${fmtNum(k.binDurationSec, k.binDurationSec >= 10 ? 0 : 1)}s bins</div></div>` +
-          `<div class="az-ov-cell"><div class="az-ov-label">Detected Metrics</div><div class="az-ov-val">${esc(metricTags.join(", ") || "Summary")}</div><div class="az-ov-sub">${caps.hasVmr ? "VMR ready" : (caps.hasPpi ? "% PPI ready" : (caps.hasSab ? "SAB % ready" : "Standard tracking"))}</div></div>` +
+          `<div class="az-ov-cell"><div class="az-ov-label">Detected Metrics</div><div class="az-ov-val">${esc(metricTags.join(", ") || "Summary")}</div><div class="az-ov-sub">${readyTags.length ? readyTags.join(" · ") + " ready" : "Standard tracking"}</div></div>` +
           `<div class="az-ov-cell"><div class="az-ov-label">Phases &amp; Temp</div><div class="az-ov-val">${esc(phaseTxt)}</div><div class="az-ov-sub">${esc(tempTxt)}</div></div>`;
       }
     } else {
       setText("loadedOverviewHint", ui.context && ui.context.valid ? "Context loaded · waiting for CSV" : "Waiting for CSV");
       if (ovGrid) ovGrid.style.display = "none";
     }
+  }
+
+  function switchActiveRun(runInternalId) {
+    const hit = ui.runs.find(r => r.id === runInternalId || r.runId === runInternalId);
+    if (!hit) return;
+    ui.activeRunId = hit.id;
+    syncLegacyStateAliases();
+    if (ui.activeFactorLayer !== PRIMARY_LAYER && !hit.factorNames.includes(ui.activeFactorLayer)) {
+      ui.activeFactorLayer = PRIMARY_LAYER;
+    }
+    ui.activeBrushGroup = hit.groupOrder.length ? hit.groupOrder[0] : UNASSIGNED;
+    recomputeAndRender();
+  }
+
+  function removeRun(runInternalId) {
+    ui.runs = ui.runs.filter(r => r.id !== runInternalId);
+    if (ui.runs.length === 0) {
+      ui.activeRunId = null;
+      ui.activeDemoId = "";
+      ui.scope = "active";
+      const dsel = document.getElementById("demoPresetSelect");
+      if (dsel) dsel.value = "";
+    } else {
+      if (!ui.runs.some(r => r.id === ui.activeRunId)) ui.activeRunId = ui.runs[0].id;
+      if (ui.runs.length === 1) ui.scope = "active";
+    }
+    syncLegacyStateAliases();
+    recomputeAndRender();
   }
 
   function renderDatasetSummarySidebar() {
@@ -947,7 +1516,7 @@
     if (ui.context && ui.context.valid) {
       setText("summaryStatusLine", "Context attached · 100% offline");
     } else if (a) {
-      setText("summaryStatusLine", "Live analysis · 100% offline");
+      setText("summaryStatusLine", ui.runs.length > 1 ? `${ui.runs.length} runs pooled · offline` : "Live analysis · 100% offline");
     } else {
       setText("summaryStatusLine", "100% offline in this browser");
     }
@@ -957,7 +1526,6 @@
       setText("statDuration", "—");
       setText("statGroups", "—");
       setText("statFlagged", "—");
-
       setText("sumDataTitle", "No CSV loaded");
       setText("sumDataSub", ui.context && ui.context.valid
         ? `Context: ${ui.context.plateName || ui.context.plateId}`
@@ -970,14 +1538,14 @@
       setText("sumGroupsSub", "");
       setText("sumPlotsTitle", "Time Series");
       setText("sumPlotsSub", "Load CSV to plot");
-      setText("sumExportTitle", "Prism · CSV · Py");
+      setText("sumExportTitle", "Prism · CSV · Log · Py");
       setText("sumExportSub", "");
       return;
     }
 
     const k = a.kpis;
     const grpCount = a.groups ? a.groups.length : 0;
-    const unexcludedFlagged = (k.flaggedWells || []).filter(w => !ui.excludedWells.has(w));
+    const unexcludedFlagged = (a.wells || []).filter(w => !w.excluded && w.qc && (w.qc.isEmpty || w.qc.isSpikeGlitch)).length;
 
     setText("statActiveWells", `${k.activeWells} / ${k.totalWells}`);
     setText("statDuration", fmtDurationNice(k.durationSec));
@@ -985,19 +1553,22 @@
     setText("statFlagged", k.flaggedCount > 0 ? `${k.flaggedCount} flagged` : "0 clean");
 
     // Row 1: Data
-    setText("sumDataTitle", p.filename || "Summary CSV");
-    setText("sumDataSub", `${a.layout.name || "Plate"} · ${k.rowCount} rows${ui.zchangeParsed ? " + _ZCHANGE" : ""}`);
+    if (ui.runs.length > 1) {
+      setText("sumDataTitle", `${ui.runs.length} runs (${ui.scope === "pooled" ? "Pooled" : "Active"})`);
+      setText("sumDataSub", ui.runs.map(r => r.runId).slice(0, 3).join(", ") + (a.capabilities.hasXy ? " + _XY" : ""));
+    } else {
+      setText("sumDataTitle", p.filename || "Summary CSV");
+      const extras = [ui.zchangeParsed ? "_ZCHANGE" : "", ui.xyParsed ? "_XY" : ""].filter(Boolean).join(" + ");
+      setText("sumDataSub", `${a.layout.name || "Plate"} · ${k.rowCount} rows${extras ? " + " + extras : ""}`);
+    }
 
     // Row 2: QC
     const qcRow = document.getElementById("sumQcRow");
-    if (qcRow) qcRow.classList.toggle("has-warn", unexcludedFlagged.length > 0);
-    if (unexcludedFlagged.length > 0) {
-      setText("sumQcTitle", `${unexcludedFlagged.length} flagged to review`);
-    } else if (k.excludedWells > 0) {
-      setText("sumQcTitle", `${k.excludedWells} excluded · clean`);
-    } else {
-      setText("sumQcTitle", "All wells clean");
-    }
+    if (qcRow) qcRow.classList.toggle("has-warn", unexcludedFlagged > 0);
+    if (unexcludedFlagged > 0) setText("sumQcTitle", `${unexcludedFlagged} flagged to review`);
+    else if (k.excludedWells > 0) setText("sumQcTitle", `${k.excludedWells} excluded · clean`);
+    else setText("sumQcTitle", "All wells clean");
+
     const qcParts = [];
     if (k.emptyCount > 0) qcParts.push(`${k.emptyCount} empty`);
     if (k.spikeCount > 0) qcParts.push(`${k.spikeCount} spike`);
@@ -1006,49 +1577,102 @@
 
     // Row 3: Groups
     const grpNames = (a.groups || []).map(g => g.group);
+    const fNames = a.factorNames || [];
     setText("sumGroupsTitle", grpNames.length === 1 && grpNames[0] === ALL_WELLS
       ? "All Wells (1 group)"
-      : `${grpNames.length} group${grpNames.length === 1 ? "" : "s"}`);
-    setText("sumGroupsSub", grpNames.slice(0, 3).join(", ") + (grpNames.length > 3 ? "…" : ""));
+      : `${grpNames.length} group${grpNames.length === 1 ? "" : "s"}${fNames.length ? ` · ${fNames.length}F` : ""}`);
+    setText("sumGroupsSub", fNames.length ? fNames.join(" × ") : (grpNames.slice(0, 3).join(", ") + (grpNames.length > 3 ? "…" : "")));
 
     // Row 4: Plots
-    const tabLabels = { timeseries: "Time Series", comparison: "Phase & Group", zchange: "Zone Events" };
+    const tabLabels = { timeseries: "Time Series", comparison: "Phase & Group", zchange: "Zone Events", spatial: "Spatial (_XY)" };
     setText("sumPlotsTitle", tabLabels[ui.activeChartTab] || "Time Series");
     const tsLbl = (a.timeSeries && a.timeSeries.metricLabel) ? a.timeSeries.metricLabel.split(" ")[0] : "Distance";
-    setText("sumPlotsSub", `${tsLbl} · ${ui.tsBinGroupSize}x bin${ui.tsBinGroupSize > 1 ? "s" : ""}`);
+    setText("sumPlotsSub", `${tsLbl} · ${ui.tsBinGroupSize}x bin${ui.normalizeToControl ? " · % Ctrl" : ""}`);
 
     // Row 5: Export
     setText("sumExportTitle", "Ready to export");
-    setText("sumExportSub", `${k.activeWells} active wells · Prism / CSV / Py`);
+    setText("sumExportSub", `${k.activeWells} active wells · UTF-8 BOM`);
   }
 
   // ---------------------------------------------------------------------------
-  // 7. Step 2: QC KPI Strip
+  // 7. Step 2: Run Switchers, QC KPI Strip & Organism Thresholds
   // ---------------------------------------------------------------------------
+  function renderRunSwitchers() {
+    const multi = ui.runs.length > 1;
+    const qcBar = document.getElementById("qcRunSwitcher");
+    const grpBar = document.getElementById("groupsRunSwitcher");
+
+    const buildRunPillsHtml = (prefix) => {
+      return (
+        `<div class="az-run-pills">` +
+          `<span class="az-run-pill-lbl">Inspecting plate:</span>` +
+          ui.runs.map(r => {
+            const act = r.id === ui.activeRunId;
+            return (
+              `<button type="button" class="az-run-pill${act ? " active" : ""}" data-${prefix}-run="${esc(r.id)}">` +
+                `<span>${esc(r.runId)}</span>` +
+                `<span class="az-run-pill-meta">${esc(r.date || "")}</span>` +
+              `</button>`
+            );
+          }).join("") +
+        `</div>`
+      );
+    };
+
+    if (qcBar) {
+      qcBar.style.display = multi ? "" : "none";
+      if (multi) {
+        qcBar.innerHTML =
+          buildRunPillsHtml("qc-sw") +
+          `<button type="button" class="btn btn-xs btn-warn" id="excludeFlaggedAllRunsBtn">Exclude Flagged (All ${ui.runs.length} Runs)</button>`;
+        qcBar.querySelectorAll("[data-qc-sw-run]").forEach(btn => {
+          btn.addEventListener("click", () => switchActiveRun(btn.getAttribute("data-qc-sw-run")));
+        });
+        const allBtn = document.getElementById("excludeFlaggedAllRunsBtn");
+        if (allBtn) allBtn.addEventListener("click", excludeFlaggedAcrossAllRuns);
+      }
+    }
+
+    if (grpBar) {
+      grpBar.style.display = multi ? "" : "none";
+      if (multi) {
+        grpBar.innerHTML =
+          buildRunPillsHtml("grp-sw") +
+          `<button type="button" class="btn btn-xs btn-primary" id="copyMapAllRunsBtn">Copy Map to All Runs</button>`;
+        grpBar.querySelectorAll("[data-grp-sw-run]").forEach(btn => {
+          btn.addEventListener("click", () => switchActiveRun(btn.getAttribute("data-grp-sw-run")));
+        });
+        const copyBtn = document.getElementById("copyMapAllRunsBtn");
+        if (copyBtn) copyBtn.addEventListener("click", copyActiveMapToAllRuns);
+      }
+    }
+  }
+
   function renderKpiStrip() {
-    const a = ui.analysis;
-    if (!a) return;
+    const a = getActiveRunAnalysis();
+    const run = getActiveRun();
+    if (!a || !run) return;
     const k = a.kpis;
-    const p = ui.summaryParsed;
+    const emptyWells = (a.wells || []).filter(w => w.qc && w.qc.isEmpty).map(w => w.well);
+    const spikeWells = (a.wells || []).filter(w => w.qc && w.qc.isSpikeGlitch).map(w => w.well);
+    const flaggedWells = (a.wells || []).filter(w => w.qc && (w.qc.isEmpty || w.qc.isSpikeGlitch)).map(w => w.well);
 
     setText("kpiActiveWells", `${k.activeWells} / ${k.totalWells}`);
     const grpCount = a.groups ? a.groups.length : 0;
     setText("kpiActiveWellsSub", `${k.excludedWells} excluded · ${grpCount} group${grpCount === 1 ? "" : "s"}`);
 
-    const emptyWells = (p.qcSummary && p.qcSummary.emptyWells) || [];
-    const spikeWells = (p.qcSummary && p.qcSummary.spikeWells) || [];
-    const unexcludedEmpty = emptyWells.filter(w => !ui.excludedWells.has(w));
-    const unexcludedSpike = spikeWells.filter(w => !ui.excludedWells.has(w));
-    const unexcludedFlagged = (k.flaggedWells || []).filter(w => !ui.excludedWells.has(w));
+    const unexcludedEmpty = emptyWells.filter(w => !run.excludedWells.has(w));
+    const unexcludedSpike = spikeWells.filter(w => !run.excludedWells.has(w));
+    const unexcludedFlagged = flaggedWells.filter(w => !run.excludedWells.has(w));
 
-    setText("kpiEmptyCount", String(k.emptyCount));
+    setText("kpiEmptyCount", String(emptyWells.length));
     setText("kpiEmptyList", emptyWells.length
       ? `${emptyWells.slice(0, 6).join(", ")}${emptyWells.length > 6 ? "…" : ""}${unexcludedEmpty.length === 0 ? " (all excluded)" : ""}`
       : "All wells active");
     const emptyCard = document.getElementById("kpiEmptyCard");
     if (emptyCard) emptyCard.classList.toggle("is-warn", unexcludedEmpty.length > 0);
 
-    setText("kpiSpikeCount", String(k.spikeCount));
+    setText("kpiSpikeCount", String(spikeWells.length));
     setText("kpiSpikeList", spikeWells.length
       ? `${spikeWells.slice(0, 6).join(", ")}${spikeWells.length > 6 ? "…" : ""}${unexcludedSpike.length === 0 ? " (all excluded)" : ""}`
       : "No reflection spikes");
@@ -1063,13 +1687,10 @@
         : "Exclude Flagged";
     }
     const qcExclBtn = document.getElementById("qcExcludeFlaggedBtn");
-    if (qcExclBtn) {
-      qcExclBtn.disabled = unexcludedFlagged.length === 0;
-    }
+    if (qcExclBtn) qcExclBtn.disabled = unexcludedFlagged.length === 0;
+
     const restBtn = document.getElementById("restoreAllWellsBtn");
-    if (restBtn) {
-      restBtn.style.display = k.excludedWells > 0 ? "" : "none";
-    }
+    if (restBtn) restBtn.style.display = k.excludedWells > 0 ? "" : "none";
 
     if (a.capabilities.hasTemp && Number.isFinite(k.tempMin) && Number.isFinite(k.tempMax)) {
       setText("kpiTempRange", `${k.tempMin.toFixed(1)}–${k.tempMax.toFixed(1)} °C`);
@@ -1081,11 +1702,48 @@
     }
   }
 
+  function renderQcThresholdsCard() {
+    const core = getCore();
+    const a = getActiveRunAnalysis();
+    if (!core || !a) return;
+    const th = a.qcThresholds || ui.qcThresholds || core.normalizeQcThresholds("default", ui.context);
+
+    const presetSel = document.getElementById("qcOrganismPresetSel");
+    if (presetSel) {
+      if (presetSel.options.length === 0 && Array.isArray(core.ORGANISM_QC_PRESET_LIST)) {
+        presetSel.innerHTML = core.ORGANISM_QC_PRESET_LIST.map(p =>
+          `<option value="${esc(p.id)}">${esc(p.label)}</option>`
+        ).join("") + `<option value="custom">Custom</option>`;
+      }
+      presetSel.value = th.presetId || th.id || "default";
+    }
+
+    const syncNum = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && document.activeElement !== el) el.value = val === null || val === undefined ? "" : String(val);
+    };
+    syncNum("qcEmptyDistInput", th.emptyDistMm);
+    syncNum("qcMaxSpeedInput", th.spikeMaxSpeedMmS);
+    syncNum("qcSpikeMinInput", th.spikeMinMm);
+    syncNum("qcMadMultInput", th.spikeMadMult);
+    syncNum("qcTrimStartInput", ui.trimWindow.trimStartSec || 0);
+    syncNum("qcTrimEndInput", ui.trimWindow.trimEndSec != null ? ui.trimWindow.trimEndSec : "");
+
+    const trim = a.trimInfo;
+    if (trim && trim.active) {
+      const sLbl = trim.trimStartSec != null ? `${trim.trimStartSec}s` : "0s";
+      const eLbl = trim.trimEndSec != null ? `${trim.trimEndSec}s` : "end";
+      setText("qcThresholdHint", `Trim active (${sLbl} → ${eLbl}) · keeping ${trim.keptRows}/${trim.originalRows} rows`);
+    } else {
+      setText("qcThresholdHint", `Preset: ${th.label || th.presetId} · non-destructive trimming preserves raw CSV values`);
+    }
+  }
+
   // ---------------------------------------------------------------------------
-  // 8. Plate / Maze Controls & Shared True-Scale SVG Renderer (Steps 2 & 3)
+  // 8. Plate / Maze Controls, Multi-Factor Layers & Shared SVG Renderer
   // ---------------------------------------------------------------------------
   function getPlateMetricOptions() {
-    const a = ui.analysis;
+    const a = getActiveRunAnalysis();
     if (!a) return [];
     const caps = a.capabilities || {};
     const opts = [];
@@ -1099,6 +1757,7 @@
       opts.push({ id: "z2Pct", label: "Zone 2 Time (%)", unit: "%", dec: 1 });
     }
     if (caps.hasPpi) opts.push({ id: "ppiPct", label: "% PPI", unit: "%", dec: 1 });
+    if (caps.hasXy) opts.push({ id: "immobilityPct", label: "Immobility (%)", unit: "%", dec: 1 });
     if (caps.hasZchange) {
       opts.push({ id: "transitions", label: "Zone Entries", unit: "", dec: 0 });
       if (caps.hasSab) opts.push({ id: "sabPct", label: "Spontaneous Alternation (%)", unit: "%", dec: 1 });
@@ -1109,9 +1768,7 @@
 
   function getWellHeatmapMetricValue(wSum, metricId) {
     if (!wSum) return null;
-    if (wSum.heatmapValues && Number.isFinite(wSum.heatmapValues[metricId])) {
-      return wSum.heatmapValues[metricId];
-    }
+    if (wSum.heatmapValues && Number.isFinite(wSum.heatmapValues[metricId])) return wSum.heatmapValues[metricId];
     switch (metricId) {
       case "totalDist": return Number.isFinite(wSum.totalDist) ? wSum.totalDist : null;
       case "meanDist": return Number.isFinite(wSum.meanDist) ? wSum.meanDist : null;
@@ -1119,6 +1776,7 @@
       case "z1Pct": return wSum.zones && Number.isFinite(wSum.zones.z1Pct) ? wSum.zones.z1Pct : null;
       case "z2Pct": return wSum.zones && Number.isFinite(wSum.zones.z2Pct) ? wSum.zones.z2Pct : null;
       case "ppiPct": return wSum.startle && Number.isFinite(wSum.startle.ppiPct) ? wSum.startle.ppiPct : null;
+      case "immobilityPct": return wSum.xy && Number.isFinite(wSum.xy.immobilityPct) ? wSum.xy.immobilityPct : null;
       case "transitions": return wSum.zchange && Number.isFinite(wSum.zchange.totalEntries) ? wSum.zchange.totalEntries : null;
       case "sabPct": return wSum.zchange && Number.isFinite(wSum.zchange.sabPct) ? wSum.zchange.sabPct : null;
       default: return Number.isFinite(wSum.heatmapValue) ? wSum.heatmapValue : null;
@@ -1139,12 +1797,23 @@
   }
 
   function renderPlateControls() {
-    const a = ui.analysis;
-    if (!a) return;
+    const a = getActiveRunAnalysis();
+    const run = getActiveRun();
+    if (!a || !run) return;
 
     const plateLbl = formatPlateSubtitle(a.layout);
-    setText("qcPlateSubtitle", `${plateLbl} · Click well to inspect, Shift+click to toggle exclusion`);
-    setText("brushPlateSubtitle", `${plateLbl} · Click or drag across wells to paint`);
+    const runPrefix = ui.runs.length > 1 ? `${run.runId} · ` : "";
+    setText("qcPlateSubtitle", `${runPrefix}${plateLbl} · Click well to inspect, Shift+click to toggle exclusion`);
+
+    const isFactorMode = ui.activeFactorLayer !== PRIMARY_LAYER && run.factorNames.includes(ui.activeFactorLayer);
+    if (!isFactorMode) ui.activeFactorLayer = PRIMARY_LAYER;
+
+    setText("brushPlateSubtitle", `${runPrefix}${plateLbl} · Painting ${isFactorMode ? `factor "${ui.activeFactorLayer}"` : "Primary Group"}`);
+    setText("activeLayerHint", isFactorMode ? `Factor: ${ui.activeFactorLayer}` : "Primary Group");
+    setText("swatchSectionLbl", isFactorMode ? `Levels for "${ui.activeFactorLayer}"` : "Group Swatches");
+    setText("activeGroupNameLabel", isFactorMode ? `Rename selected "${ui.activeFactorLayer}" level` : "Rename selected group");
+    setText("addGroupBtn", isFactorMode ? "+ Add Level" : "+ Add Group");
+    setText("deleteGroupBtn", isFactorMode ? "Remove Level" : "Remove Group");
 
     // Step 2 Heatmap metric selector
     const mSel = document.getElementById("plateMetricSel");
@@ -1155,43 +1824,111 @@
       mSel.value = ui.plateMetric;
     }
 
-    // Step 3 Group Brush swatches
-    const swWrap = document.getElementById("groupSwatchList");
-    if (swWrap) {
-      const counts = {};
-      for (const w of ui.summaryParsed.wells) {
-        const g = ui.groups[w] || UNASSIGNED;
-        counts[g] = (counts[g] || 0) + 1;
-      }
-      const allGroups = [...ui.groupOrder, UNASSIGNED];
-      swWrap.innerHTML = allGroups.map(g => {
-        const col = getGroupColor(g);
-        const isActive = ui.brushTool === "group" && ui.activeBrushGroup === g;
-        return (
-          `<button type="button" class="az-swatch-btn${isActive ? " active" : ""}" data-swatch-group="${esc(g)}">` +
-            `<span class="az-swatch-dot" style="background:${col};"></span>` +
-            `<span>${esc(g)}</span>` +
-            `<span class="az-swatch-count">(${counts[g] || 0})</span>` +
+    // Step 3 Factor Layer pills
+    const flBar = document.getElementById("factorLayerBar");
+    if (flBar) {
+      const pills = [
+        `<button type="button" class="az-factor-pill${!isFactorMode ? " active" : ""}" data-factor-layer="${PRIMARY_LAYER}">Primary Group</button>`,
+        ...run.factorNames.map(fn => (
+          `<button type="button" class="az-factor-pill${ui.activeFactorLayer === fn ? " active" : ""}" data-factor-layer="${esc(fn)}">` +
+            `<span>${esc(fn)}</span>` +
+            `<span class="az-factor-rm" data-rm-factor="${esc(fn)}" title="Remove factor ${esc(fn)}">&times;</span>` +
           `</button>`
-        );
-      }).join("");
-
-      swWrap.querySelectorAll("[data-swatch-group]").forEach(btn => {
-        btn.addEventListener("click", () => {
+        ))
+      ];
+      flBar.innerHTML = pills.join("");
+      flBar.querySelectorAll("[data-factor-layer]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          if (e.target && e.target.closest && e.target.closest("[data-rm-factor]")) return;
+          const layer = btn.getAttribute("data-factor-layer") || PRIMARY_LAYER;
+          ui.activeFactorLayer = layer;
           ui.brushTool = "group";
-          ui.activeBrushGroup = btn.getAttribute("data-swatch-group") || UNASSIGNED;
+          if (layer !== PRIMARY_LAYER) {
+            const lvls = run.factorLevelOrder[layer] || [];
+            ui.activeBrushFactorVal = lvls.length ? lvls[0] : UNASSIGNED;
+          }
           renderPlateControls();
+          renderAllPlateMaps();
+        });
+      });
+      flBar.querySelectorAll("[data-rm-factor]").forEach(rm => {
+        rm.addEventListener("click", (e) => {
+          e.stopPropagation();
+          removeFactorLayer(rm.getAttribute("data-rm-factor"));
         });
       });
     }
 
+    const combBtn = document.getElementById("combineFactorsBtn");
+    if (combBtn) combBtn.style.display = run.factorNames.length > 0 ? "" : "none";
+
+    // Step 3 Swatches (Primary Groups OR Active Factor Levels)
+    const swWrap = document.getElementById("groupSwatchList");
+    if (swWrap) {
+      const counts = {};
+      if (isFactorMode) {
+        const fn = ui.activeFactorLayer;
+        const fMap = run.wellFactors[fn] || {};
+        for (const w of run.summaryParsed.wells) {
+          const v = fMap[w] || UNASSIGNED;
+          counts[v] = (counts[v] || 0) + 1;
+        }
+        const lvls = run.factorLevelOrder[fn] || [];
+        if (!lvls.includes(ui.activeBrushFactorVal) && ui.activeBrushFactorVal !== UNASSIGNED) {
+          ui.activeBrushFactorVal = lvls.length ? lvls[0] : UNASSIGNED;
+        }
+        const allItems = [...lvls, UNASSIGNED];
+        swWrap.innerHTML = allItems.map(lv => {
+          const col = getFactorLevelColor(fn, lv, lvls);
+          const isAct = ui.brushTool === "group" && ui.activeBrushFactorVal === lv;
+          return (
+            `<button type="button" class="az-swatch-btn${isAct ? " active" : ""}" data-swatch-val="${esc(lv)}">` +
+              `<span class="az-swatch-dot" style="background:${col};"></span>` +
+              `<span>${esc(lv)}</span>` +
+              `<span class="az-swatch-count">(${counts[lv] || 0})</span>` +
+            `</button>`
+          );
+        }).join("");
+        swWrap.querySelectorAll("[data-swatch-val]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            ui.brushTool = "group";
+            ui.activeBrushFactorVal = btn.getAttribute("data-swatch-val") || UNASSIGNED;
+            renderPlateControls();
+          });
+        });
+      } else {
+        for (const w of run.summaryParsed.wells) {
+          const g = run.groups[w] || UNASSIGNED;
+          counts[g] = (counts[g] || 0) + 1;
+        }
+        const allGroups = [...run.groupOrder, UNASSIGNED];
+        swWrap.innerHTML = allGroups.map(g => {
+          const col = getGroupColor(g);
+          const isAct = ui.brushTool === "group" && ui.activeBrushGroup === g;
+          return (
+            `<button type="button" class="az-swatch-btn${isAct ? " active" : ""}" data-swatch-group="${esc(g)}">` +
+              `<span class="az-swatch-dot" style="background:${col};"></span>` +
+              `<span>${esc(g)}</span>` +
+              `<span class="az-swatch-count">(${counts[g] || 0})</span>` +
+            `</button>`
+          );
+        }).join("");
+        swWrap.querySelectorAll("[data-swatch-group]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            ui.brushTool = "group";
+            ui.activeBrushGroup = btn.getAttribute("data-swatch-group") || UNASSIGNED;
+            renderPlateControls();
+          });
+        });
+      }
+    }
+
     const nameInp = document.getElementById("activeGroupNameInput");
     const delBtn = document.getElementById("deleteGroupBtn");
-    const isNamed = ui.activeBrushGroup && ui.activeBrushGroup !== UNASSIGNED;
+    const curSelVal = isFactorMode ? ui.activeBrushFactorVal : ui.activeBrushGroup;
+    const isNamed = Boolean(curSelVal && curSelVal !== UNASSIGNED);
     if (nameInp) {
-      if (document.activeElement !== nameInp) {
-        nameInp.value = isNamed ? ui.activeBrushGroup : "";
-      }
+      if (document.activeElement !== nameInp) nameInp.value = isNamed ? curSelVal : "";
       nameInp.disabled = !isNamed;
     }
     if (delBtn) delBtn.disabled = !isNamed;
@@ -1204,6 +1941,9 @@
       if (ui.brushTool === "exclude") {
         ind.className = "badge-warn";
         ind.textContent = "Brush: Toggle Exclude";
+      } else if (isFactorMode) {
+        ind.className = "badge-custom";
+        ind.textContent = `${ui.activeFactorLayer}: ${ui.activeBrushFactorVal || UNASSIGNED}`;
       } else {
         ind.className = "badge-custom";
         ind.textContent = `Brush: ${ui.activeBrushGroup || UNASSIGNED}`;
@@ -1217,14 +1957,15 @@
   }
 
   function renderPlateSvgInto(svg, mode) {
-    const a = ui.analysis;
-    if (!svg || !a || !a.layout) return;
+    const a = getActiveRunAnalysis();
+    const run = getActiveRun();
+    if (!svg || !a || !a.layout || !run) return;
 
     const layout = a.layout;
     const isPetri = layout.id === "petri";
     const plateW = isPetri ? 132 : (layout.plateW || 127.8);
     const plateH = isPetri ? 88 : (layout.plateH || 85.5);
-    const wells = layout.wells || ui.summaryParsed.wells;
+    const wells = layout.wells || run.summaryParsed.wells;
     const wellsById = a.wellsById || {};
 
     const opts = getPlateMetricOptions();
@@ -1283,11 +2024,15 @@
       }
     }
 
+    const isFactorBrush = mode === "brush" && ui.activeFactorLayer !== PRIMARY_LAYER && run.factorNames.includes(ui.activeFactorLayer);
+    const activeFactorMap = isFactorBrush ? (run.wellFactors[ui.activeFactorLayer] || {}) : null;
+    const activeFactorOrder = isFactorBrush ? (run.factorLevelOrder[ui.activeFactorLayer] || []) : null;
+
     const wellVisualStyle = (w) => {
       const ws = wellsById[w];
-      const grp = (ws && ws.group) || ui.groups[w] || UNASSIGNED;
+      const grp = (ws && ws.group) || run.groups[w] || UNASSIGNED;
       const gCol = getGroupColor(grp);
-      const isExcl = ui.excludedWells.has(w);
+      const isExcl = run.excludedWells.has(w);
       const qc = (ws && ws.qc) || {};
       const isEmpty = Boolean(qc.isEmpty);
       const isSpike = Boolean(qc.isSpikeGlitch);
@@ -1301,46 +2046,37 @@
       let opacity = 1;
 
       if (mode === "brush") {
-        if (grp === UNASSIGNED || grp === ALL_WELLS) {
-          fill = "#f6f8fa";
-          stroke = "#afb8c1";
-          textColor = "#59636e";
+        if (isFactorBrush) {
+          const fv = activeFactorMap[w] || UNASSIGNED;
+          if (fv === UNASSIGNED) {
+            fill = "#f6f8fa"; stroke = "#afb8c1"; textColor = "#59636e";
+          } else {
+            const fc = getFactorLevelColor(ui.activeFactorLayer, fv, activeFactorOrder);
+            fill = hexToRgba(fc, 0.25); stroke = fc; strokeWidth = 1.1; textColor = "#1f2328";
+          }
+        } else if (grp === UNASSIGNED || grp === ALL_WELLS) {
+          fill = "#f6f8fa"; stroke = "#afb8c1"; textColor = "#59636e";
         } else {
-          fill = hexToRgba(gCol, 0.24);
-          stroke = gCol;
-          strokeWidth = 1.1;
-          textColor = "#1f2328";
+          fill = hexToRgba(gCol, 0.24); stroke = gCol; strokeWidth = 1.1; textColor = "#1f2328";
         }
       } else {
         const val = valsByWell[w];
         if (isEmpty) {
-          fill = "#f3f4f6";
-          stroke = "#8c959f";
-          strokeDash = ' stroke-dasharray="1.8,1.2"';
-          textColor = "#59636e";
+          fill = "#f3f4f6"; stroke = "#8c959f"; strokeDash = ' stroke-dasharray="1.8,1.2"'; textColor = "#59636e";
         } else if (Number.isFinite(val)) {
           const t = (val - vMin) / (vMax - vMin);
           const hc = heatColor(t);
-          fill = hc.fill;
-          textColor = hc.text;
+          fill = hc.fill; textColor = hc.text;
           stroke = (grp !== UNASSIGNED && grp !== ALL_WELLS) ? gCol : "#0969da";
           strokeWidth = (grp !== UNASSIGNED && grp !== ALL_WELLS) ? 1.15 : 0.75;
         } else {
-          fill = "#f6f8fa";
-          stroke = "#afb8c1";
+          fill = "#f6f8fa"; stroke = "#afb8c1";
         }
       }
 
-      if (isSpike && !isExcl) {
-        stroke = "#cf222e";
-        strokeWidth = 1.35;
-      }
+      if (isSpike && !isExcl) { stroke = "#cf222e"; strokeWidth = 1.35; }
       if (isExcl) {
-        fill = "#eef1f4";
-        stroke = "#8c959f";
-        strokeDash = ' stroke-dasharray="1.5,1.2"';
-        textColor = "#6e7781";
-        opacity = 0.58;
+        fill = "#eef1f4"; stroke = "#8c959f"; strokeDash = ' stroke-dasharray="1.5,1.2"'; textColor = "#6e7781"; opacity = 0.58;
       }
       if (isSel) {
         strokeWidth = 1.65;
@@ -1351,7 +2087,6 @@
     };
 
     const hasMazeShapes = Boolean(layout.isMaze && Array.isArray(layout.mazeShapes) && layout.mazeShapes.length > 0);
-
     if (hasMazeShapes) {
       const shapesByWell = new Map();
       for (const s of layout.mazeShapes) {
@@ -1359,28 +2094,22 @@
         if (!shapesByWell.has(wId)) shapesByWell.set(wId, []);
         shapesByWell.get(wId).push(s);
       }
-
       for (const w of wells) {
         const shapes = shapesByWell.get(w) || [];
         if (!shapes.length) continue;
         const st = wellVisualStyle(w);
-        let sumX = 0, sumY = 0;
-        let hubShape = null;
-        let inner = "";
+        let sumX = 0, sumY = 0, hubShape = null, inner = "";
         for (const s of shapes) {
-          sumX += s.x;
-          sumY += s.y;
+          sumX += s.x; sumY += s.y;
           if (s.type === "TRIANGLE") hubShape = s;
           const rot = s.angle && s.type !== "DISC" ? ` transform="rotate(${s.angle} ${s.x.toFixed(2)} ${s.y.toFixed(2)})"` : "";
           const common = `fill="${st.fill}" stroke="${st.stroke}" stroke-width="${st.strokeWidth}"${st.strokeDash}`;
-          if (s.type === "DISC") {
-            inner += `<circle cx="${s.x.toFixed(2)}" cy="${s.y.toFixed(2)}" r="${s.w.toFixed(2)}" ${common}/>`;
-          } else if (s.type === "SQUARE") {
+          if (s.type === "DISC") inner += `<circle cx="${s.x.toFixed(2)}" cy="${s.y.toFixed(2)}" r="${s.w.toFixed(2)}" ${common}/>`;
+          else if (s.type === "SQUARE") {
             const half = s.w / 2;
             inner += `<rect x="${(s.x - half).toFixed(2)}" y="${(s.y - half).toFixed(2)}" width="${s.w.toFixed(2)}" height="${s.w.toFixed(2)}"${rot} ${common}/>`;
           } else if (s.type === "TRIANGLE" && typeof buildTrianglePointsAttr === "function") {
-            const pts = buildTrianglePointsAttr(s.x, s.y, s.w);
-            inner += `<polygon points="${pts}"${rot} ${common}/>`;
+            inner += `<polygon points="${buildTrianglePointsAttr(s.x, s.y, s.w)}"${rot} ${common}/>`;
           } else {
             const hw = s.w / 2, hh = s.h / 2;
             inner += `<rect x="${(s.x - hw).toFixed(2)}" y="${(s.y - hh).toFixed(2)}" width="${s.w.toFixed(2)}" height="${s.h.toFixed(2)}"${rot} ${common}/>`;
@@ -1398,8 +2127,7 @@
         markup +=
           `<g class="az-well-hit" data-well="${esc(w)}" opacity="${st.opacity}">` +
             `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${hitR.toFixed(2)}" fill="transparent" stroke="none"/>` +
-            selRing +
-            inner +
+            selRing + inner +
             `<rect x="${(cx - lblW / 2).toFixed(2)}" y="${(cy - 2.3).toFixed(2)}" width="${lblW.toFixed(2)}" height="4.6" rx="1.6" fill="rgba(255,255,255,0.88)" stroke="rgba(31,35,40,0.16)" stroke-width="0.35" pointer-events="none"/>` +
             `<text class="az-well-lbl" x="${cx.toFixed(2)}" y="${cy.toFixed(2)}" font-size="2.8" fill="#1f2328">${esc(w)}</text>` +
             badge +
@@ -1408,21 +2136,18 @@
     } else {
       const coords = layout.wellCoords || buildFallbackWellCoords(wells, plateW, plateH);
       const isDense = wells.length >= 48;
-
       for (const w of wells) {
         const wc = coords[w];
         if (!wc) continue;
         const st = wellVisualStyle(w);
-        const cx = wc.x;
-        const cy = wc.y;
+        const cx = wc.x, cy = wc.y;
         const r = wc.r || (Math.min(wc.w || 10, wc.h || 10) / 2);
         const isSquare = wc.shape === "SQUARE" || wc.shape === "RECT" || layout.shape === "SQUARE";
         const isTile = wc.shape === "RECT" || layout.isMaze;
 
         let shapeSvg = "";
         if (isSquare || isTile) {
-          const bw = wc.w || (r * 2);
-          const bh = wc.h || (r * 2);
+          const bw = wc.w || (r * 2), bh = wc.h || (r * 2);
           const rx = isTile ? Math.min(2.6, Math.min(bw, bh) * 0.2) : 0.8;
           shapeSvg = `<rect x="${(cx - bw / 2).toFixed(2)}" y="${(cy - bh / 2).toFixed(2)}" width="${bw.toFixed(2)}" height="${bh.toFixed(2)}" rx="${rx.toFixed(2)}" fill="${st.fill}" stroke="${st.stroke}" stroke-width="${st.strokeWidth}"${st.strokeDash}/>`;
           if (st.isSel) {
@@ -1437,7 +2162,6 @@
 
         const lblSize = Math.max(2.15, Math.min(4.8, r * (isDense ? 0.62 : 0.50)));
         const badge = buildWellQcOverlay(cx, cy, r, st);
-
         markup +=
           `<g class="az-well-hit" data-well="${esc(w)}" opacity="${st.opacity}">` +
             shapeSvg +
@@ -1479,16 +2203,7 @@
     wells.forEach((w, i) => {
       const row = Math.floor(i / cols);
       const col = i % cols;
-      out[w] = {
-        x: padX + (col + 0.5) * stepX,
-        y: padY + (row + 0.5) * stepY,
-        r,
-        w: stepX * 0.78,
-        h: stepY * 0.78,
-        shape: "RECT",
-        row,
-        col
-      };
+      out[w] = { x: padX + (col + 0.5) * stepX, y: padY + (row + 0.5) * stepY, r, w: stepX * 0.78, h: stepY * 0.78, shape: "RECT", row, col };
     });
     return out;
   }
@@ -1496,91 +2211,100 @@
   function renderWellInspector() {
     const textEl = document.getElementById("qcWellInspectorText");
     const btnEl = document.getElementById("qcWellInspectorExcludeBtn");
-    if (!textEl || !btnEl || !ui.analysis) return;
+    const a = getActiveRunAnalysis();
+    if (!textEl || !btnEl || !a) return;
 
     const w = ui.selectedWell;
-    const ws = w && ui.analysis.wellsById ? ui.analysis.wellsById[w] : null;
+    const ws = w && a.wellsById ? a.wellsById[w] : null;
     if (!ws) {
       textEl.innerHTML = "Click any well on the plate map to inspect its QC metrics or toggle exclusion.";
       btnEl.style.display = "none";
       return;
     }
 
-    const parts = [
-      `<strong>${esc(ws.well)}</strong>`,
-      `<span>${esc(ws.group || UNASSIGNED)}</span>`
-    ];
+    const parts = [`<strong>${esc(ws.well)}</strong>`, `<span>${esc(ws.group || UNASSIGNED)}</span>`];
     if (Number.isFinite(ws.totalDist)) parts.push(`Dist ${fmtNum(ws.totalDist, 1)} mm`);
     if (Number.isFinite(ws.meanMsd)) parts.push(`MSD ${fmtNum(ws.meanMsd, 2)}`);
     if (ws.zones && Number.isFinite(ws.zones.z2Pct)) parts.push(`Z2 ${fmtNum(ws.zones.z2Pct, 1)}%`);
     if (ws.startle && Number.isFinite(ws.startle.ppiPct)) parts.push(`PPI ${fmtNum(ws.startle.ppiPct, 1)}%`);
+    if (ws.xy && Number.isFinite(ws.xy.immobilityPct)) parts.push(`Immob ${fmtNum(ws.xy.immobilityPct, 1)}%`);
     if (ws.zchange && Number.isFinite(ws.zchange.sabPct)) parts.push(`SAB ${fmtNum(ws.zchange.sabPct, 1)}%`);
     if (ws.qc && ws.qc.isEmpty) parts.push(`<span class="az-pill az-pill-empty">Empty</span>`);
     if (ws.qc && ws.qc.isSpikeGlitch) parts.push(`<span class="az-pill az-pill-spike">${ws.qc.spikeCount} Spike${ws.qc.spikeCount === 1 ? "" : "s"}</span>`);
-    if (ws.excluded) parts.push(`<span class="az-pill az-pill-excl">Excluded</span>`);
+    if (ws.excluded) parts.push(`<span class="az-pill az-pill-excl">Excluded (${esc(ws.qcReason || "manual")})</span>`);
 
     textEl.innerHTML = parts.join(" · ");
     btnEl.style.display = "";
     btnEl.textContent = ws.excluded ? "Restore Well" : "Exclude Well";
   }
 
+  function setWellExcluded(run, wellId, isExcluded, source, reason) {
+    if (!run || !wellId) return;
+    if (isExcluded) {
+      run.excludedWells.add(wellId);
+      run.excludeMeta[wellId] = { source: source || "manual", reason: reason || "manual_exclude" };
+    } else {
+      run.excludedWells.delete(wellId);
+      delete run.excludeMeta[wellId];
+    }
+  }
+
   function paintWell(wellId, isStartOfStroke) {
-    if (!wellId || !ui.summaryParsed) return;
+    const run = getActiveRun();
+    if (!wellId || !run) return;
     if (_paintedInStroke.has(wellId)) return;
     _paintedInStroke.add(wellId);
     ui.selectedWell = wellId;
 
     if (ui.brushTool === "exclude") {
-      if (isStartOfStroke) {
-        _paintExcludeValue = !ui.excludedWells.has(wellId);
+      if (isStartOfStroke) _paintExcludeValue = !run.excludedWells.has(wellId);
+      setWellExcluded(run, wellId, _paintExcludeValue, "manual", "manual_exclude");
+    } else if (ui.activeFactorLayer !== PRIMARY_LAYER && run.factorNames.includes(ui.activeFactorLayer)) {
+      const fn = ui.activeFactorLayer;
+      if (!run.wellFactors[fn]) run.wellFactors[fn] = {};
+      if (!ui.activeBrushFactorVal || ui.activeBrushFactorVal === UNASSIGNED) {
+        delete run.wellFactors[fn][wellId];
+      } else {
+        run.wellFactors[fn][wellId] = ui.activeBrushFactorVal;
       }
-      if (_paintExcludeValue) ui.excludedWells.add(wellId);
-      else ui.excludedWells.delete(wellId);
     } else {
       if (!ui.activeBrushGroup || ui.activeBrushGroup === UNASSIGNED) {
-        delete ui.groups[wellId];
+        delete run.groups[wellId];
       } else {
-        ui.groups[wellId] = ui.activeBrushGroup;
+        run.groups[wellId] = ui.activeBrushGroup;
       }
     }
     recomputeAndRender();
   }
 
   function showPlateTooltipInto(tt, stage, wellId, clientX, clientY) {
-    if (!ui.analysis || !ui.analysis.wellsById || !ui.analysis.wellsById[wellId]) {
+    const a = getActiveRunAnalysis();
+    const run = getActiveRun();
+    if (!a || !a.wellsById || !a.wellsById[wellId]) {
       hideTooltip(tt);
       return;
     }
-    const ws = ui.analysis.wellsById[wellId];
+    const ws = a.wellsById[wellId];
     const gCol = getGroupColor(ws.group);
     let rows = `<div class="az-tt-title">${esc(ws.well)} · <span class="az-tt-swatch" style="background:${gCol};"></span>${esc(ws.group || UNASSIGNED)}</div>`;
-    if (Number.isFinite(ws.totalDist)) {
-      rows += `<div class="az-tt-row"><span>Total Dist</span><span class="az-tt-val">${fmtNum(ws.totalDist, 1)} mm</span></div>`;
+    if (run && run.factorNames.length) {
+      const fPairs = run.factorNames.map(fn => `${fn}=${(run.wellFactors[fn] && run.wellFactors[fn][wellId]) || "—"}`).join(", ");
+      rows += `<div class="az-tt-row"><span>Factors</span><span class="az-tt-val">${esc(fPairs)}</span></div>`;
     }
-    if (Number.isFinite(ws.meanMsd)) {
-      rows += `<div class="az-tt-row"><span>Mean MSD</span><span class="az-tt-val">${fmtNum(ws.meanMsd, 2)}</span></div>`;
-    }
-    if (ws.zones && Number.isFinite(ws.zones.z2Pct)) {
-      rows += `<div class="az-tt-row"><span>Z1 / Z2</span><span class="az-tt-val">${fmtNum(ws.zones.z1Pct, 0)}% / ${fmtNum(ws.zones.z2Pct, 0)}%</span></div>`;
-    }
-    if (ws.startle && Number.isFinite(ws.startle.ppiPct)) {
-      rows += `<div class="az-tt-row"><span>% PPI</span><span class="az-tt-val">${fmtNum(ws.startle.ppiPct, 1)}%</span></div>`;
-    }
-    if (ws.zchange && Number.isFinite(ws.zchange.totalEntries)) {
-      rows += `<div class="az-tt-row"><span>Zone Entries</span><span class="az-tt-val">${ws.zchange.totalEntries}${Number.isFinite(ws.zchange.sabPct) ? ` (SAB ${fmtNum(ws.zchange.sabPct, 0)}%)` : ""}</span></div>`;
-    }
-    if (ws.excluded) {
-      rows += `<div class="az-tt-row"><span>Status</span><span class="az-tt-val">Excluded</span></div>`;
-    } else if (ws.qc && ws.qc.isSpikeGlitch) {
-      rows += `<div class="az-tt-row"><span>QC</span><span class="az-tt-val">Spike Glitch (${ws.qc.spikeCount})</span></div>`;
-    } else if (ws.qc && ws.qc.isEmpty) {
-      rows += `<div class="az-tt-row"><span>QC</span><span class="az-tt-val">Empty / Dead</span></div>`;
-    }
+    if (Number.isFinite(ws.totalDist)) rows += `<div class="az-tt-row"><span>Total Dist</span><span class="az-tt-val">${fmtNum(ws.totalDist, 1)} mm</span></div>`;
+    if (Number.isFinite(ws.meanMsd)) rows += `<div class="az-tt-row"><span>Mean MSD</span><span class="az-tt-val">${fmtNum(ws.meanMsd, 2)}</span></div>`;
+    if (ws.zones && Number.isFinite(ws.zones.z2Pct)) rows += `<div class="az-tt-row"><span>Z1 / Z2</span><span class="az-tt-val">${fmtNum(ws.zones.z1Pct, 0)}% / ${fmtNum(ws.zones.z2Pct, 0)}%</span></div>`;
+    if (ws.startle && Number.isFinite(ws.startle.ppiPct)) rows += `<div class="az-tt-row"><span>% PPI</span><span class="az-tt-val">${fmtNum(ws.startle.ppiPct, 1)}%</span></div>`;
+    if (ws.xy && Number.isFinite(ws.xy.immobilityPct)) rows += `<div class="az-tt-row"><span>Immobility</span><span class="az-tt-val">${fmtNum(ws.xy.immobilityPct, 1)}%</span></div>`;
+    if (ws.zchange && Number.isFinite(ws.zchange.totalEntries)) rows += `<div class="az-tt-row"><span>Zone Entries</span><span class="az-tt-val">${ws.zchange.totalEntries}${Number.isFinite(ws.zchange.sabPct) ? ` (SAB ${fmtNum(ws.zchange.sabPct, 0)}%)` : ""}</span></div>`;
+    if (ws.excluded) rows += `<div class="az-tt-row"><span>Status</span><span class="az-tt-val">Excluded (${esc(ws.qcReason || "manual")})</span></div>`;
+    else if (ws.qc && ws.qc.isSpikeGlitch) rows += `<div class="az-tt-row"><span>QC</span><span class="az-tt-val">Spike Glitch (${ws.qc.spikeCount})</span></div>`;
+    else if (ws.qc && ws.qc.isEmpty) rows += `<div class="az-tt-row"><span>QC</span><span class="az-tt-val">Empty / Dead</span></div>`;
     positionTooltip(tt, stage, clientX, clientY, rows);
   }
 
   // ---------------------------------------------------------------------------
-  // 9. Step 2: Temperature Curve & QC Diagnostics Table
+  // 9. Step 2: Temperature Curve (with niceTimeTicks) & QC Diagnostics Table
   // ---------------------------------------------------------------------------
   function buildQcPillsHtml(w) {
     const out = [];
@@ -1596,13 +2320,14 @@
     const stage = document.getElementById("tempChartStage");
     const tt = document.getElementById("tempTooltip");
     const hint = document.getElementById("tempChartHint");
-    const a = ui.analysis;
-    if (!svg || !a) return;
+    const a = getActiveRunAnalysis();
+    const run = getActiveRun();
+    if (!svg || !a || !run) return;
 
     const ta = a.tempAnalysis || {};
     const pts = ta.points || [];
     const W = 880, H = 225;
-    const m = { left: 58, right: 26, top: 16, bottom: 40 };
+    const m = { left: 58, right: 20, top: 18, bottom: 34 };
     const pw = W - m.left - m.right;
     const ph = H - m.top - m.bottom;
 
@@ -1621,17 +2346,9 @@
       const xMin = pts[0].relTime;
       const durEnd = (a.kpis && Number.isFinite(a.kpis.durationSec)) ? a.kpis.durationSec : 0;
       const xMax = Math.max(xMin + 1, pts[pts.length - 1].relTime, durEnd);
-      let yLo = ta.min;
-      let yHi = ta.max;
-      if (targetC !== null) {
-        yLo = Math.min(yLo, targetC - 0.6);
-        yHi = Math.max(yHi, targetC + 0.6);
-      }
-      if (yHi - yLo < 2.4) {
-        const mid = (yHi + yLo) / 2;
-        yLo = mid - 1.2;
-        yHi = mid + 1.2;
-      }
+      let yLo = ta.min, yHi = ta.max;
+      if (targetC !== null) { yLo = Math.min(yLo, targetC - 0.6); yHi = Math.max(yHi, targetC + 0.6); }
+      if (yHi - yLo < 2.4) { const mid = (yHi + yLo) / 2; yLo = mid - 1.2; yHi = mid + 1.2; }
       const yTicksObj = niceTicks(yLo - 0.2, yHi + 0.2, 4);
       const yMin = yTicksObj.min;
       const yMax = Math.max(yMin + 0.5, yTicksObj.max);
@@ -1658,12 +2375,11 @@
         if (xt < xMin - 1e-6 || xt > xMax + 1e-6) continue;
         const xx = sx(xt);
         out += `<line x1="${xx.toFixed(1)}" y1="${m.top + ph}" x2="${xx.toFixed(1)}" y2="${m.top + ph + 4}" stroke="#94a3b8" stroke-width="1"/>`;
-        out += `<text x="${xx.toFixed(1)}" y="${m.top + ph + 16}" font-size="10.5" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtAxisTime(xt, xMax, xTicksObj.step))}</text>`;
+        out += `<text x="${xx.toFixed(1)}" y="${m.top + ph + 17}" font-size="10.5" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtAxisTime(xt, xMax, xTicksObj.step))}</text>`;
       }
 
       out += `<line x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + ph}" stroke="#94a3b8" stroke-width="1"/>`;
       out += `<line x1="${m.left}" y1="${m.top + ph}" x2="${m.left + pw}" y2="${m.top + ph}" stroke="#94a3b8" stroke-width="1"/>`;
-      out += `<text x="${m.left + pw / 2}" y="${H - 7}" font-size="10.5" font-weight="600" fill="#59636e" text-anchor="middle">Elapsed Time</text>`;
 
       const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${sx(p.relTime).toFixed(1)} ${sy(p.tempC).toFixed(1)}`).join(" ");
       out += `<path d="${d}" fill="none" stroke="#ea580c" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>`;
@@ -1689,14 +2405,12 @@
           if (!rect.width) return;
           const svgX = ((e.clientX - rect.left) / rect.width) * W;
           const relT = xMin + ((svgX - m.left) / pw) * (xMax - xMin);
-          let best = pts[0];
-          let bestD = Infinity;
+          let best = pts[0], bestD = Infinity;
           for (const p of pts) {
             const dist = Math.abs(p.relTime - relT);
             if (dist < bestD) { bestD = dist; best = p; }
           }
-          const xx = sx(best.relTime);
-          const yy = sy(best.tempC);
+          const xx = sx(best.relTime), yy = sy(best.tempC);
           hLayer.innerHTML =
             `<line x1="${xx.toFixed(1)}" y1="${m.top}" x2="${xx.toFixed(1)}" y2="${m.top + ph}" stroke="#59636e" stroke-width="1" stroke-dasharray="3,2"/>` +
             `<circle cx="${xx.toFixed(1)}" cy="${yy.toFixed(1)}" r="4" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>`;
@@ -1709,10 +2423,7 @@
             deltaStr;
           positionTooltip(tt, stage, e.clientX, e.clientY, html);
         });
-        hit.addEventListener("mouseleave", () => {
-          hLayer.innerHTML = "";
-          hideTooltip(tt);
-        });
+        hit.addEventListener("mouseleave", () => { hLayer.innerHTML = ""; hideTooltip(tt); });
       }
     }
 
@@ -1741,18 +2452,21 @@
     });
 
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:18px;">No QC anomalies detected across all wells. Switch filter to "All Wells" to inspect every well.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:18px;">No QC anomalies detected across all wells. Switch filter to "All Wells" to inspect every well.</td></tr>`;
       return;
     }
 
     tbody.innerHTML = rows.map(w => {
       const gCol = getGroupColor(w.group);
+      const reasonCode = w.qcReason || (w.qc && w.qc.qcReason) || "ok";
+      const srcTag = w.excludeSource ? ` (${w.excludeSource})` : "";
       return (
         `<tr class="${w.excluded ? "is-excluded" : ""}">` +
           `<td><input type="checkbox" class="az-chk" data-qc-chk="${esc(w.well)}" aria-label="Exclude ${esc(w.well)}"${w.excluded ? " checked" : ""}></td>` +
           `<td class="az-well-id-cell">${esc(w.well)}</td>` +
           `<td><span class="az-group-tag" style="background:${hexToRgba(gCol, 0.14)};color:${gCol};"><span class="az-swatch-dot" style="background:${gCol};"></span>${esc(w.group)}</span></td>` +
           `<td>${buildQcPillsHtml(w)}</td>` +
+          `<td><span class="az-reason-code">${esc(reasonCode)}${esc(srcTag)}</span></td>` +
           `<td class="num">${fmtNum(w.totalDist, 1)} mm</td>` +
           `<td class="num">${fmtNum(w.qc && w.qc.maxBinDist, 1)} mm</td>` +
           `<td class="num">${(w.qc && w.qc.spikeCount) || 0}</td>` +
@@ -1764,8 +2478,7 @@
     tbody.querySelectorAll("[data-qc-chk]").forEach(chk => {
       chk.addEventListener("change", () => {
         const well = chk.getAttribute("data-qc-chk");
-        if (chk.checked) ui.excludedWells.add(well);
-        else ui.excludedWells.delete(well);
+        setWellExcluded(run, well, chk.checked, "manual", "manual_exclude");
         recomputeAndRender();
       });
     });
@@ -1773,16 +2486,63 @@
     tbody.querySelectorAll("[data-qc-toggle]").forEach(btn => {
       btn.addEventListener("click", () => {
         const well = btn.getAttribute("data-qc-toggle");
-        if (ui.excludedWells.has(well)) ui.excludedWells.delete(well);
-        else ui.excludedWells.add(well);
+        setWellExcluded(run, well, !run.excludedWells.has(well), "manual", "manual_exclude");
         recomputeAndRender();
       });
     });
   }
 
   // ---------------------------------------------------------------------------
-  // 10. Step 4: Plot Toolbars & 3-Tab Pure-SVG Charting Studio
+  // 10. Step 4: Scope Bar, Toolbars & 4-Tab Pure-SVG Charting Studio
   // ---------------------------------------------------------------------------
+  function renderPlotScopeBar() {
+    const bar = document.getElementById("plotScopeBar");
+    const a = ui.analysis;
+    if (!bar || !a) return;
+    const multi = ui.runs.length > 1;
+    bar.style.display = multi ? "" : "none";
+    if (!multi) return;
+
+    const pooledBtn = document.getElementById("plotScopePooledBtn");
+    const activeBtn = document.getElementById("plotScopeActiveBtn");
+    const run = getActiveRun();
+    if (pooledBtn) {
+      pooledBtn.textContent = `Pooled (${ui.runs.length} runs)`;
+      pooledBtn.classList.toggle("active", ui.scope === "pooled");
+    }
+    if (activeBtn) {
+      activeBtn.textContent = `Active: ${run ? run.runId : "Run"}`;
+      activeBtn.classList.toggle("active", ui.scope !== "pooled");
+    }
+
+    const normChk = document.getElementById("normControlChk");
+    if (normChk) normChk.checked = ui.normalizeToControl;
+
+    const pm = a.pooledMeta || {};
+    const ctrlWrap = document.getElementById("normControlGroupWrap");
+    const ctrlSel = document.getElementById("normControlGroupSel");
+    if (ctrlWrap && ctrlSel) {
+      const avail = pm.availableControlGroups || (a.groups || []).map(g => g.group);
+      ctrlWrap.style.display = ui.normalizeToControl && avail.length > 0 ? "" : "none";
+      ctrlSel.innerHTML = avail.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("");
+      ctrlSel.value = pm.controlGroupName || ui.controlGroupName || avail[0] || "";
+    }
+
+    const shiftBadge = document.getElementById("batchShiftBadge");
+    if (shiftBadge) {
+      const shift = pm.batchDiagnostics ? pm.batchDiagnostics.plateShiftPct : null;
+      if (Number.isFinite(shift) && shift > 0) {
+        shiftBadge.style.display = "";
+        shiftBadge.className = ui.normalizeToControl ? "badge-custom" : (shift >= 10 ? "badge-warn" : "badge-hw");
+        shiftBadge.textContent = ui.normalizeToControl
+          ? `Normalized to ${pm.controlGroupName || "Control"} (raw shift +${shift.toFixed(1)}%)`
+          : `Inter-plate shift +${shift.toFixed(1)}%`;
+      } else {
+        shiftBadge.style.display = "none";
+      }
+    }
+  }
+
   function renderChartToolbars() {
     const a = ui.analysis;
     if (!a) return;
@@ -1800,6 +2560,44 @@
       tsSel.value = ui.tsMetric;
     }
 
+    // Peri-stimulus / Habituation trace view selector
+    const ps = a.periStimulus;
+    const tvWrap = document.getElementById("tsTraceViewWrap");
+    const tvSel = document.getElementById("tsTraceViewSel");
+    const ptWrap = document.getElementById("tsPeriTypeWrap");
+    const ptSel = document.getElementById("tsPeriTypeSel");
+    if (tvWrap && tvSel) {
+      tvWrap.style.display = ps ? "" : "none";
+      if (ps) {
+        const opts = [
+          `<option value="full">Full Trace</option>`,
+          `<option value="peri">Peri-Stimulus (t = 0)</option>`
+        ];
+        if (ps.hasHabituation) opts.push(`<option value="habituation">Trial Habituation (T1..T${ps.trialCount})</option>`);
+        tvSel.innerHTML = opts.join("");
+        tvSel.value = ui.tsTraceView;
+      }
+    }
+    if (ptWrap && ptSel) {
+      const showTypes = Boolean(ps && ui.tsTraceView === "peri" && ps.availableTypes && ps.availableTypes.length > 1);
+      ptWrap.style.display = showTypes ? "" : "none";
+      if (showTypes) {
+        ptSel.innerHTML = ps.availableTypes.map(k => `<option value="${esc(k)}">${esc((ps.byType[k] && ps.byType[k].label) || k)}</option>`).join("");
+        if (!ps.availableTypes.includes(ui.tsPeriType)) ui.tsPeriType = ps.defaultType || "ALL";
+        ptSel.value = ui.tsPeriType;
+      }
+    }
+
+    const winWrap = document.getElementById("tsWindowAucWrap");
+    if (winWrap) winWrap.style.display = ui.tsTraceView === "full" ? "" : "none";
+    const winCfg = getActiveWindowAucConfig();
+    const winClear = document.getElementById("tsWinClearBtn");
+    const winReadout = document.getElementById("tsWinAucReadout");
+    if (winClear) winClear.style.display = winCfg ? "" : "none";
+    if (winReadout) {
+      winReadout.textContent = winCfg ? `Shaded ${winCfg.startSec}–${winCfg.endSec}s (see Phase & Group → Window AUC)` : "";
+    }
+
     const compSel = document.getElementById("compViewSel");
     if (compSel) {
       const views = (a.comparisonViews && a.comparisonViews.length)
@@ -1808,6 +2606,12 @@
       compSel.innerHTML = views.map(v => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join("");
       compSel.value = ui.compView;
     }
+
+    const showStatsChk = document.getElementById("compShowStatsChk");
+    if (showStatsChk) showStatsChk.checked = ui.compShowStats;
+
+    const xyInp = document.getElementById("xyFreezeInput");
+    if (xyInp && document.activeElement !== xyInp) xyInp.value = String(ui.xyFreezeSpeedMmS);
 
     const core = getCore();
     const prismSel = document.getElementById("prismMetricSel");
@@ -1834,15 +2638,13 @@
     renderTimeSeriesChart();
     renderComparisonChart();
     renderZchangeTab();
+    renderSpatialTab();
   }
 
   function renderGroupLegend(containerId, groupsList) {
     const el = document.getElementById(containerId);
     if (!el) return;
-    if (!groupsList || !groupsList.length) {
-      el.innerHTML = "";
-      return;
-    }
+    if (!groupsList || !groupsList.length) { el.innerHTML = ""; return; }
     el.innerHTML = groupsList.map(g => {
       const name = g.group;
       const col = getGroupColor(name);
@@ -1866,7 +2668,7 @@
     });
   }
 
-  // Tab 1: Time Series (Mean ± SEM)
+  // Tab 1: Time Series (Full Trace + Window AUC Band, OR Peri-Stimulus t=0, OR Trial Habituation)
   function renderTimeSeriesChart() {
     const svg = document.getElementById("tsChartSvg");
     const stage = document.getElementById("tsChartStage");
@@ -1874,22 +2676,29 @@
     const a = ui.analysis;
     if (!svg || !a || !a.timeSeries) return;
 
+    if (ui.tsTraceView === "peri" && a.periStimulus) {
+      renderPeriStimulusChart(svg, stage, tt, a.periStimulus);
+      return;
+    }
+    if (ui.tsTraceView === "habituation" && a.periStimulus && a.periStimulus.hasHabituation) {
+      renderTrialHabituationChart(svg, stage, tt, a.periStimulus);
+      return;
+    }
+
     const ts = a.timeSeries;
     const allSeries = ts.series || [];
     renderGroupLegend("tsLegend", allSeries);
     const visSeries = allSeries.filter(s => !ui.hiddenGroups.has(s.group) && s.n > 0);
 
     const W = 880, H = 320;
-    const m = { left: 62, right: 26, top: 28, bottom: 42 };
+    const m = { left: 62, right: 22, top: 28, bottom: 42 };
     const pw = W - m.left - m.right;
     const ph = H - m.top - m.bottom;
 
     const xAxis = ts.xAxis || [];
     const nPts = xAxis.length;
     if (nPts === 0 || visSeries.length === 0) {
-      svg.innerHTML =
-        `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="#59636e">` +
-        `${nPts === 0 ? "No time-series bins available for this CSV." : "All groups are hidden or excluded — restore wells or toggle a group in the legend."}</text>`;
+      svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="#59636e">${nPts === 0 ? "No time-series bins available for this CSV." : "All groups are hidden or excluded — restore wells or toggle a group in the legend."}</text>`;
       return;
     }
 
@@ -1897,17 +2706,15 @@
       typeof pt === "number" ? pt : (Number.isFinite(pt.relTime) ? pt.relTime : idx * (ts.effectiveBinSec || 1))
     );
     const xEnds = xAxis.map((pt, idx) => {
-      if (typeof pt === "object" && pt && Number.isFinite(pt.endRelTime) && pt.endRelTime > xStarts[idx]) {
-        return pt.endRelTime;
-      }
+      if (pt && Number.isFinite(pt.endTime)) return pt.endTime;
+      if (idx + 1 < xStarts.length) return xStarts[idx + 1];
       return xStarts[idx] + (ts.effectiveBinSec || 0);
     });
     const xTimes = xStarts.map((s, idx) => (xEnds[idx] > s ? (s + xEnds[idx]) / 2 : s));
     const xMin = xStarts[0];
     const xMax = Math.max(xMin + 1, xEnds[nPts - 1]);
 
-    let yLo = 0;
-    let yHi = -Infinity;
+    let yLo = 0, yHi = -Infinity;
     for (const s of visSeries) {
       for (const v of (s.values || [])) {
         if (!v || !Number.isFinite(v.mean)) continue;
@@ -1918,7 +2725,7 @@
       }
     }
     if (!Number.isFinite(yHi) || yHi <= yLo) yHi = Math.max(1, yLo + 10);
-    const isPct = String(ts.unit || "").includes("%");
+    const isPct = String(ts.unit || "") === "%";
     if (isPct) { yLo = 0; yHi = Math.max(100, yHi); }
 
     const yTicksObj = niceTicks(Math.min(0, yLo), yHi * 1.08, 5);
@@ -1947,6 +2754,21 @@
       });
     }
 
+    // Optional Window AUC highlight overlay
+    const winCfg = getActiveWindowAucConfig();
+    if (winCfg) {
+      const wx0 = Math.max(m.left, sx(winCfg.startSec));
+      const wx1 = Math.min(m.left + pw, sx(winCfg.endSec));
+      if (wx1 > wx0 + 1) {
+        const aucTxt = `AUC ${winCfg.startSec}–${winCfg.endSec}s`;
+        const pillW = Math.max(72, Math.round(aucTxt.length * 6.0 + 14));
+        const pillX = Math.min(m.left + pw - pillW - 2, wx0 + 4);
+        out += `<rect x="${wx0.toFixed(1)}" y="${m.top}" width="${(wx1 - wx0).toFixed(1)}" height="${ph}" fill="rgba(9, 105, 218, 0.11)" stroke="#0969da" stroke-width="1" stroke-dasharray="4,3"/>`;
+        out += `<rect x="${pillX.toFixed(1)}" y="${(m.top + 4).toFixed(1)}" width="${pillW}" height="14" rx="3" fill="rgba(255,255,255,0.94)" stroke="#54aeff" stroke-width="0.6"/>`;
+        out += `<text x="${(pillX + 5).toFixed(1)}" y="${(m.top + 14).toFixed(1)}" font-size="9.5" font-weight="700" fill="#0969da">${esc(aucTxt)}</text>`;
+      }
+    }
+
     for (const tv of yTicksObj.ticks) {
       const yy = sy(tv);
       if (yy < m.top - 1 || yy > m.top + ph + 1) continue;
@@ -1954,6 +2776,13 @@
       out += `<text x="${m.left - 8}" y="${(yy + 3.5).toFixed(1)}" font-size="10.5" fill="#59636e" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtTick(tv, yTicksObj.step))}</text>`;
     }
 
+    // 100% baseline reference line when Control-normalized
+    if (ui.normalizeToControl && 100 >= yMin && 100 <= yMax) {
+      const ry = sy(100);
+      out += `<line x1="${m.left}" y1="${ry.toFixed(1)}" x2="${m.left + pw}" y2="${ry.toFixed(1)}" stroke="#59636e" stroke-width="1.1" stroke-dasharray="4,3"/>`;
+    }
+
+    // Sexagesimal Elapsed Time ticks (preserved!)
     const xTicksObj = niceTimeTicks(xMin, xMax, 5);
     for (const xt of xTicksObj.ticks) {
       if (xt < xMin - 1e-6 || xt > xMax + 1e-6) continue;
@@ -1998,16 +2827,14 @@
       const vals = s.values || [];
 
       if (ui.tsShowSem && s.n > 1) {
-        let segUpper = [];
-        let segLower = [];
+        let segUpper = [], segLower = [];
         const flushRibbon = () => {
           if (segUpper.length >= 2) {
             const d = "M " + segUpper.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L ") +
               " L " + segLower.reverse().map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L ") + " Z";
             ribbons += `<path d="${d}" fill="${col}" fill-opacity="0.16" stroke="none"/>`;
           }
-          segUpper = [];
-          segLower = [];
+          segUpper = []; segLower = [];
         };
         for (let i = 0; i < nPts; i++) {
           const v = vals[i];
@@ -2020,19 +2847,15 @@
         flushRibbon();
       }
 
-      let pathD = "";
-      let open = false;
+      let pathD = "", open = false;
       for (let i = 0; i < nPts; i++) {
         const v = vals[i];
         if (!v || !Number.isFinite(v.mean)) { open = false; continue; }
-        const xx = sx(xTimes[i]);
-        const yy = sy(v.mean);
+        const xx = sx(xTimes[i]), yy = sy(v.mean);
         pathD += (open ? " L " : " M ") + `${xx.toFixed(1)} ${yy.toFixed(1)}`;
         open = true;
       }
-      if (pathD) {
-        lines += `<path d="${pathD.trim()}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
-      }
+      if (pathD) lines += `<path d="${pathD.trim()}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
       if (nPts === 1 && vals[0] && Number.isFinite(vals[0].mean)) {
         lines += `<circle cx="${sx(xTimes[0]).toFixed(1)}" cy="${sy(vals[0].mean).toFixed(1)}" r="4" fill="${col}" stroke="#ffffff" stroke-width="1.2"/>`;
       }
@@ -2051,8 +2874,7 @@
         if (!rect.width) return;
         const svgX = ((e.clientX - rect.left) / rect.width) * W;
         const relT = xMin + ((svgX - m.left) / pw) * (xMax - xMin);
-        let bestIdx = 0;
-        let bestDist = Infinity;
+        let bestIdx = 0, bestDist = Infinity;
         for (let i = 0; i < nPts; i++) {
           const d = Math.abs(xTimes[i] - relT);
           if (d < bestDist) { bestDist = d; bestIdx = i; }
@@ -2060,13 +2882,8 @@
         const xx = sx(xTimes[bestIdx]);
         const ptMeta = xAxis[bestIdx];
         const phaseTxt = (ptMeta && ptMeta.phase) ? ` · ${ptMeta.phase}` : "";
-        const tStart = xStarts[bestIdx];
-        const tEnd = xEnds[bestIdx];
-        const timeTitle = (tEnd > tStart)
-          ? `t = ${fmtAxisTime(tStart, xMax)}–${fmtAxisTime(tEnd, xMax)}`
-          : `t = ${fmtAxisTime(tStart, xMax)}`;
         let markerHtml = `<line x1="${xx.toFixed(1)}" y1="${m.top}" x2="${xx.toFixed(1)}" y2="${m.top + ph}" stroke="#59636e" stroke-width="1" stroke-dasharray="3,2"/>`;
-        let ttHtml = `<div class="az-tt-title">${esc(timeTitle)}${esc(phaseTxt)}</div>`;
+        let ttHtml = `<div class="az-tt-title">t = ${esc(fmtAxisTime(xTimes[bestIdx], xMax))}${esc(phaseTxt)}</div>`;
         for (const s of visSeries) {
           const v = s.values[bestIdx];
           if (!v || !Number.isFinite(v.mean)) continue;
@@ -2079,14 +2896,177 @@
         hoverLayer.innerHTML = markerHtml;
         positionTooltip(tt, stage, e.clientX, e.clientY, ttHtml);
       });
-      hit.addEventListener("mouseleave", () => {
-        hoverLayer.innerHTML = "";
-        hideTooltip(tt);
-      });
+      hit.addEventListener("mouseleave", () => { hoverLayer.innerHTML = ""; hideTooltip(tt); });
     }
   }
 
-  // Tab 2: Phase & Group Comparison (Grouped Bars + SEM + Jittered Well Scatter Dots)
+  function renderPeriStimulusChart(svg, stage, tt, ps) {
+    const bucket = (ps.byType && ps.byType[ui.tsPeriType]) || (ps.byType && ps.byType[ps.defaultType]) || ps;
+    const allSeries = bucket.series || [];
+    renderGroupLegend("tsLegend", allSeries);
+    const visSeries = allSeries.filter(s => !ui.hiddenGroups.has(s.group) && s.n > 0);
+    const offsets = bucket.offsetsSec || ps.offsetsSec || [];
+
+    const W = 880, H = 320;
+    const m = { left: 62, right: 22, top: 28, bottom: 42 };
+    const pw = W - m.left - m.right;
+    const ph = H - m.top - m.bottom;
+
+    if (!offsets.length || !visSeries.length) {
+      svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="#59636e">No peri-stimulus aligned bins available.</text>`;
+      return;
+    }
+
+    const xMin = offsets[0], xMax = Math.max(xMin + 1, offsets[offsets.length - 1]);
+    let yLo = 0, yHi = -Infinity;
+    for (const s of visSeries) {
+      for (const v of (s.values || [])) {
+        if (!v || !Number.isFinite(v.mean)) continue;
+        yHi = Math.max(yHi, v.mean + (ui.tsShowSem ? (v.sem || 0) : 0));
+        yLo = Math.min(yLo, v.mean - (ui.tsShowSem ? (v.sem || 0) : 0));
+      }
+    }
+    if (!Number.isFinite(yHi) || yHi <= yLo) yHi = 10;
+    const yTicksObj = niceTicks(Math.min(0, yLo), yHi * 1.12, 5);
+    const yMin = yTicksObj.min, yMax = Math.max(yMin + 1e-6, yTicksObj.max);
+
+    const sx = (t) => m.left + ((t - xMin) / (xMax - xMin)) * pw;
+    const sy = (v) => m.top + ph - ((v - yMin) / (yMax - yMin)) * ph;
+
+    let out = "";
+    for (const tv of yTicksObj.ticks) {
+      const yy = sy(tv);
+      out += `<line x1="${m.left}" y1="${yy.toFixed(1)}" x2="${m.left + pw}" y2="${yy.toFixed(1)}" stroke="${tv === 0 ? "#cbd5e1" : "#edf1f5"}" stroke-width="1"/>`;
+      out += `<text x="${m.left - 8}" y="${(yy + 3.5).toFixed(1)}" font-size="10.5" fill="#59636e" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtTick(tv, yTicksObj.step))}</text>`;
+    }
+
+    // t = 0 stimulus onset vertical line
+    if (0 >= xMin && 0 <= xMax) {
+      const zx = sx(0);
+      out += `<line x1="${zx.toFixed(1)}" y1="${m.top}" x2="${zx.toFixed(1)}" y2="${m.top + ph}" stroke="#d97706" stroke-width="1.6" stroke-dasharray="4,3"/>`;
+      out += `<rect x="${(zx - 40).toFixed(1)}" y="${(m.top - 18).toFixed(1)}" width="80" height="14" rx="3" fill="#fff8c5" stroke="#d4a72c" stroke-width="0.6"/>`;
+      out += `<text x="${zx.toFixed(1)}" y="${(m.top - 8).toFixed(1)}" font-size="9.5" font-weight="700" fill="#9a6700" text-anchor="middle">Stimulus t = 0s</text>`;
+    }
+
+    for (const xt of offsets) {
+      const xx = sx(xt);
+      out += `<line x1="${xx.toFixed(1)}" y1="${m.top + ph}" x2="${xx.toFixed(1)}" y2="${m.top + ph + 4}" stroke="#94a3b8" stroke-width="1"/>`;
+      out += `<text x="${xx.toFixed(1)}" y="${m.top + ph + 17}" font-size="10.5" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${xt > 0 ? "+" : ""}${xt}s</text>`;
+    }
+
+    out += `<line x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + ph}" stroke="#94a3b8" stroke-width="1"/>`;
+    out += `<line x1="${m.left}" y1="${m.top + ph}" x2="${m.left + pw}" y2="${m.top + ph}" stroke="#94a3b8" stroke-width="1"/>`;
+    out += `<text transform="rotate(-90)" x="${-(m.top + ph / 2)}" y="16" font-size="11" font-weight="600" fill="#59636e" text-anchor="middle">${esc(ps.metric === "msd" ? "Activity (MSD)" : "Distance (mm/bin)")}</text>`;
+    out += `<text x="${m.left + pw / 2}" y="${H - 8}" font-size="11" font-weight="600" fill="#59636e" text-anchor="middle">Time Relative to Stimulus Onset (${bucket.trialCount || ps.trialCount} aligned trials)</text>`;
+
+    for (const s of visSeries) {
+      const col = getGroupColor(s.group);
+      const vals = s.values || [];
+      if (ui.tsShowSem && s.n > 1) {
+        const up = [], lo = [];
+        offsets.forEach((t, i) => {
+          const v = vals[i];
+          if (!v || !Number.isFinite(v.mean)) return;
+          up.push([sx(t), sy(v.mean + (v.sem || 0))]);
+          lo.push([sx(t), sy(Math.max(yMin, v.mean - (v.sem || 0)))]);
+        });
+        if (up.length >= 2) {
+          const d = "M " + up.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L ") +
+            " L " + lo.reverse().map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L ") + " Z";
+          out += `<path d="${d}" fill="${col}" fill-opacity="0.16"/>`;
+        }
+      }
+      const d = offsets.map((t, i) => {
+        const v = vals[i];
+        return (v && Number.isFinite(v.mean)) ? `${i === 0 ? "M" : "L"} ${sx(t).toFixed(1)} ${sy(v.mean).toFixed(1)}` : "";
+      }).filter(Boolean).join(" ");
+      if (d) out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2.2"/>`;
+      offsets.forEach((t, i) => {
+        const v = vals[i];
+        if (v && Number.isFinite(v.mean)) {
+          out += `<circle cx="${sx(t).toFixed(1)}" cy="${sy(v.mean).toFixed(1)}" r="3.4" fill="${col}" stroke="#ffffff" stroke-width="1"/>`;
+        }
+      });
+    }
+
+    svg.innerHTML = out;
+    hideTooltip(tt);
+  }
+
+  function renderTrialHabituationChart(svg, stage, tt, ps) {
+    const hByG = ps.habituationByGroup || {};
+    const groupNames = Object.keys(hByG);
+    const legendList = groupNames.map(g => ({
+      group: g,
+      n: (hByG[g].trialSeries && hByG[g].trialSeries[0]) ? hByG[g].trialSeries[0].n : 0
+    }));
+    renderGroupLegend("tsLegend", legendList);
+    const visGroups = groupNames.filter(g => !ui.hiddenGroups.has(g));
+    const trialLabels = ps.trialLabels || [];
+
+    const W = 880, H = 320;
+    const m = { left: 62, right: 24, top: 28, bottom: 44 };
+    const pw = W - m.left - m.right;
+    const ph = H - m.top - m.bottom;
+
+    if (!trialLabels.length || !visGroups.length) {
+      svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="#59636e">No repeated stimulus trials for habituation.</text>`;
+      return;
+    }
+
+    let yLo = 0, yHi = -Infinity;
+    for (const g of visGroups) {
+      for (const pt of (hByG[g].trialSeries || [])) {
+        if (pt && Number.isFinite(pt.mean)) {
+          yHi = Math.max(yHi, pt.mean + (pt.sem || 0));
+        }
+      }
+    }
+    if (!Number.isFinite(yHi) || yHi <= 0) yHi = 10;
+    const yTicksObj = niceTicks(0, yHi * 1.15, 5);
+    const yMin = yTicksObj.min, yMax = Math.max(yMin + 1e-6, yTicksObj.max);
+
+    const sx = (idx) => m.left + (trialLabels.length === 1 ? pw / 2 : (idx / (trialLabels.length - 1)) * pw);
+    const sy = (v) => m.top + ph - ((v - yMin) / (yMax - yMin)) * ph;
+
+    let out = "";
+    for (const tv of yTicksObj.ticks) {
+      const yy = sy(tv);
+      out += `<line x1="${m.left}" y1="${yy.toFixed(1)}" x2="${m.left + pw}" y2="${yy.toFixed(1)}" stroke="${tv === 0 ? "#cbd5e1" : "#edf1f5"}" stroke-width="1"/>`;
+      out += `<text x="${m.left - 8}" y="${(yy + 3.5).toFixed(1)}" font-size="10.5" fill="#59636e" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(fmtTick(tv, yTicksObj.step))}</text>`;
+    }
+
+    trialLabels.forEach((lbl, idx) => {
+      const xx = sx(idx);
+      out += `<line x1="${xx.toFixed(1)}" y1="${m.top + ph}" x2="${xx.toFixed(1)}" y2="${m.top + ph + 4}" stroke="#94a3b8" stroke-width="1"/>`;
+      out += `<text x="${xx.toFixed(1)}" y="${m.top + ph + 18}" font-size="11" font-weight="600" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(lbl)}</text>`;
+    });
+
+    out += `<line x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + ph}" stroke="#94a3b8" stroke-width="1"/>`;
+    out += `<line x1="${m.left}" y1="${m.top + ph}" x2="${m.left + pw}" y2="${m.top + ph}" stroke="#94a3b8" stroke-width="1"/>`;
+    out += `<text transform="rotate(-90)" x="${-(m.top + ph / 2)}" y="16" font-size="11" font-weight="600" fill="#59636e" text-anchor="middle">Peak Response (${esc(ps.unit || "mm")})</text>`;
+    out += `<text x="${m.left + pw / 2}" y="${H - 8}" font-size="11" font-weight="600" fill="#59636e" text-anchor="middle">Repeated Stimulus Trials (Trial Habituation Curve)</text>`;
+
+    for (const g of visGroups) {
+      const col = getGroupColor(g);
+      const pts = hByG[g].trialSeries || [];
+      const d = pts.map((pt, i) => (pt && Number.isFinite(pt.mean)) ? `${i === 0 ? "M" : "L"} ${sx(i).toFixed(1)} ${sy(pt.mean).toFixed(1)}` : "").filter(Boolean).join(" ");
+      if (d) out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2.2"/>`;
+      pts.forEach((pt, i) => {
+        if (!pt || !Number.isFinite(pt.mean)) return;
+        const xx = sx(i), yy = sy(pt.mean);
+        if (ui.tsShowSem && pt.sem > 0) {
+          out += `<line x1="${xx.toFixed(1)}" y1="${sy(pt.mean + pt.sem).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${sy(Math.max(yMin, pt.mean - pt.sem)).toFixed(1)}" stroke="${col}" stroke-width="1.5"/>`;
+        }
+        out += `<circle cx="${xx.toFixed(1)}" cy="${yy.toFixed(1)}" r="4.2" fill="${col}" stroke="#ffffff" stroke-width="1.3"/>`;
+      });
+    }
+
+    svg.innerHTML = out;
+    hideTooltip(tt);
+  }
+
+  // Tab 2: Phase & Group Comparison + Quick Screening Statistics
   function buildComparisonDataset(viewId) {
     const a = ui.analysis;
     if (!a) return null;
@@ -2109,7 +3089,10 @@
           for (const w of activeWells) {
             if (w.group !== g.group) continue;
             const v = c.getWellVal(w);
-            if (Number.isFinite(v)) pts.push({ well: w.well, value: v });
+            if (Number.isFinite(v)) {
+              const ptLabel = w.runId && ui.runs.length > 1 ? `${w.runId}:${w.well}` : w.well;
+              pts.push({ well: w.well, label: ptLabel, value: v });
+            }
           }
           const st = statOf(pts.map(p => p.value));
           return { group: g.group, mean: st.mean, sem: st.sem, n: st.n, points: pts };
@@ -2138,11 +3121,7 @@
     }
 
     if (viewId === "msd") {
-      return buildFromCategories(
-        [{ id: "msd", label: "Mean MSD", getWellVal: w => w.meanMsd }],
-        "Mean Pixel Activity (MSD)",
-        "px"
-      );
+      return buildFromCategories([{ id: "msd", label: "Mean MSD", getWellVal: w => w.meanMsd }], "Mean Pixel Activity (MSD)", "px");
     }
 
     if (viewId === "vmr") {
@@ -2151,9 +3130,7 @@
         { id: "dark", label: "Dark Mean", getWellVal: w => w.vmr && w.vmr.darkMean },
         { id: "burst", label: "Dark-Onset Burst", getWellVal: w => w.vmr && w.vmr.darkOnsetBurst }
       ].filter(c => activeWells.some(w => Number.isFinite(c.getWellVal(w))));
-      if (cats.length) {
-        return buildFromCategories(cats, "Visual Motor Response (mm / bin)", "mm");
-      }
+      if (cats.length) return buildFromCategories(cats, "Visual Motor Response (mm / bin)", "mm");
     }
 
     if (viewId === "zones" || viewId === "thigmotaxis" || viewId === "zone_pref") {
@@ -2179,9 +3156,7 @@
     if (viewId === "ppi") {
       return buildFromCategories(
         [{ id: "ppi", label: "% Prepulse Inhibition", getWellVal: w => w.startle && w.startle.ppiPct }],
-        "% PPI (1 - PPI / Pulse Alone)",
-        "%",
-        { value: 0, label: "0% baseline" }
+        "% PPI (1 - PPI / Pulse Alone)", "%", { value: 0, label: "0% baseline" }
       );
     }
 
@@ -2197,25 +3172,51 @@
             { id: "iti", label: "ITI", getWellVal: w => w.startle && w.startle.itiMean },
             { id: "stim", label: "Stimulus", getWellVal: w => w.startle && w.startle.stimMean }
           ].filter(c => activeWells.some(w => Number.isFinite(c.getWellVal(w))));
-      if (cats.length) {
-        return buildFromCategories(cats, "Startle Response (mm / bin)", "mm");
-      }
+      if (cats.length) return buildFromCategories(cats, "Startle Response (mm / bin)", "mm");
+    }
+
+    if (viewId === "habituation") {
+      return buildFromCategories(
+        [{ id: "habit", label: "Trial Habituation Index", getWellVal: w => w.habituation && w.habituation.habituationIndex }],
+        "Habituation Index (%)", "%", { value: 0, label: "0% (no change)" }
+      );
+    }
+
+    if (viewId === "window_auc") {
+      const wCfg = a.windowAucConfig || getActiveWindowAucConfig();
+      const lbl = wCfg ? `Window AUC (${wCfg.startSec}–${wCfg.endSec}s)` : "Window AUC";
+      return buildFromCategories(
+        [{ id: "wauc", label: lbl, getWellVal: w => w.windowAuc && w.windowAuc.auc }],
+        `${lbl} (mm·s)`, "mm·s"
+      );
+    }
+
+    if (viewId === "xy_spatial") {
+      return buildFromCategories(
+        [
+          { id: "immob", label: "Immobility %", getWellVal: w => w.xy && w.xy.immobilityPct },
+          { id: "center", label: "Center Occupancy %", getWellVal: w => w.xy && w.xy.centerOccupancyPct }
+        ],
+        "Spatial Occupancy & Immobility (%)", "%", { value: 50, label: "50%" }
+      );
+    }
+
+    if (viewId === "normalized_ctrl") {
+      const ctrlName = (a.pooledMeta && a.pooledMeta.controlGroupName) || "Control";
+      return buildFromCategories(
+        [{ id: "norm", label: `% of ${ctrlName}`, getWellVal: w => w.normalized && w.normalized.totalDistPctCtrl }],
+        `Total Distance (% of ${ctrlName})`, "%", { value: 100, label: "100% Control" }
+      );
     }
 
     if (viewId === "sab") {
       return buildFromCategories(
         [{ id: "sab", label: "Spontaneous Alternation (SAB %)", getWellVal: w => w.zchange && w.zchange.sabPct }],
-        "Spontaneous Alternation (%)",
-        "%",
-        { value: 50, label: "50% chance" }
+        "Spontaneous Alternation (%)", "%", { value: 50, label: "50% chance" }
       );
     }
 
-    return buildFromCategories(
-      [{ id: "total", label: "Total Distance", getWellVal: w => w.totalDist }],
-      "Total Distance (mm)",
-      "mm"
-    );
+    return buildFromCategories([{ id: "total", label: "Total Distance", getWellVal: w => w.totalDist }], "Total Distance (mm)", "mm");
   }
 
   function renderComparisonChart() {
@@ -2223,26 +3224,53 @@
     const stage = document.getElementById("compChartStage");
     const tt = document.getElementById("compTooltip");
     const summaryStrip = document.getElementById("compSummaryStrip");
+    const statsPanel = document.getElementById("compStatsPanel");
     const a = ui.analysis;
+    const core = getCore();
     if (!svg || !a) return;
 
     renderGroupLegend("compLegend", a.groups || []);
     const ds = buildComparisonDataset(ui.compView);
 
-    const W = 880, H = 300;
-    const m = { left: 62, right: 24, top: 22, bottom: 44 };
+    // Run screening statistics per category when enabled
+    const catStats = [];
+    if (ui.compShowStats && core && core.stats && ds && ds.categories.length && ds.groups.length >= 2) {
+      for (const cat of ds.categories) {
+        const gData = cat.bars.map(b => ({ group: b.group, values: b.points.map(p => p.value) }));
+        const res = core.stats.screenComparisonGroups(gData);
+        catStats.push({ catLabel: cat.label, res });
+      }
+    }
+
+    const singleCat = ds && ds.categories.length === 1;
+    // Pick up to 3 significant brackets sorted by span ascending (adjacent pairs below wide spanning pairs)
+    const groupIdxMap = new Map((ds ? ds.groups : []).map((g, i) => [typeof g === "string" ? g : g.group, i]));
+    const sigBrackets = (singleCat && catStats[0] && catStats[0].res && catStats[0].res.valid)
+      ? (catStats[0].res.brackets || [])
+          .filter(b => b.sig && b.sig !== "ns")
+          .slice(0, 3)
+          .sort((a, b) => {
+            const spanA = Math.abs((groupIdxMap.get(a.groupB) ?? 0) - (groupIdxMap.get(a.groupA) ?? 0));
+            const spanB = Math.abs((groupIdxMap.get(b.groupB) ?? 0) - (groupIdxMap.get(b.groupA) ?? 0));
+            return spanA - spanB;
+          })
+      : [];
+
+    const bracketTopSpace = sigBrackets.length > 0 ? (18 + sigBrackets.length * 20) : 0;
+    const W = 880, H = 300 + bracketTopSpace;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const m = { left: 62, right: 24, top: 22 + bracketTopSpace, bottom: 44 };
     const pw = W - m.left - m.right;
     const ph = H - m.top - m.bottom;
 
     if (!ds || !ds.categories.length || !ds.groups.length) {
       svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="#59636e">No active group data to compare.</text>`;
       if (summaryStrip) summaryStrip.innerHTML = "";
+      if (statsPanel) statsPanel.style.display = "none";
       return;
     }
 
-    let yLo = 0;
-    let yHi = -Infinity;
-    let anyVal = false;
+    let yLo = 0, yHi = -Infinity, anyVal = false;
     for (const cat of ds.categories) {
       for (const bar of cat.bars) {
         if (Number.isFinite(bar.mean)) {
@@ -2257,20 +3285,16 @@
         }
       }
     }
-    if (ds.refLine) {
-      yHi = Math.max(yHi, ds.refLine.value);
-      yLo = Math.min(yLo, ds.refLine.value);
-    }
+    if (ds.refLine) { yHi = Math.max(yHi, ds.refLine.value); yLo = Math.min(yLo, ds.refLine.value); }
     if (!anyVal) {
       svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="#59636e">No measurements available for this comparison view.</text>`;
       if (summaryStrip) summaryStrip.innerHTML = "";
+      if (statsPanel) statsPanel.style.display = "none";
       return;
     }
 
     const span = Math.max(1e-6, yHi - yLo);
-    const padTop = span * 0.12;
-    const padBot = yLo < 0 ? span * 0.12 : 0;
-    const yTicksObj = niceTicks(yLo - padBot, yHi + padTop, 5);
+    const yTicksObj = niceTicks(yLo - (yLo < 0 ? span * 0.12 : 0), yHi + span * 0.12, 5);
     const yMin = yTicksObj.min;
     const yMax = Math.max(yMin + 1e-6, yTicksObj.max);
     const sy = (v) => m.top + ph - ((v - yMin) / (yMax - yMin)) * ph;
@@ -2306,18 +3330,18 @@
     out += `<line x1="${m.left}" y1="${m.top + ph}" x2="${m.left + pw}" y2="${m.top + ph}" stroke="#94a3b8" stroke-width="1"/>`;
     out += `<text transform="rotate(-90)" x="${-(m.top + ph / 2)}" y="16" font-size="11" font-weight="600" fill="#59636e" text-anchor="middle">${esc(ds.yLabel)}</text>`;
 
-    const singleCat = ds.categories.length === 1;
     const nCats = ds.categories.length;
     const nGrps = ds.groups.length;
     const catSlotW = pw / Math.max(1, singleCat ? nGrps : nCats);
-
     let dotsMarkup = "";
+    const singleGroupX = {};
 
     if (singleCat) {
       const cat = ds.categories[0];
       const barW = Math.min(80, Math.max(24, catSlotW * 0.44));
       cat.bars.forEach((bar, gi) => {
         const cx = m.left + (gi + 0.5) * catSlotW;
+        singleGroupX[bar.group] = cx;
         const col = getGroupColor(bar.group);
         if (Number.isFinite(bar.mean)) {
           const yVal = sy(bar.mean);
@@ -2325,8 +3349,7 @@
           const bh = Math.max(1, Math.abs(zeroY - yVal));
           out += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${col}" fill-opacity="0.22" stroke="${col}" stroke-width="1.5"/>`;
           if (bar.n > 1 && bar.sem > 0) {
-            const eTop = sy(bar.mean + bar.sem);
-            const eBot = sy(bar.mean - bar.sem);
+            const eTop = sy(bar.mean + bar.sem), eBot = sy(bar.mean - bar.sem);
             out += `<line x1="${cx.toFixed(1)}" y1="${eTop.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${eBot.toFixed(1)}" stroke="${col}" stroke-width="1.6"/>`;
             out += `<line x1="${(cx - 6).toFixed(1)}" y1="${eTop.toFixed(1)}" x2="${(cx + 6).toFixed(1)}" y2="${eTop.toFixed(1)}" stroke="${col}" stroke-width="1.6"/>`;
             out += `<line x1="${(cx - 6).toFixed(1)}" y1="${eBot.toFixed(1)}" x2="${(cx + 6).toFixed(1)}" y2="${eBot.toFixed(1)}" stroke="${col}" stroke-width="1.6"/>`;
@@ -2334,13 +3357,13 @@
         }
         const jSpan = barW * 0.34;
         for (const pt of bar.points) {
-          const dx = cx + deterministicJitter(pt.well, jSpan);
+          const dx = cx + deterministicJitter(pt.label || pt.well, jSpan);
           const dy = sy(pt.value);
-          dotsMarkup += `<circle class="az-scatter-dot" cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="4" fill="${col}" stroke="#ffffff" stroke-width="1.1" style="cursor:pointer;" data-dot-well="${esc(pt.well)}" data-dot-group="${esc(bar.group)}" data-dot-cat="${esc(cat.label)}" data-dot-val="${pt.value}" data-dot-unit="${esc(ds.unit)}"/>`;
+          dotsMarkup += `<circle class="az-scatter-dot" cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="3.9" fill="${col}" stroke="#ffffff" stroke-width="1.1" style="cursor:pointer;" data-dot-well="${esc(pt.label || pt.well)}" data-dot-group="${esc(bar.group)}" data-dot-cat="${esc(cat.label)}" data-dot-val="${pt.value}" data-dot-unit="${esc(ds.unit)}"/>`;
         }
         const lbl = bar.group.length > 18 ? bar.group.slice(0, 17) + "…" : bar.group;
-        out += `<text x="${cx.toFixed(1)}" y="${m.top + ph + 19}" font-size="11.5" font-weight="600" fill="#1f2328" text-anchor="middle">${esc(lbl)}</text>`;
-        out += `<text x="${cx.toFixed(1)}" y="${m.top + ph + 33}" font-size="10" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">n=${bar.n}</text>`;
+        out += `<text x="${cx.toFixed(1)}" y="${m.top + ph + 18}" font-size="11.5" font-weight="600" fill="#1f2328" text-anchor="middle">${esc(lbl)}</text>`;
+        out += `<text x="${cx.toFixed(1)}" y="${m.top + ph + 32}" font-size="10" fill="#59636e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">n=${bar.n}</text>`;
       });
     } else {
       const innerPad = Math.min(20, catSlotW * 0.14);
@@ -2362,8 +3385,7 @@
             const bh = Math.max(1, Math.abs(zeroY - yVal));
             out += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="2.5" fill="${col}" fill-opacity="0.22" stroke="${col}" stroke-width="1.4"/>`;
             if (bar.n > 1 && bar.sem > 0) {
-              const eTop = sy(bar.mean + bar.sem);
-              const eBot = sy(bar.mean - bar.sem);
+              const eTop = sy(bar.mean + bar.sem), eBot = sy(bar.mean - bar.sem);
               const cap = Math.min(5, barW * 0.28);
               out += `<line x1="${cx.toFixed(1)}" y1="${eTop.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${eBot.toFixed(1)}" stroke="${col}" stroke-width="1.4"/>`;
               out += `<line x1="${(cx - cap).toFixed(1)}" y1="${eTop.toFixed(1)}" x2="${(cx + cap).toFixed(1)}" y2="${eTop.toFixed(1)}" stroke="${col}" stroke-width="1.4"/>`;
@@ -2372,9 +3394,9 @@
           }
           const jSpan = barW * 0.30;
           for (const pt of bar.points) {
-            const dx = cx + deterministicJitter(pt.well, jSpan);
+            const dx = cx + deterministicJitter(pt.label || pt.well, jSpan);
             const dy = sy(pt.value);
-            dotsMarkup += `<circle class="az-scatter-dot" cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="3.6" fill="${col}" stroke="#ffffff" stroke-width="1" style="cursor:pointer;" data-dot-well="${esc(pt.well)}" data-dot-group="${esc(bar.group)}" data-dot-cat="${esc(cat.label)}" data-dot-val="${pt.value}" data-dot-unit="${esc(ds.unit)}"/>`;
+            dotsMarkup += `<circle class="az-scatter-dot" cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="3.5" fill="${col}" stroke="#ffffff" stroke-width="1" style="cursor:pointer;" data-dot-well="${esc(pt.label || pt.well)}" data-dot-group="${esc(bar.group)}" data-dot-cat="${esc(cat.label)}" data-dot-val="${pt.value}" data-dot-unit="${esc(ds.unit)}"/>`;
           }
         });
 
@@ -2384,7 +3406,25 @@
       });
     }
 
-    svg.innerHTML = out + dotsMarkup + refPillMarkup;
+    // Stacked non-overlapping significance brackets in reserved top headroom
+    let bracketsMarkup = "";
+    if (sigBrackets.length > 0) {
+      sigBrackets.forEach((br, bi) => {
+        const x1 = singleGroupX[br.groupA];
+        const x2 = singleGroupX[br.groupB];
+        if (!Number.isFinite(x1) || !Number.isFinite(x2)) return;
+        const lx = Math.min(x1, x2), rx = Math.max(x1, x2);
+        const by = m.top - 8 - bi * 20;
+        const tickH = 5;
+        bracketsMarkup +=
+          `<g class="az-sig-bracket" pointer-events="none">` +
+            `<path d="M ${lx.toFixed(1)} ${(by + tickH).toFixed(1)} L ${lx.toFixed(1)} ${by.toFixed(1)} L ${rx.toFixed(1)} ${by.toFixed(1)} L ${rx.toFixed(1)} ${(by + tickH).toFixed(1)}" fill="none" stroke="#1f2328" stroke-width="1.2"/>` +
+            `<text x="${((lx + rx) / 2).toFixed(1)}" y="${(by - 3).toFixed(1)}" font-size="11" font-weight="700" fill="#1f2328" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${esc(br.sig)}</text>` +
+          `</g>`;
+      });
+    }
+
+    svg.innerHTML = out + dotsMarkup + refPillMarkup + bracketsMarkup;
 
     svg.querySelectorAll(".az-scatter-dot").forEach(dot => {
       dot.addEventListener("mouseenter", (e) => {
@@ -2400,23 +3440,28 @@
         positionTooltip(tt, stage, e.clientX, e.clientY, html);
       });
       dot.addEventListener("mouseleave", () => hideTooltip(tt));
-      dot.addEventListener("click", () => {
-        ui.selectedWell = dot.getAttribute("data-dot-well");
-        renderAllPlateMaps();
-        renderWellInspector();
-      });
     });
 
+    // Summary strip
     if (summaryStrip) {
       const cards = ds.groups.map(g => {
         const col = getGroupColor(g.group);
-        let mainVal = "—";
-        let subTxt = `n = ${g.n} active`;
+        let mainVal = "—", subTxt = `n = ${g.n} active`;
         if (ui.compView === "ppi" && g.startle && g.startle.ppiPct && Number.isFinite(g.startle.ppiPct.mean)) {
           mainVal = `${fmtNum(g.startle.ppiPct.mean, 1)} ± ${fmtNum(g.startle.ppiPct.sem, 1)}%`;
-          const pA = g.startle.pulseAloneMean ? fmtNum(g.startle.pulseAloneMean.mean, 1) : "—";
-          const pP = g.startle.ppiTrialMean ? fmtNum(g.startle.ppiTrialMean.mean, 1) : "—";
-          subTxt = `n=${g.n} · Pulse ${pA} vs PPI ${pP} mm`;
+          subTxt = `n=${g.n} · Pulse ${g.startle.pulseAloneMean ? fmtNum(g.startle.pulseAloneMean.mean, 1) : "—"} vs PPI ${g.startle.ppiTrialMean ? fmtNum(g.startle.ppiTrialMean.mean, 1) : "—"} mm`;
+        } else if (ui.compView === "habituation" && g.habituation && g.habituation.habituationIndex && Number.isFinite(g.habituation.habituationIndex.mean)) {
+          mainVal = `${fmtNum(g.habituation.habituationIndex.mean, 1)} ± ${fmtNum(g.habituation.habituationIndex.sem, 1)}%`;
+          subTxt = `n=${g.n} · Habituation index`;
+        } else if (ui.compView === "window_auc" && g.windowAuc && g.windowAuc.auc && Number.isFinite(g.windowAuc.auc.mean)) {
+          mainVal = `${fmtNum(g.windowAuc.auc.mean, 1)} ± ${fmtNum(g.windowAuc.auc.sem, 1)} mm·s`;
+          subTxt = `n=${g.n} · Window mean ${g.windowAuc.mean ? fmtNum(g.windowAuc.mean.mean, 2) : "—"} mm/bin`;
+        } else if (ui.compView === "normalized_ctrl" && g.normalized && g.normalized.totalDistPctCtrl && Number.isFinite(g.normalized.totalDistPctCtrl.mean)) {
+          mainVal = `${fmtNum(g.normalized.totalDistPctCtrl.mean, 1)} ± ${fmtNum(g.normalized.totalDistPctCtrl.sem, 1)}%`;
+          subTxt = `n=${g.n} · % of ${g.normalized.controlGroup || "Control"}`;
+        } else if (ui.compView === "xy_spatial" && g.xy && g.xy.immobilityPct && Number.isFinite(g.xy.immobilityPct.mean)) {
+          mainVal = `Immob ${fmtNum(g.xy.immobilityPct.mean, 1)}%`;
+          subTxt = `n=${g.n} · Speed ${g.xy.meanSpeedMmS ? fmtNum(g.xy.meanSpeedMmS.mean, 2) : "—"} mm/s`;
         } else if (ui.compView === "sab" && g.zchange && g.zchange.sabPct && Number.isFinite(g.zchange.sabPct.mean)) {
           mainVal = `${fmtNum(g.zchange.sabPct.mean, 1)} ± ${fmtNum(g.zchange.sabPct.sem, 1)}%`;
           subTxt = `n=${g.n} · Mean entries ${g.zchange.totalEntries ? fmtNum(g.zchange.totalEntries.mean, 0) : "—"}`;
@@ -2428,9 +3473,6 @@
           mainVal = `Z2 ${fmtNum(g.zones.z2Pct.mean, 1)} ± ${fmtNum(g.zones.z2Pct.sem, 1)}%`;
           const pi = g.zones.preferenceIndex && Number.isFinite(g.zones.preferenceIndex.mean) ? fmtNum(g.zones.preferenceIndex.mean, 2) : "—";
           subTxt = `n=${g.n} · Pref Index ${pi}`;
-        } else if (ui.compView === "msd" && g.meanMsd && Number.isFinite(g.meanMsd.mean)) {
-          mainVal = `${fmtNum(g.meanMsd.mean, 2)} ± ${fmtNum(g.meanMsd.sem, 2)}`;
-          subTxt = `n=${g.n} · Mean MSD`;
         } else if (g.totalDist && Number.isFinite(g.totalDist.mean)) {
           mainVal = `${fmtNum(g.totalDist.mean, 1)} ± ${fmtNum(g.totalDist.sem, 1)} mm`;
           subTxt = `n=${g.n} · Total Dist (${g.excludedCount || 0} excl)`;
@@ -2445,6 +3487,74 @@
       });
       summaryStrip.innerHTML = cards.join("");
     }
+
+    renderScreeningStatsPanel(statsPanel, catStats);
+  }
+
+  function renderScreeningStatsPanel(panel, catStats) {
+    if (!panel) return;
+    if (!ui.compShowStats || !catStats.length) {
+      panel.style.display = "none";
+      panel.innerHTML = "";
+      return;
+    }
+
+    const validCats = catStats.filter(c => c.res && c.res.valid);
+    if (!validCats.length) {
+      const reason = (catStats[0] && catStats[0].res && catStats[0].res.reason) || "Need at least 2 groups with n >= 2 included wells to run screening stats.";
+      panel.style.display = "";
+      panel.innerHTML = `<div class="az-stats-title">Quick Screening Statistics</div><div class="az-stats-disclaimer" style="margin-top:4px;">${esc(reason)}</div>`;
+      return;
+    }
+
+    const sections = validCats.map(({ catLabel, res }) => {
+      const omniHtml = (res.summaryRows || []).map(row => {
+        const isSig = row.sig && row.sig !== "ns";
+        const pStr = fmtPVal(row.p);
+        const pDisp = pStr.startsWith("<") ? `p ${pStr}` : `p = ${pStr}`;
+        return (
+          `<span class="az-stats-chip">` +
+            `<span>${esc(row.test)}:</span>` +
+            `<code>${esc(row.stat)}</code>` +
+            `<code>${esc(pDisp)}</code>` +
+            `<span class="az-sig-pill${isSig ? " is-sig" : ""}">${esc(row.sig || "ns")}</span>` +
+            `<span style="color:var(--text-muted);">${esc(row.effect || "")}</span>` +
+          `</span>`
+        );
+      }).join("");
+
+      let pairwiseHtml = "";
+      if (res.kind === "multi_group" && Array.isArray(res.pairwise) && res.pairwise.length > 0) {
+        pairwiseHtml =
+          `<div class="az-stats-table-wrap"><table class="az-table"><thead><tr>` +
+            `<th>Pairwise Comparison (Welch t + Holm)</th><th class="num">Mean Δ</th><th class="num">t (df)</th><th class="num">p (raw)</th><th class="num">p (Holm)</th><th class="num">Cohen's d</th><th>Sig</th>` +
+          `</tr></thead><tbody>` +
+          res.pairwise.map(pw => {
+            const isSig = pw.sig && pw.sig !== "ns";
+            return (
+              `<tr>` +
+                `<td><strong>${esc(pw.groupA)}</strong> vs <strong>${esc(pw.groupB)}</strong></td>` +
+                `<td class="num">${fmtNum(pw.meanDiff, 2)}</td>` +
+                `<td class="num">${fmtNum(pw.t, 2)} (${fmtNum(pw.df, 1)})</td>` +
+                `<td class="num">${esc(fmtPVal(pw.p))}</td>` +
+                `<td class="num"><strong>${esc(fmtPVal(pw.pAdj))}</strong></td>` +
+                `<td class="num">${fmtNum(pw.cohensD, 2)}</td>` +
+                `<td><span class="az-sig-pill${isSig ? " is-sig" : ""}">${esc(pw.sig || "ns")}</span></td>` +
+              `</tr>`
+            );
+          }).join("") +
+          `</tbody></table></div>`;
+      }
+
+      const heading = validCats.length > 1 ? `<div class="az-stats-head"><span class="az-stats-title">${esc(catLabel)}</span></div>` : "";
+      return `${heading}<div class="az-stats-omnibus">${omniHtml}</div>${pairwiseHtml}`;
+    }).join("");
+
+    panel.style.display = "";
+    panel.innerHTML =
+      `<div class="az-stats-head"><span class="az-stats-title">Quick Screening Statistics (Two-Sided)</span><span class="card-hint">Parametric + Non-Parametric</span></div>` +
+      sections +
+      `<div class="az-stats-disclaimer">Quick screening stats — confirm publication models in Prism / R / Python; equivalent <code>scipy.stats</code> code is included in <code>.py</code> export.</div>`;
   }
 
   // Tab 3: Zone Events (_ZCHANGE)
@@ -2455,7 +3565,7 @@
     if (!emptyEl || !contentEl || !a) return;
 
     const zs = a.zchangeSummary;
-    const hasZ = Boolean(ui.zchangeParsed && a.capabilities && a.capabilities.hasZchange && zs);
+    const hasZ = Boolean(a.capabilities && a.capabilities.hasZchange && zs);
     emptyEl.style.display = hasZ ? "none" : "";
     contentEl.style.display = hasZ ? "" : "none";
     if (!hasZ) return;
@@ -2531,9 +3641,7 @@
         const x = startX + c * cell;
         const y = startY + r * cell;
         const isDiag = fz === tz;
-        const hc = isDiag && cnt === 0
-          ? { fill: "#f6f8fa", text: "#8c959f" }
-          : heatColor(cnt / maxCnt);
+        const hc = isDiag && cnt === 0 ? { fill: "#f6f8fa", text: "#8c959f" } : heatColor(cnt / maxCnt);
         out += `<rect x="${(x + 1.5).toFixed(1)}" y="${(y + 1.5).toFixed(1)}" width="${(cell - 3).toFixed(1)}" height="${(cell - 3).toFixed(1)}" rx="4" fill="${hc.fill}" stroke="#d0d7de" stroke-width="0.8"/>`;
         out += `<text x="${(x + cell / 2).toFixed(1)}" y="${(y + cell / 2 - (rowSum > 0 && cnt > 0 && cell >= 42 ? 4 : 0) + 4).toFixed(1)}" font-size="${cell >= 44 ? 12 : 10}" font-weight="700" fill="${hc.text}" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${cnt}</text>`;
         if (rowSum > 0 && cnt > 0 && cell >= 42) {
@@ -2588,10 +3696,11 @@
       const val = useSab ? w.zchange.sabPct : w.zchange.totalEntries;
       const cx = m.left + (i + 0.5) * slot;
       const col = getGroupColor(w.group);
+      const wKey = w.wellKey || w.well;
       if (Number.isFinite(val)) {
         const yy = sy(val);
         const bh = Math.max(1, m.top + ph - yy);
-        out += `<rect class="az-zc-bar" x="${(cx - barW / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${col}" fill-opacity="0.76" style="cursor:pointer;" data-zc-well="${esc(w.well)}"/>`;
+        out += `<rect class="az-zc-bar" x="${(cx - barW / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${col}" fill-opacity="0.76" style="cursor:pointer;" data-zc-well="${esc(wKey)}"/>`;
       }
       if (activeWells.length <= 24 || i % 2 === 0) {
         const fontSz = activeWells.length > 16 ? 8.5 : 9.5;
@@ -2610,8 +3719,8 @@
 
     svg.querySelectorAll(".az-zc-bar").forEach(bar => {
       bar.addEventListener("mousemove", (e) => {
-        const wellId = bar.getAttribute("data-zc-well");
-        const ws = a.wellsById && a.wellsById[wellId];
+        const k = bar.getAttribute("data-zc-well");
+        const ws = (a.wellsByKey && a.wellsByKey[k]) || (a.wellsById && a.wellsById[k]);
         if (!ws || !ws.zchange) return;
         const col = getGroupColor(ws.group);
         const html =
@@ -2625,9 +3734,152 @@
     });
   }
 
+  // Tab 4: Spatial Phenotyping (_XY) Multi-Panel 2D Occupancy Heatmaps
+  function renderSpatialTab() {
+    const emptyEl = document.getElementById("spatialEmptyHint");
+    const contentEl = document.getElementById("spatialContent");
+    const a = ui.analysis;
+    if (!emptyEl || !contentEl || !a) return;
+
+    const xy = a.xyAnalysis;
+    const hasXy = Boolean(a.capabilities && a.capabilities.hasXy && xy && xy.hasXy);
+    emptyEl.style.display = hasXy ? "none" : "";
+    contentEl.style.display = hasXy ? "" : "none";
+    if (!hasXy) return;
+
+    const fpsTxt = Number.isFinite(xy.estimatedFps) ? ` · ~${xy.estimatedFps.toFixed(1)} fps` : "";
+    setText("spatialSummaryHint", `${xy.frameCount} frames (${fmtDurationNice(xy.durationSec)})${fpsTxt}`);
+
+    const svg = document.getElementById("spatialHeatmapSvg");
+    const strip = document.getElementById("spatialSummaryStrip");
+    const groupNames = Object.keys(xy.groupHeatmaps || {});
+    const isRound = !(a.layout && a.layout.shape === "SQUARE");
+
+    if (svg) {
+      const W = 880, H = 290;
+      if (!groupNames.length) {
+        svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="13" fill="#59636e">No active wells with _XY coordinates.</text>`;
+      } else {
+        const nP = groupNames.length;
+        const cols = Math.min(4, nP);
+        const rows = Math.ceil(nP / cols);
+        const padX = 24, padTop = 18, padBot = 34;
+        const slotW = (W - padX * 2) / cols;
+        const slotH = (H - padTop - padBot) / rows;
+        const boxSize = Math.min(slotW - 28, slotH - 36, 175);
+
+        let defs = "<defs>";
+        let panels = "";
+
+        groupNames.forEach((gName, idx) => {
+          const hm = xy.groupHeatmaps[gName];
+          const colIdx = idx % cols;
+          const rowIdx = Math.floor(idx / cols);
+          const cx = padX + (colIdx + 0.5) * slotW;
+          const topY = padTop + rowIdx * slotH + 22;
+          const x0 = cx - boxSize / 2;
+          const y0 = topY;
+          const r = boxSize / 2;
+          const clipId = `xyClip_${idx}`;
+
+          if (isRound) {
+            defs += `<clipPath id="${clipId}"><circle cx="${cx.toFixed(1)}" cy="${(y0 + r).toFixed(1)}" r="${r.toFixed(1)}"/></clipPath>`;
+          } else {
+            defs += `<clipPath id="${clipId}"><rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${boxSize.toFixed(1)}" height="${boxSize.toFixed(1)}" rx="6"/></clipPath>`;
+          }
+
+          const gCol = getGroupColor(gName);
+          const shortName = gName.length > 20 ? gName.slice(0, 19) + "…" : gName;
+          const fullTitle = `${shortName} (n=${hm.n})`;
+          const dotX = Math.max(padX + 6, cx - (fullTitle.length * 3.35) - 7);
+          panels += `<circle cx="${dotX.toFixed(1)}" cy="${(y0 - 10.5).toFixed(1)}" r="4" fill="${gCol}"/>`;
+          panels += `<text x="${(cx + 5).toFixed(1)}" y="${(y0 - 7).toFixed(1)}" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">${esc(fullTitle)}</text>`;
+
+          // Render 24x24 occupancy grid cells
+          const gSize = hm.size || 24;
+          const cell = boxSize / gSize;
+          const maxV = Math.max(1e-6, hm.maxVal || 1);
+          let cells = "";
+          for (let gy = 0; gy < gSize; gy++) {
+            const row = hm.grid[gy] || [];
+            for (let gx = 0; gx < gSize; gx++) {
+              const val = row[gx] || 0;
+              if (val <= 0) continue;
+              const fill = spatialHeatColor(Math.pow(val / maxV, 0.72));
+              cells += `<rect x="${(x0 + gx * cell).toFixed(1)}" y="${(y0 + gy * cell).toFixed(1)}" width="${(cell + 0.4).toFixed(1)}" height="${(cell + 0.4).toFixed(1)}" fill="${fill}"/>`;
+            }
+          }
+
+          if (isRound) {
+            panels += `<circle cx="${cx.toFixed(1)}" cy="${(y0 + r).toFixed(1)}" r="${r.toFixed(1)}" fill="#f8fafc"/>`;
+            panels += `<g clip-path="url(#${clipId})">${cells}</g>`;
+            // Inner 50%-area concentric circle (r * 0.707)
+            panels += `<circle cx="${cx.toFixed(1)}" cy="${(y0 + r).toFixed(1)}" r="${(r * Math.SQRT1_2).toFixed(1)}" fill="none" stroke="rgba(31,35,40,0.45)" stroke-width="1" stroke-dasharray="3,3"/>`;
+            panels += `<circle cx="${cx.toFixed(1)}" cy="${(y0 + r).toFixed(1)}" r="${r.toFixed(1)}" fill="none" stroke="${gCol}" stroke-width="1.6"/>`;
+          } else {
+            panels += `<rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${boxSize.toFixed(1)}" height="${boxSize.toFixed(1)}" rx="6" fill="#f8fafc"/>`;
+            panels += `<g clip-path="url(#${clipId})">${cells}</g>`;
+            const inS = boxSize * Math.SQRT1_2;
+            panels += `<rect x="${(cx - inS / 2).toFixed(1)}" y="${(y0 + (boxSize - inS) / 2).toFixed(1)}" width="${inS.toFixed(1)}" height="${inS.toFixed(1)}" fill="none" stroke="rgba(31,35,40,0.45)" stroke-width="1" stroke-dasharray="3,3"/>`;
+            panels += `<rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${boxSize.toFixed(1)}" height="${boxSize.toFixed(1)}" rx="6" fill="none" stroke="${gCol}" stroke-width="1.6"/>`;
+          }
+        });
+
+        // Colorbar legend at bottom
+        defs +=
+          `<linearGradient id="xyScaleGrad" x1="0%" y1="0%" x2="100%" y2="0%">` +
+            `<stop offset="0%" stop-color="#f1f5f9"/>` +
+            `<stop offset="25%" stop-color="#93c5fd"/>` +
+            `<stop offset="52%" stop-color="#2563eb"/>` +
+            `<stop offset="78%" stop-color="#f59e0b"/>` +
+            `<stop offset="100%" stop-color="#dc2626"/>` +
+          `</linearGradient></defs>`;
+
+        const barW = 200, barX = (W - barW) / 2, barY = H - 20;
+        const legend =
+          `<text x="${(barX - 8).toFixed(1)}" y="${(barY + 8).toFixed(1)}" font-size="10" fill="#59636e" text-anchor="end">Low occupancy</text>` +
+          `<rect x="${barX.toFixed(1)}" y="${barY.toFixed(1)}" width="${barW}" height="9" rx="4" fill="url(#xyScaleGrad)" stroke="#d0d7de" stroke-width="0.7"/>` +
+          `<text x="${(barX + barW + 8).toFixed(1)}" y="${(barY + 8).toFixed(1)}" font-size="10" fill="#59636e" text-anchor="start">High occupancy · dashed = inner 50% area</text>`;
+
+        svg.innerHTML = defs + panels + legend;
+      }
+    }
+
+    if (strip) {
+      const grpStats = xy.groups || {};
+      strip.innerHTML = groupNames.map(gName => {
+        const gs = grpStats[gName];
+        if (!gs) return "";
+        const col = getGroupColor(gName);
+        return (
+          `<div class="az-stat-mini">` +
+            `<div class="az-stat-mini-head"><span class="az-swatch-dot" style="background:${col};"></span><span>${esc(gName)} (n=${gs.n})</span></div>` +
+            `<div class="az-stat-mini-val">Immob ${fmtNum(gs.immobilityPct && gs.immobilityPct.mean, 1)}% · Center ${fmtNum(gs.centerOccupancyPct && gs.centerOccupancyPct.mean, 1)}%</div>` +
+            `<div class="az-stat-mini-sub">Speed ${fmtNum(gs.meanSpeedMmS && gs.meanSpeedMmS.mean, 2)} mm/s · Burst P95 ${fmtNum(gs.burstSpeedP95MmS && gs.burstSpeedP95MmS.mean, 1)} mm/s</div>` +
+          `</div>`
+        );
+      }).join("");
+    }
+  }
+
   // ---------------------------------------------------------------------------
-  // 11. Step 5: Per-Well Summary Table
+  // 11. Step 5: Audit Summary Pill & Per-Well Summary Table
   // ---------------------------------------------------------------------------
+  function renderExportAuditSummary() {
+    const el = document.getElementById("cleaningLogAuditSummary");
+    if (!el || !ui.analysis) return;
+    let autoEx = 0, manEx = 0;
+    const targetRuns = (ui.runs.length > 1 && ui.scope === "pooled") ? ui.runs : (getActiveRun() ? [getActiveRun()] : []);
+    for (const r of targetRuns) {
+      for (const w of r.excludedWells) {
+        const meta = r.excludeMeta && r.excludeMeta[w];
+        if (meta && meta.source === "auto") autoEx++;
+        else manEx++;
+      }
+    }
+    el.textContent = `${targetRuns.length} run${targetRuns.length === 1 ? "" : "s"} · ${autoEx} auto-excl · ${manEx} manual-excl · UTF-8 BOM`;
+  }
+
   function renderWellTable() {
     const a = ui.analysis;
     if (!a) return;
@@ -2645,14 +3897,22 @@
     }
 
     const caps = a.capabilities || {};
-    const cols = [
-      { key: "exclude", label: "Excl.", sortable: false, num: false },
-      { key: "well", label: "Well", sortable: true, num: false },
-      { key: "group", label: "Group", sortable: true, num: false },
-      { key: "qc", label: "QC", sortable: false, num: false },
-      { key: "totalDist", label: "Total Dist (mm)", sortable: true, num: true },
-      { key: "meanDist", label: "Mean / Bin", sortable: true, num: true }
-    ];
+    const isPooledMulti = ui.runs.length > 1 && a.scope === "pooled";
+    const fNames = a.factorNames || [];
+
+    const cols = [{ key: "exclude", label: "Excl.", sortable: false, num: false }];
+    if (isPooledMulti) cols.push({ key: "runId", label: "Run", sortable: true, num: false });
+    cols.push({ key: "well", label: "Well", sortable: true, num: false });
+    cols.push({ key: "group", label: "Group", sortable: true, num: false });
+    for (const fn of fNames) cols.push({ key: `factor:${fn}`, label: fn, sortable: true, num: false });
+    cols.push({ key: "qc", label: "QC", sortable: false, num: false });
+    cols.push({ key: "qcReason", label: "QC Reason", sortable: false, num: false });
+    cols.push({ key: "totalDist", label: "Total Dist (mm)", sortable: true, num: true });
+    cols.push({ key: "meanDist", label: "Mean / Bin", sortable: true, num: true });
+
+    if (ui.normalizeToControl && a.wells.some(w => w.normalized && w.normalized.totalDistPctCtrl !== null)) {
+      cols.push({ key: "normPct", label: "% Ctrl", sortable: true, num: true });
+    }
     if (caps.hasMsd) cols.push({ key: "meanMsd", label: "Mean MSD", sortable: true, num: true });
     if (caps.hasZones) {
       cols.push({ key: "z1Pct", label: "Z1 %", sortable: true, num: true });
@@ -2661,6 +3921,9 @@
     }
     if (caps.hasVmr) cols.push({ key: "vmrDelta", label: "VMR Δ", sortable: true, num: true });
     if (caps.hasPpi) cols.push({ key: "ppiPct", label: "% PPI", sortable: true, num: true });
+    if (caps.hasHabituation) cols.push({ key: "habitIdx", label: "Habit %", sortable: true, num: true });
+    if (caps.hasWindowAuc) cols.push({ key: "winAuc", label: "Win AUC", sortable: true, num: true });
+    if (caps.hasXy) cols.push({ key: "immobPct", label: "Immob %", sortable: true, num: true });
     if (caps.hasZchange) {
       cols.push({ key: "transitions", label: "Entries", sortable: true, num: true });
       if (caps.hasSab) cols.push({ key: "sabPct", label: "SAB %", sortable: true, num: true });
@@ -2671,31 +3934,37 @@
       thead.innerHTML = "<tr>" + cols.map(c => {
         const cls = [c.num ? "num" : "", c.sortable ? "sortable" : ""].filter(Boolean).join(" ");
         const arrow = c.sortable && ui.tableSortKey === c.key ? (ui.tableSortDir > 0 ? " ▲" : " ▼") : "";
-        return `<th class="${cls}"${c.sortable ? ` data-sort-key="${c.key}"` : ""}>${esc(c.label)}${arrow}</th>`;
+        return `<th class="${cls}"${c.sortable ? ` data-sort-key="${esc(c.key)}"` : ""}>${esc(c.label)}${arrow}</th>`;
       }).join("") + "</tr>";
 
       thead.querySelectorAll("[data-sort-key]").forEach(th => {
         th.addEventListener("click", () => {
           const k = th.getAttribute("data-sort-key");
           if (ui.tableSortKey === k) ui.tableSortDir *= -1;
-          else { ui.tableSortKey = k; ui.tableSortDir = k === "well" || k === "group" ? 1 : -1; }
+          else { ui.tableSortKey = k; ui.tableSortDir = (k === "well" || k === "group" || k === "runId" || k.startsWith("factor:")) ? 1 : -1; }
           renderWellTable();
         });
       });
     }
 
     const getSortVal = (w, key) => {
+      if (key.startsWith("factor:")) return (w.factors && w.factors[key.slice(7)]) || "";
       switch (key) {
+        case "runId": return w.runId || "";
         case "well": return w.well;
         case "group": return w.group || UNASSIGNED;
         case "totalDist": return w.totalDist ?? -Infinity;
         case "meanDist": return w.meanDist ?? -Infinity;
+        case "normPct": return (w.normalized && w.normalized.totalDistPctCtrl) ?? -Infinity;
         case "meanMsd": return w.meanMsd ?? -Infinity;
         case "z1Pct": return (w.zones && w.zones.z1Pct) ?? -Infinity;
         case "z2Pct": return (w.zones && w.zones.z2Pct) ?? -Infinity;
         case "prefIdx": return (w.zones && w.zones.preferenceIndex) ?? -Infinity;
         case "vmrDelta": return (w.vmr && w.vmr.darkMinusLight) ?? -Infinity;
         case "ppiPct": return (w.startle && w.startle.ppiPct) ?? -Infinity;
+        case "habitIdx": return (w.habituation && w.habituation.habituationIndex) ?? -Infinity;
+        case "winAuc": return (w.windowAuc && w.windowAuc.auc) ?? -Infinity;
+        case "immobPct": return (w.xy && w.xy.immobilityPct) ?? -Infinity;
         case "transitions": return (w.zchange && w.zchange.totalEntries) ?? -Infinity;
         case "sabPct": return (w.zchange && w.zchange.sabPct) ?? -Infinity;
         default: return w.well;
@@ -2723,25 +3992,33 @@
 
     const tbody = document.getElementById("wellTableBody");
     if (!tbody) return;
-    const allGroupChoices = [...ui.groupOrder, UNASSIGNED];
+    const unionGroups = collectUnionGroupOrder();
+    const allGroupChoices = [...unionGroups, UNASSIGNED];
 
     tbody.innerHTML = list.map(w => {
       const g = w.group || UNASSIGNED;
       const gCol = getGroupColor(g);
       const selVal = allGroupChoices.includes(g) ? g : UNASSIGNED;
+      const runAttr = w.runId ? ` data-row-run="${esc(w.runId)}"` : "";
       const groupSelHtml = allGroupChoices.length > 1
-        ? `<select class="az-select az-table-grp-sel" data-row-group="${esc(w.well)}" aria-label="Group for ${esc(w.well)}">` +
+        ? `<select class="az-select az-table-grp-sel" data-row-group="${esc(w.well)}"${runAttr} aria-label="Group for ${esc(w.well)}">` +
             allGroupChoices.map(gn => `<option value="${esc(gn)}"${gn === selVal ? " selected" : ""}>${esc(gn)}</option>`).join("") +
           `</select>`
         : `<span class="az-group-tag" style="background:${hexToRgba(gCol, 0.14)};color:${gCol};"><span class="az-swatch-dot" style="background:${gCol};"></span>${esc(g)}</span>`;
 
-      let cells =
-        `<td><input type="checkbox" class="az-chk" data-row-excl="${esc(w.well)}" aria-label="Exclude ${esc(w.well)}"${w.excluded ? " checked" : ""}></td>` +
-        `<td class="az-well-id-cell">${esc(w.well)}</td>` +
-        `<td>${groupSelHtml}</td>` +
-        `<td>${buildQcPillsHtml(w)}</td>` +
-        `<td class="num">${fmtNum(w.totalDist, 1)}</td>` +
-        `<td class="num">${fmtNum(w.meanDist, 2)}</td>`;
+      let cells = `<td><input type="checkbox" class="az-chk" data-row-excl="${esc(w.well)}"${runAttr} aria-label="Exclude ${esc(w.well)}"${w.excluded ? " checked" : ""}></td>`;
+      if (isPooledMulti) cells += `<td><span class="az-reason-code">${esc(w.runId || "")}</span></td>`;
+      cells += `<td class="az-well-id-cell">${esc(w.well)}</td><td>${groupSelHtml}</td>`;
+      for (const fn of fNames) {
+        const fv = (w.factors && w.factors[fn]) || "—";
+        cells += `<td>${esc(fv)}</td>`;
+      }
+      const qReason = w.qcReason || (w.qc && w.qc.qcReason) || "ok";
+      cells += `<td>${buildQcPillsHtml(w)}</td><td><span class="az-reason-code">${esc(qReason)}</span></td>`;
+      cells += `<td class="num">${fmtNum(w.totalDist, 1)}</td><td class="num">${fmtNum(w.meanDist, 2)}</td>`;
+      if (ui.normalizeToControl && a.wells.some(x => x.normalized && x.normalized.totalDistPctCtrl !== null)) {
+        cells += `<td class="num">${w.normalized && Number.isFinite(w.normalized.totalDistPctCtrl) ? fmtNum(w.normalized.totalDistPctCtrl, 1) + "%" : "—"}</td>`;
+      }
       if (caps.hasMsd) cells += `<td class="num">${fmtNum(w.meanMsd, 2)}</td>`;
       if (caps.hasZones) {
         cells += `<td class="num">${fmtNum(w.zones && w.zones.z1Pct, 1)}%</td>`;
@@ -2753,6 +4030,9 @@
         cells += `<td class="num">${Number.isFinite(d) ? (d >= 0 ? "+" : "") + fmtNum(d, 2) : "—"}</td>`;
       }
       if (caps.hasPpi) cells += `<td class="num">${w.startle && Number.isFinite(w.startle.ppiPct) ? fmtNum(w.startle.ppiPct, 1) + "%" : "—"}</td>`;
+      if (caps.hasHabituation) cells += `<td class="num">${w.habituation && Number.isFinite(w.habituation.habituationIndex) ? fmtNum(w.habituation.habituationIndex, 1) + "%" : "—"}</td>`;
+      if (caps.hasWindowAuc) cells += `<td class="num">${w.windowAuc && Number.isFinite(w.windowAuc.auc) ? fmtNum(w.windowAuc.auc, 1) : "—"}</td>`;
+      if (caps.hasXy) cells += `<td class="num">${w.xy && Number.isFinite(w.xy.immobilityPct) ? fmtNum(w.xy.immobilityPct, 1) + "%" : "—"}</td>`;
       if (caps.hasZchange) {
         cells += `<td class="num">${w.zchange && Number.isFinite(w.zchange.totalEntries) ? w.zchange.totalEntries : "—"}</td>`;
         if (caps.hasSab) cells += `<td class="num">${w.zchange && Number.isFinite(w.zchange.sabPct) ? fmtNum(w.zchange.sabPct, 1) + "%" : "—"}</td>`;
@@ -2763,8 +4043,8 @@
     tbody.querySelectorAll("[data-row-excl]").forEach(chk => {
       chk.addEventListener("change", () => {
         const well = chk.getAttribute("data-row-excl");
-        if (chk.checked) ui.excludedWells.add(well);
-        else ui.excludedWells.delete(well);
+        const targetRun = getRunByIdOrLabel(chk.getAttribute("data-row-run"));
+        setWellExcluded(targetRun, well, chk.checked, "manual", "manual_exclude");
         recomputeAndRender();
       });
     });
@@ -2772,10 +4052,12 @@
     tbody.querySelectorAll("[data-row-group]").forEach(sel => {
       sel.addEventListener("change", () => {
         const well = sel.getAttribute("data-row-group");
-        if (!sel.value || sel.value === UNASSIGNED || sel.value === ALL_WELLS) {
-          delete ui.groups[well];
-        } else {
-          ui.groups[well] = sel.value;
+        const targetRun = getRunByIdOrLabel(sel.getAttribute("data-row-run"));
+        if (!targetRun) return;
+        if (!sel.value || sel.value === UNASSIGNED || sel.value === ALL_WELLS) delete targetRun.groups[well];
+        else {
+          targetRun.groups[well] = sel.value;
+          if (!targetRun.groupOrder.includes(sel.value)) targetRun.groupOrder.push(sel.value);
         }
         recomputeAndRender();
       });
@@ -2783,75 +4065,204 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 12. Group Brush Actions
+  // 12. Group Brush, Multi-Factor Layers & Multi-Run Actions
   // ---------------------------------------------------------------------------
-  function addNewGroup() {
-    let idx = ui.groupOrder.length + 1;
-    let name = `Group ${idx}`;
-    while (ui.groupOrder.includes(name)) {
-      idx++;
-      name = `Group ${idx}`;
+  function addFactorLayer(rawName, defaultLevels) {
+    const run = getActiveRun();
+    if (!run) return;
+    const clean = String(rawName || "").trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24);
+    if (!clean) return;
+    if (!run.factorNames.includes(clean)) {
+      run.factorNames.push(clean);
+      run.wellFactors[clean] = {};
+      run.factorLevelOrder[clean] = Array.isArray(defaultLevels) && defaultLevels.length
+        ? defaultLevels.slice()
+        : [`${clean}_A`, `${clean}_B`];
     }
-    ui.groupOrder.push(name);
-    getGroupColor(name);
-    ui.activeBrushGroup = name;
+    ui.activeFactorLayer = clean;
+    ui.activeBrushFactorVal = run.factorLevelOrder[clean][0] || UNASSIGNED;
     ui.brushTool = "group";
+    recomputeAndRender();
+  }
+
+  function removeFactorLayer(fn) {
+    const run = getActiveRun();
+    if (!run) return;
+    run.factorNames = run.factorNames.filter(x => x !== fn);
+    delete run.wellFactors[fn];
+    delete run.factorLevelOrder[fn];
+    if (ui.activeFactorLayer === fn) ui.activeFactorLayer = PRIMARY_LAYER;
+    recomputeAndRender();
+  }
+
+  function applyFactorPreset(pairs) {
+    const run = getActiveRun();
+    if (!run) return;
+    for (const [fn, lvls] of pairs) {
+      if (!run.factorNames.includes(fn)) {
+        run.factorNames.push(fn);
+        run.wellFactors[fn] = {};
+        run.factorLevelOrder[fn] = lvls.slice();
+      }
+    }
+    const firstFn = pairs[0][0];
+    ui.activeFactorLayer = firstFn;
+    ui.activeBrushFactorVal = (run.factorLevelOrder[firstFn] && run.factorLevelOrder[firstFn][0]) || UNASSIGNED;
+    ui.brushTool = "group";
+    recomputeAndRender();
+    toast(`Added factors: ${pairs.map(p => p[0]).join(" × ")}`);
+  }
+
+  function combineFactorsIntoGroups() {
+    const core = getCore();
+    const run = getActiveRun();
+    if (!core || !run || !run.factorNames.length) return;
+    const res = core.synthesizeGroupsFromFactors(run.summaryParsed.wells, run.factorNames, run.wellFactors);
+    if (!res || !res.groupOrder.length) {
+      toast("Paint at least one factor level onto the plate first.");
+      return;
+    }
+    run.groups = { ...res.groups };
+    const reg = buildGroupRegistryForRun(run.groups, res.groupOrder, run.groupColors);
+    run.groupOrder = reg.groupOrder;
+    run.groupColors = reg.groupColors;
+    ui.activeFactorLayer = PRIMARY_LAYER;
+    ui.activeBrushGroup = run.groupOrder[0] || UNASSIGNED;
+    ui.brushTool = "group";
+    recomputeAndRender();
+    toast(`Combined ${run.factorNames.join(" × ")} into ${run.groupOrder.length} groups`);
+  }
+
+  function copyActiveMapToAllRuns() {
+    const src = getActiveRun();
+    if (!src || ui.runs.length < 2) return;
+    let copied = 0;
+    for (const r of ui.runs) {
+      if (r.id === src.id) continue;
+      r.groups = { ...src.groups };
+      r.groupOrder = [...src.groupOrder];
+      r.groupColors = { ...src.groupColors };
+      r.factorNames = [...src.factorNames];
+      r.wellFactors = JSON.parse(JSON.stringify(src.wellFactors || {}));
+      r.factorLevelOrder = JSON.parse(JSON.stringify(src.factorLevelOrder || {}));
+      copied++;
+    }
+    recomputeAndRender();
+    toast(`Copied group & factor map from ${src.runId} to ${copied} other run${copied === 1 ? "" : "s"}`);
+  }
+
+  function addNewGroupOrLevel() {
+    const run = getActiveRun();
+    if (!run) return;
+    if (ui.activeFactorLayer !== PRIMARY_LAYER && run.factorNames.includes(ui.activeFactorLayer)) {
+      const fn = ui.activeFactorLayer;
+      const list = run.factorLevelOrder[fn] || (run.factorLevelOrder[fn] = []);
+      let idx = list.length + 1;
+      let name = `${fn}_${idx}`;
+      while (list.includes(name)) { idx++; name = `${fn}_${idx}`; }
+      list.push(name);
+      ui.activeBrushFactorVal = name;
+      ui.brushTool = "group";
+    } else {
+      let idx = run.groupOrder.length + 1;
+      let name = `Group ${idx}`;
+      while (run.groupOrder.includes(name)) { idx++; name = `Group ${idx}`; }
+      run.groupOrder.push(name);
+      getGroupColor(name);
+      ui.activeBrushGroup = name;
+      ui.brushTool = "group";
+    }
     renderPlateControls();
     const inp = document.getElementById("activeGroupNameInput");
     if (inp) { inp.focus(); inp.select(); }
   }
 
-  function renameActiveGroup(rawNewName) {
-    const oldName = ui.activeBrushGroup;
-    if (!oldName || oldName === UNASSIGNED) return;
+  function renameActiveGroupOrLevel(rawNewName) {
+    const run = getActiveRun();
+    if (!run) return;
     const nextName = String(rawNewName || "").trim().slice(0, 32);
-    if (!nextName || nextName === oldName || nextName === UNASSIGNED || nextName === ALL_WELLS) return;
-    if (ui.groupOrder.includes(nextName)) {
-      toast(`Group "${nextName}" already exists`);
-      renderPlateControls();
+    if (!nextName || nextName === UNASSIGNED || nextName === ALL_WELLS) return;
+
+    if (ui.activeFactorLayer !== PRIMARY_LAYER && run.factorNames.includes(ui.activeFactorLayer)) {
+      const fn = ui.activeFactorLayer;
+      const oldName = ui.activeBrushFactorVal;
+      if (!oldName || oldName === UNASSIGNED || nextName === oldName) return;
+      const list = run.factorLevelOrder[fn] || [];
+      if (list.includes(nextName)) { toast(`Level "${nextName}" already exists`); renderPlateControls(); return; }
+      const idx = list.indexOf(oldName);
+      if (idx >= 0) list[idx] = nextName;
+      const fMap = run.wellFactors[fn] || {};
+      for (const w of Object.keys(fMap)) { if (fMap[w] === oldName) fMap[w] = nextName; }
+      ui.activeBrushFactorVal = nextName;
+      recomputeAndRender();
       return;
     }
-    const idx = ui.groupOrder.indexOf(oldName);
-    if (idx >= 0) ui.groupOrder[idx] = nextName;
-    ui.groupColors[nextName] = ui.groupColors[oldName] || getGroupColor(oldName);
-    delete ui.groupColors[oldName];
-    for (const w of Object.keys(ui.groups)) {
-      if (ui.groups[w] === oldName) ui.groups[w] = nextName;
-    }
-    if (ui.hiddenGroups.has(oldName)) {
-      ui.hiddenGroups.delete(oldName);
-      ui.hiddenGroups.add(nextName);
-    }
+
+    const oldName = ui.activeBrushGroup;
+    if (!oldName || oldName === UNASSIGNED || nextName === oldName) return;
+    if (run.groupOrder.includes(nextName)) { toast(`Group "${nextName}" already exists`); renderPlateControls(); return; }
+    const idx = run.groupOrder.indexOf(oldName);
+    if (idx >= 0) run.groupOrder[idx] = nextName;
+    run.groupColors[nextName] = run.groupColors[oldName] || getGroupColor(oldName);
+    delete run.groupColors[oldName];
+    for (const w of Object.keys(run.groups)) { if (run.groups[w] === oldName) run.groups[w] = nextName; }
+    if (ui.hiddenGroups.has(oldName)) { ui.hiddenGroups.delete(oldName); ui.hiddenGroups.add(nextName); }
     ui.activeBrushGroup = nextName;
     recomputeAndRender();
   }
 
-  function deleteActiveGroup() {
+  function deleteActiveGroupOrLevel() {
+    const run = getActiveRun();
+    if (!run) return;
+    if (ui.activeFactorLayer !== PRIMARY_LAYER && run.factorNames.includes(ui.activeFactorLayer)) {
+      const fn = ui.activeFactorLayer;
+      const target = ui.activeBrushFactorVal;
+      if (!target || target === UNASSIGNED) return;
+      run.factorLevelOrder[fn] = (run.factorLevelOrder[fn] || []).filter(v => v !== target);
+      const fMap = run.wellFactors[fn] || {};
+      for (const w of Object.keys(fMap)) { if (fMap[w] === target) delete fMap[w]; }
+      ui.activeBrushFactorVal = run.factorLevelOrder[fn][0] || UNASSIGNED;
+      recomputeAndRender();
+      return;
+    }
+
     const target = ui.activeBrushGroup;
     if (!target || target === UNASSIGNED) return;
-    ui.groupOrder = ui.groupOrder.filter(g => g !== target);
-    delete ui.groupColors[target];
+    run.groupOrder = run.groupOrder.filter(g => g !== target);
+    delete run.groupColors[target];
     ui.hiddenGroups.delete(target);
-    for (const w of Object.keys(ui.groups)) {
-      if (ui.groups[w] === target) delete ui.groups[w];
-    }
-    ui.activeBrushGroup = ui.groupOrder.length ? ui.groupOrder[0] : UNASSIGNED;
+    for (const w of Object.keys(run.groups)) { if (run.groups[w] === target) delete run.groups[w]; }
+    ui.activeBrushGroup = run.groupOrder.length ? run.groupOrder[0] : UNASSIGNED;
     recomputeAndRender();
   }
 
-  function autoAssignGroups(axis) {
-    if (!ui.summaryParsed || !ui.analysis || !ui.analysis.layout) return;
-    if (ui.groupOrder.length === 0) {
-      ui.groupOrder = ["Group 1", "Group 2", "Group 3"];
-      ui.groupOrder.forEach(getGroupColor);
-      ui.activeBrushGroup = ui.groupOrder[0];
-    }
-    const nGrps = ui.groupOrder.length;
-    const coords = ui.analysis.layout.wellCoords || {};
-    const wells = ui.summaryParsed.wells;
+  function autoAssignGroupsOrLevels(axis) {
+    const run = getActiveRun();
+    const a = getActiveRunAnalysis();
+    if (!run || !a || !a.layout) return;
 
+    const isFactor = ui.activeFactorLayer !== PRIMARY_LAYER && run.factorNames.includes(ui.activeFactorLayer);
+    let levels;
+    if (isFactor) {
+      const fn = ui.activeFactorLayer;
+      if (!run.factorLevelOrder[fn] || !run.factorLevelOrder[fn].length) {
+        run.factorLevelOrder[fn] = [`${fn}_A`, `${fn}_B`];
+      }
+      levels = run.factorLevelOrder[fn];
+    } else {
+      if (run.groupOrder.length === 0) {
+        run.groupOrder = ["Group 1", "Group 2", "Group 3"];
+        run.groupOrder.forEach(getGroupColor);
+        ui.activeBrushGroup = run.groupOrder[0];
+      }
+      levels = run.groupOrder;
+    }
+
+    const nLvls = levels.length;
+    const coords = a.layout.wellCoords || {};
+    const wells = run.summaryParsed.wells;
     const quantize = (v) => Math.round((Number(v) || 0) / 4) * 4;
-    const useGeom = Boolean(ui.analysis.layout.isMaze);
+    const useGeom = Boolean(a.layout.isMaze);
     const getPos = (w, i) => {
       const wc = coords[w];
       if (!wc) return axis === "row" ? Math.floor(i / 6) : (i % 6);
@@ -2860,46 +4271,73 @@
     };
 
     const distinctVals = [...new Set(wells.map((w, i) => getPos(w, i)))].sort((a, b) => a - b);
+    const targetMap = isFactor ? (run.wellFactors[ui.activeFactorLayer] || (run.wellFactors[ui.activeFactorLayer] = {})) : run.groups;
     wells.forEach((w, i) => {
       const idx = distinctVals.indexOf(getPos(w, i));
-      const gIdx = Math.min(nGrps - 1, Math.floor((Math.max(0, idx) * nGrps) / Math.max(1, distinctVals.length)));
-      ui.groups[w] = ui.groupOrder[gIdx];
+      const gIdx = Math.min(nLvls - 1, Math.floor((Math.max(0, idx) * nLvls) / Math.max(1, distinctVals.length)));
+      targetMap[w] = levels[gIdx];
     });
     recomputeAndRender();
-    toast(`Filled ${nGrps} groups by ${axis}`);
+    toast(`Filled ${nLvls} ${isFactor ? ui.activeFactorLayer + " levels" : "groups"} by ${axis}`);
   }
 
   function excludeAllFlaggedWells() {
-    if (!ui.analysis || !ui.analysis.kpis) return;
-    const flagged = ui.analysis.kpis.flaggedWells || [];
+    const a = getActiveRunAnalysis();
+    const run = getActiveRun();
+    if (!a || !run) return;
     let added = 0;
-    for (const w of flagged) {
-      if (!ui.excludedWells.has(w)) {
-        ui.excludedWells.add(w);
+    for (const w of (a.wells || [])) {
+      if (w.qc && (w.qc.isEmpty || w.qc.isSpikeGlitch) && !run.excludedWells.has(w.well)) {
+        setWellExcluded(run, w.well, true, "auto", w.qc.qcReason || "qc_flagged");
         added++;
       }
     }
     if (added > 0) {
       recomputeAndRender();
-      toast(`Excluded ${added} QC-flagged well${added === 1 ? "" : "s"}`);
+      toast(`Excluded ${added} QC-flagged well${added === 1 ? "" : "s"} on ${run.runId}`);
     } else {
-      toast("No remaining flagged wells to exclude");
+      toast("No remaining flagged wells to exclude on this run");
+    }
+  }
+
+  function excludeFlaggedAcrossAllRuns() {
+    if (!ui.analysis || !Array.isArray(ui.analysis.runAnalyses)) {
+      excludeAllFlaggedWells();
+      return;
+    }
+    let added = 0;
+    for (const item of ui.analysis.runAnalyses) {
+      const r = getRunByIdOrLabel(item.id);
+      if (!r || !item.analysis) continue;
+      for (const w of (item.analysis.wells || [])) {
+        if (w.qc && (w.qc.isEmpty || w.qc.isSpikeGlitch) && !r.excludedWells.has(w.well)) {
+          setWellExcluded(r, w.well, true, "auto", w.qc.qcReason || "qc_flagged");
+          added++;
+        }
+      }
+    }
+    if (added > 0) {
+      recomputeAndRender();
+      toast(`Auto-excluded ${added} QC-flagged well${added === 1 ? "" : "s"} across ${ui.runs.length} runs`);
+    } else {
+      toast("No remaining flagged wells across any run");
     }
   }
 
   function triggerPrismExport() {
     const core = getCore();
     if (!core || !ui.analysis) return;
-    const csv = core.buildPrismGroupedCsv(ui.analysis, ui.prismMetric);
+    const csv = typeof core.exportPrismGroupedCsv === "function"
+      ? core.exportPrismGroupedCsv(buildExportPayload(), ui.prismMetric, { includeBom: true })
+      : core.buildPrismGroupedCsv(ui.analysis, ui.prismMetric);
     downloadTextFile(csv, `${getExportBasename()}_prism_${ui.prismMetric}.csv`, "text/csv;charset=utf-8");
-    toast("Downloaded Prism Grouped CSV");
+    toast("Downloaded Prism Grouped CSV (UTF-8 BOM)");
   }
 
   // ---------------------------------------------------------------------------
   // 13. Event Binding & Initialization
   // ---------------------------------------------------------------------------
   function bindEvents() {
-    // Wizard step navigation
     document.querySelectorAll("[data-goto]").forEach(el => {
       el.addEventListener("click", () => goToPage(el.getAttribute("data-goto")));
     });
@@ -2916,11 +4354,8 @@
     if (nextBtn) {
       nextBtn.addEventListener("click", () => {
         const idx = pageIndexOf(ui.currentPage);
-        if (idx < ANALYZER_PAGES.length - 1) {
-          goToPage(ANALYZER_PAGES[idx + 1].id);
-        } else {
-          triggerPrismExport();
-        }
+        if (idx < ANALYZER_PAGES.length - 1) goToPage(ANALYZER_PAGES[idx + 1].id);
+        else triggerPrismExport();
       });
     }
 
@@ -2931,11 +4366,7 @@
 
     // Topbar & Sidebar actions
     const demoSel = document.getElementById("demoPresetSelect");
-    if (demoSel) {
-      demoSel.addEventListener("change", () => {
-        if (demoSel.value) loadDemoDataset(demoSel.value);
-      });
-    }
+    if (demoSel) demoSel.addEventListener("change", () => { if (demoSel.value) loadDemoDataset(demoSel.value); });
 
     const useCtxBtn = document.getElementById("useBuilderConfigBtn");
     if (useCtxBtn) useCtxBtn.addEventListener("click", loadLatestBuilderConfig);
@@ -2952,73 +4383,115 @@
     const clearCtxBtn = document.getElementById("clearContextBtn");
     if (clearCtxBtn) {
       clearCtxBtn.addEventListener("click", () => {
-        ui.context = null;
-        ui.contextFilename = "";
-        if (ui.summaryParsed) recomputeAndRender();
+        const run = getActiveRun();
+        if (run) { run.context = null; run.contextFilename = ""; }
+        ui.pendingContext = null;
+        ui.pendingContextFilename = "";
+        syncLegacyStateAliases();
+        if (ui.runs.length) recomputeAndRender();
         else renderAll();
         toast("Detached Builder context");
       });
     }
 
-    // Demo cards & empty-state demo buttons
     document.querySelectorAll("[data-demo]").forEach(btn => {
       btn.addEventListener("click", () => loadDemoDataset(btn.getAttribute("data-demo")));
     });
 
     const loadYmazeBtn = document.getElementById("loadYmazeDemoFromTabBtn");
-    if (loadYmazeBtn) {
-      loadYmazeBtn.addEventListener("click", () => {
-        ui.activeChartTab = "zchange";
-        loadDemoDataset("ymaze_15");
-      });
-    }
+    if (loadYmazeBtn) loadYmazeBtn.addEventListener("click", () => { ui.activeChartTab = "zchange"; loadDemoDataset("ymaze_15"); });
+    const loadSpatialBtn = document.getElementById("loadMultiDemoFromSpatialBtn");
+    if (loadSpatialBtn) loadSpatialBtn.addEventListener("click", () => { ui.activeChartTab = "spatial"; loadDemoDataset("ld_multi_2p"); });
 
-    // File dropzone & picker
+    // File dropzone & pickers
     const dropZone = document.getElementById("dropZone");
     const fileInput = document.getElementById("analyzerFileInput");
+    const addRunInput = document.getElementById("addRunFileInput");
     const browseBtn = document.getElementById("browseFilesBtn");
+    const addRunBtn = document.getElementById("addRunCsvBtn");
 
     if (browseBtn && fileInput) {
-      browseBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        fileInput.value = "";
-        fileInput.click();
+      browseBtn.addEventListener("click", (e) => { e.stopPropagation(); fileInput.value = ""; fileInput.click(); });
+    }
+    if (addRunBtn && addRunInput) {
+      addRunBtn.addEventListener("click", (e) => { e.stopPropagation(); addRunInput.value = ""; addRunInput.click(); });
+      addRunInput.addEventListener("change", () => {
+        if (addRunInput.files && addRunInput.files.length) handleIncomingFiles(addRunInput.files, { appendMode: true });
       });
     }
     if (dropZone && fileInput) {
-      dropZone.addEventListener("click", () => {
-        fileInput.value = "";
-        fileInput.click();
-      });
+      dropZone.addEventListener("click", () => { fileInput.value = ""; fileInput.click(); });
       dropZone.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          fileInput.value = "";
-          fileInput.click();
-        }
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.value = ""; fileInput.click(); }
       });
-      dropZone.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        dropZone.classList.add("is-dragover");
-      });
+      dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("is-dragover"); });
       dropZone.addEventListener("dragleave", () => dropZone.classList.remove("is-dragover"));
       dropZone.addEventListener("drop", (e) => {
         e.preventDefault();
         dropZone.classList.remove("is-dragover");
-        if (e.dataTransfer && e.dataTransfer.files) {
-          handleIncomingFiles(e.dataTransfer.files);
-        }
+        if (e.dataTransfer && e.dataTransfer.files) handleIncomingFiles(e.dataTransfer.files);
       });
     }
     if (fileInput) {
       fileInput.addEventListener("change", () => {
-        if (fileInput.files && fileInput.files.length) {
-          handleIncomingFiles(fileInput.files);
-        }
+        if (fileInput.files && fileInput.files.length) handleIncomingFiles(fileInput.files);
       });
     }
 
-    // Step 2: QC controls & Heatmap SVG interaction
+    // Step 2: QC Thresholds & Trim Window controls
+    const orgSel = document.getElementById("qcOrganismPresetSel");
+    if (orgSel) {
+      orgSel.addEventListener("change", () => {
+        const core = getCore();
+        if (!core || orgSel.value === "custom") return;
+        ui.qcThresholds = core.normalizeQcThresholds(orgSel.value, ui.context);
+        recomputeAndRender();
+      });
+    }
+
+    const resetThBtn = document.getElementById("qcResetThresholdsBtn");
+    if (resetThBtn) {
+      resetThBtn.addEventListener("click", () => {
+        const core = getCore();
+        if (!core) return;
+        const pid = (ui.context && ui.context.organismId) ? ui.context.organismId : "default";
+        ui.qcThresholds = core.normalizeQcThresholds(pid, ui.context);
+        ui.trimWindow = { trimStartSec: 0, trimEndSec: null };
+        recomputeAndRender();
+        toast("Reset QC thresholds & trim window");
+      });
+    }
+
+    const readQcInputs = () => {
+      const core = getCore();
+      if (!core) return;
+      const cur = ui.qcThresholds || core.normalizeQcThresholds("default", ui.context);
+      const valNum = (id, fb) => {
+        const el = document.getElementById(id);
+        const v = el ? parseFloat(el.value) : NaN;
+        return Number.isFinite(v) ? v : fb;
+      };
+      ui.qcThresholds = core.normalizeQcThresholds({
+        presetId: cur.presetId,
+        emptyDistMm: Math.max(0, valNum("qcEmptyDistInput", cur.emptyDistMm)),
+        spikeMaxSpeedMmS: Math.max(1, valNum("qcMaxSpeedInput", cur.spikeMaxSpeedMmS)),
+        spikeMinMm: Math.max(1, valNum("qcSpikeMinInput", cur.spikeMinMm)),
+        spikeMadMult: Math.max(1, valNum("qcMadMultInput", cur.spikeMadMult))
+      }, ui.context);
+      const rawTrimEndEl = document.getElementById("qcTrimEndInput");
+      const rawTrimEnd = rawTrimEndEl && rawTrimEndEl.value.trim() !== "" ? parseFloat(rawTrimEndEl.value) : NaN;
+      ui.trimWindow = {
+        trimStartSec: Math.max(0, valNum("qcTrimStartInput", 0)),
+        trimEndSec: Number.isFinite(rawTrimEnd) && rawTrimEnd > 0 ? rawTrimEnd : null
+      };
+      recomputeAndRender();
+    };
+    ["qcEmptyDistInput", "qcMaxSpeedInput", "qcSpikeMinInput", "qcMadMultInput", "qcTrimStartInput", "qcTrimEndInput"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("change", readQcInputs);
+    });
+
+    // Step 2: QC Exclude & Plate Heatmap interaction
     const exclFlagBtn = document.getElementById("excludeFlaggedBtn");
     if (exclFlagBtn) exclFlagBtn.addEventListener("click", excludeAllFlaggedWells);
     const qcExclBtn = document.getElementById("qcExcludeFlaggedBtn");
@@ -3026,26 +4499,24 @@
     const restAllBtn = document.getElementById("restoreAllWellsBtn");
     if (restAllBtn) {
       restAllBtn.addEventListener("click", () => {
-        ui.excludedWells.clear();
+        const run = getActiveRun();
+        if (!run) return;
+        run.excludedWells.clear();
+        run.excludeMeta = {};
         recomputeAndRender();
         toast("Restored all excluded wells");
       });
     }
 
     const plateMetricSel = document.getElementById("plateMetricSel");
-    if (plateMetricSel) {
-      plateMetricSel.addEventListener("change", () => {
-        ui.plateMetric = plateMetricSel.value;
-        renderAllPlateMaps();
-      });
-    }
+    if (plateMetricSel) plateMetricSel.addEventListener("change", () => { ui.plateMetric = plateMetricSel.value; renderAllPlateMaps(); });
 
     const inspBtn = document.getElementById("qcWellInspectorExcludeBtn");
     if (inspBtn) {
       inspBtn.addEventListener("click", () => {
-        if (!ui.selectedWell) return;
-        if (ui.excludedWells.has(ui.selectedWell)) ui.excludedWells.delete(ui.selectedWell);
-        else ui.excludedWells.add(ui.selectedWell);
+        const run = getActiveRun();
+        if (!run || !ui.selectedWell) return;
+        setWellExcluded(run, ui.selectedWell, !run.excludedWells.has(ui.selectedWell), "manual", "manual_exclude");
         recomputeAndRender();
       });
     }
@@ -3060,15 +4531,14 @@
         if (!wellId) return;
         ui.selectedWell = wellId;
         if (e.shiftKey || e.altKey) {
-          if (ui.excludedWells.has(wellId)) ui.excludedWells.delete(wellId);
-          else ui.excludedWells.add(wellId);
+          const run = getActiveRun();
+          if (run) setWellExcluded(run, wellId, !run.excludedWells.has(wellId), "manual", "manual_exclude");
           recomputeAndRender();
         } else {
           renderAllPlateMaps();
           renderWellInspector();
         }
       });
-
       qcSvg.addEventListener("pointermove", (e) => {
         const el = document.elementFromPoint(e.clientX, e.clientY);
         const target = el && el.closest ? el.closest("[data-well]") : null;
@@ -3078,51 +4548,53 @@
         if (wellId) showPlateTooltipInto(tt, stage, wellId, e.clientX, e.clientY);
         else hideTooltip(tt);
       });
-
-      qcSvg.addEventListener("pointerleave", () => {
-        hideTooltip(document.getElementById("qcPlateTooltip"));
-      });
+      qcSvg.addEventListener("pointerleave", () => hideTooltip(document.getElementById("qcPlateTooltip")));
     }
 
     const qcFilterSel = document.getElementById("qcFilterSel");
-    if (qcFilterSel) {
-      qcFilterSel.addEventListener("change", () => { ui.qcFilter = qcFilterSel.value; renderTempAndQcDiagnostics(); });
-    }
+    if (qcFilterSel) qcFilterSel.addEventListener("change", () => { ui.qcFilter = qcFilterSel.value; renderTempAndQcDiagnostics(); });
     const qcSortSel = document.getElementById("qcSortSel");
-    if (qcSortSel) {
-      qcSortSel.addEventListener("change", () => { ui.qcSort = qcSortSel.value; renderTempAndQcDiagnostics(); });
+    if (qcSortSel) qcSortSel.addEventListener("change", () => { ui.qcSort = qcSortSel.value; renderTempAndQcDiagnostics(); });
+
+    // Step 3: Multi-Factor & Group Brush controls
+    const newFactorInp = document.getElementById("newFactorInput");
+    const addFactorBtn = document.getElementById("addFactorBtn");
+    if (addFactorBtn && newFactorInp) {
+      const submitFactor = () => {
+        if (!newFactorInp.value.trim()) return;
+        addFactorLayer(newFactorInp.value.trim());
+        newFactorInp.value = "";
+      };
+      addFactorBtn.addEventListener("click", submitFactor);
+      newFactorInp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitFactor(); } });
     }
 
-    // Step 3: Group Brush controls & Painter SVG interaction
+    const gtBtn = document.getElementById("presetGenoTreatBtn");
+    if (gtBtn) gtBtn.addEventListener("click", () => applyFactorPreset([["genotype", ["WT", "Mutant"]], ["treatment", ["Vehicle", "Drug"]]]));
+    const tdBtn = document.getElementById("presetTreatDoseBtn");
+    if (tdBtn) tdBtn.addEventListener("click", () => applyFactorPreset([["treatment", ["Vehicle", "Drug"]], ["dose", ["Low", "High"]]]));
+    const combBtn = document.getElementById("combineFactorsBtn");
+    if (combBtn) combBtn.addEventListener("click", combineFactorsIntoGroups);
+
     const addGrpBtn = document.getElementById("addGroupBtn");
-    if (addGrpBtn) addGrpBtn.addEventListener("click", addNewGroup);
+    if (addGrpBtn) addGrpBtn.addEventListener("click", addNewGroupOrLevel);
     const delGrpBtn = document.getElementById("deleteGroupBtn");
-    if (delGrpBtn) delGrpBtn.addEventListener("click", deleteActiveGroup);
+    if (delGrpBtn) delGrpBtn.addEventListener("click", deleteActiveGroupOrLevel);
 
     const renameInp = document.getElementById("activeGroupNameInput");
     if (renameInp) {
-      renameInp.addEventListener("change", () => renameActiveGroup(renameInp.value));
+      renameInp.addEventListener("change", () => renameActiveGroupOrLevel(renameInp.value));
       renameInp.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          renameActiveGroup(renameInp.value);
-          renameInp.blur();
-        }
+        if (e.key === "Enter") { e.preventDefault(); renameActiveGroupOrLevel(renameInp.value); renameInp.blur(); }
       });
     }
 
     const exBrushBtn = document.getElementById("brushExcludeBtn");
-    if (exBrushBtn) {
-      exBrushBtn.addEventListener("click", () => {
-        ui.brushTool = ui.brushTool === "exclude" ? "group" : "exclude";
-        renderPlateControls();
-      });
-    }
-
+    if (exBrushBtn) exBrushBtn.addEventListener("click", () => { ui.brushTool = ui.brushTool === "exclude" ? "group" : "exclude"; renderPlateControls(); });
     const rowBtn = document.getElementById("autoAssignRowsBtn");
-    if (rowBtn) rowBtn.addEventListener("click", () => autoAssignGroups("row"));
+    if (rowBtn) rowBtn.addEventListener("click", () => autoAssignGroupsOrLevels("row"));
     const colBtn = document.getElementById("autoAssignColsBtn");
-    if (colBtn) colBtn.addEventListener("click", () => autoAssignGroups("col"));
+    if (colBtn) colBtn.addEventListener("click", () => autoAssignGroupsOrLevels("col"));
 
     const saveMapBtn = document.getElementById("savePlateMapBtn");
     if (saveMapBtn) saveMapBtn.addEventListener("click", savePlateMapJson);
@@ -3134,13 +4606,10 @@
         const f = mapInput.files && mapInput.files[0];
         if (!f) return;
         try {
-          const obj = JSON.parse(await f.text());
-          applyPlateMapObject(obj);
+          applyPlateMapObject(JSON.parse(await f.text()));
           recomputeAndRender();
           toast(`Loaded plate map from ${f.name}`);
-        } catch (err) {
-          toast("Invalid plate map JSON file");
-        }
+        } catch (_) { toast("Invalid plate map JSON file"); }
       });
     }
 
@@ -3157,7 +4626,6 @@
         _paintedInStroke = new Set();
         paintWell(wellId, true);
       });
-
       brushSvg.addEventListener("pointermove", (e) => {
         const el = document.elementFromPoint(e.clientX, e.clientY);
         const target = el && el.closest ? el.closest("[data-well]") : null;
@@ -3168,18 +4636,27 @@
         if (wellId) showPlateTooltipInto(tt, stage, wellId, e.clientX, e.clientY);
         else hideTooltip(tt);
       });
-
-      brushSvg.addEventListener("pointerleave", () => {
-        hideTooltip(document.getElementById("brushPlateTooltip"));
-      });
-
-      window.addEventListener("pointerup", () => {
-        _painting = false;
-        _paintedInStroke.clear();
-      });
+      brushSvg.addEventListener("pointerleave", () => hideTooltip(document.getElementById("brushPlateTooltip")));
+      window.addEventListener("pointerup", () => { _painting = false; _paintedInStroke.clear(); });
     }
 
-    // Step 4: Plot tabs & chart controls
+    // Step 4: Scope, Normalization, Plot Tabs, Window AUC, Screening Stats & Spatial
+    const pooledBtn = document.getElementById("plotScopePooledBtn");
+    const activeBtn = document.getElementById("plotScopeActiveBtn");
+    if (pooledBtn) pooledBtn.addEventListener("click", () => { ui.scope = "pooled"; recomputeAndRender(); });
+    if (activeBtn) activeBtn.addEventListener("click", () => { ui.scope = "active"; recomputeAndRender(); });
+
+    const normChk = document.getElementById("normControlChk");
+    if (normChk) {
+      normChk.addEventListener("change", () => {
+        ui.normalizeToControl = Boolean(normChk.checked);
+        if (ui.normalizeToControl) ui.compView = "normalized_ctrl";
+        recomputeAndRender();
+      });
+    }
+    const normSel = document.getElementById("normControlGroupSel");
+    if (normSel) normSel.addEventListener("change", () => { ui.controlGroupName = normSel.value; recomputeAndRender(); });
+
     document.querySelectorAll("#chartTabsBar [data-chart-tab]").forEach(btn => {
       btn.addEventListener("click", () => {
         ui.activeChartTab = btn.getAttribute("data-chart-tab") || "timeseries";
@@ -3190,49 +4667,72 @@
     });
 
     const tsMetricSel = document.getElementById("tsMetricSel");
-    if (tsMetricSel) {
-      tsMetricSel.addEventListener("change", () => {
-        ui.tsMetric = tsMetricSel.value;
-        recomputeAndRender();
-      });
-    }
+    if (tsMetricSel) tsMetricSel.addEventListener("change", () => { ui.tsMetric = tsMetricSel.value; recomputeAndRender(); });
     const tsSmoothSel = document.getElementById("tsSmoothSel");
-    if (tsSmoothSel) {
-      tsSmoothSel.addEventListener("change", () => {
-        ui.tsBinGroupSize = Math.max(1, parseInt(tsSmoothSel.value, 10) || 1);
+    if (tsSmoothSel) tsSmoothSel.addEventListener("change", () => { ui.tsBinGroupSize = Math.max(1, parseInt(tsSmoothSel.value, 10) || 1); recomputeAndRender(); });
+    const tvSel = document.getElementById("tsTraceViewSel");
+    if (tvSel) tvSel.addEventListener("change", () => { ui.tsTraceView = tvSel.value; renderChartToolbars(); renderTimeSeriesChart(); });
+    const ptSel = document.getElementById("tsPeriTypeSel");
+    if (ptSel) ptSel.addEventListener("change", () => { ui.tsPeriType = ptSel.value; renderTimeSeriesChart(); });
+
+    const readWindowAuc = () => {
+      const sEl = document.getElementById("tsWinStartInput");
+      const eEl = document.getElementById("tsWinEndInput");
+      const s = sEl && sEl.value !== "" ? parseFloat(sEl.value) : NaN;
+      const e = eEl && eEl.value !== "" ? parseFloat(eEl.value) : NaN;
+      if (Number.isFinite(s) && Number.isFinite(e) && e > s) {
+        ui.windowAuc = { startSec: Math.max(0, s), endSec: e };
+      } else {
+        ui.windowAuc = { startSec: null, endSec: null };
+      }
+      recomputeAndRender();
+    };
+    const wsInp = document.getElementById("tsWinStartInput");
+    const weInp = document.getElementById("tsWinEndInput");
+    const wcBtn = document.getElementById("tsWinClearBtn");
+    if (wsInp) wsInp.addEventListener("change", readWindowAuc);
+    if (weInp) weInp.addEventListener("change", readWindowAuc);
+    if (wcBtn) {
+      wcBtn.addEventListener("click", () => {
+        if (wsInp) wsInp.value = "";
+        if (weInp) weInp.value = "";
+        ui.windowAuc = { startSec: null, endSec: null };
         recomputeAndRender();
       });
     }
-    const bindChk = (id, key) => {
+
+    const bindChk = (id, key, fn) => {
       const el = document.getElementById(id);
-      if (el) el.addEventListener("change", () => { ui[key] = Boolean(el.checked); renderTimeSeriesChart(); });
+      if (el) el.addEventListener("change", () => { ui[key] = Boolean(el.checked); fn(); });
     };
-    bindChk("tsShowSem", "tsShowSem");
-    bindChk("tsShowPhases", "tsShowPhases");
-    bindChk("tsShowStim", "tsShowStim");
+    bindChk("tsShowSem", "tsShowSem", renderTimeSeriesChart);
+    bindChk("tsShowPhases", "tsShowPhases", renderTimeSeriesChart);
+    bindChk("tsShowStim", "tsShowStim", renderTimeSeriesChart);
+    bindChk("compShowStatsChk", "compShowStats", renderComparisonChart);
 
     const compSel = document.getElementById("compViewSel");
-    if (compSel) {
-      compSel.addEventListener("change", () => {
-        ui.compView = compSel.value;
-        renderComparisonChart();
+    if (compSel) compSel.addEventListener("change", () => { ui.compView = compSel.value; renderComparisonChart(); });
+
+    const xyFreezeInp = document.getElementById("xyFreezeInput");
+    if (xyFreezeInp) {
+      xyFreezeInp.addEventListener("change", () => {
+        const v = parseFloat(xyFreezeInp.value);
+        ui.xyFreezeSpeedMmS = Number.isFinite(v) && v >= 0.05 ? v : 0.5;
+        recomputeAndRender();
       });
     }
 
     const bindSvgDl = (btnId, svgId, suffix) => {
       const btn = document.getElementById(btnId);
-      if (btn) {
-        btn.addEventListener("click", () => {
-          downloadSvgElement(document.getElementById(svgId), `${getExportBasename()}_${suffix}.svg`);
-        });
-      }
+      if (btn) btn.addEventListener("click", () => downloadSvgElement(document.getElementById(svgId), `${getExportBasename()}_${suffix}.svg`));
     };
     bindSvgDl("downloadTsSvgBtn", "tsChartSvg", "timeseries");
     bindSvgDl("downloadCompSvgBtn", "compChartSvg", "comparison");
     bindSvgDl("downloadTempSvgBtn", "tempChartSvg", "temperature");
     bindSvgDl("downloadZchangeSvgBtn", "zchangeMatrixSvg", "zchange_matrix");
+    bindSvgDl("downloadSpatialSvgBtn", "spatialHeatmapSvg", "spatial_heatmaps");
 
-    // Step 5: Table filters & Export Hub
+    // Step 5: Table filters & v2 Exporters
     const tGrp = document.getElementById("tableGroupFilter");
     if (tGrp) tGrp.addEventListener("change", () => { ui.tableGroupFilter = tGrp.value; renderWellTable(); });
     const tSt = document.getElementById("tableStatusFilter");
@@ -3241,25 +4741,26 @@
     const prismSel = document.getElementById("prismMetricSel");
     if (prismSel) prismSel.addEventListener("change", () => { ui.prismMetric = prismSel.value; });
 
-    const bindExport = (id, fn) => {
-      const btn = document.getElementById(id);
-      if (btn) btn.addEventListener("click", fn);
-    };
+    const bindExport = (id, fn) => { const btn = document.getElementById(id); if (btn) btn.addEventListener("click", fn); };
 
     bindExport("exportTidyBtn", () => {
       const core = getCore();
-      if (!core || !ui.analysis || !ui.summaryParsed) return;
-      const csv = core.buildTidyLongCsv(ui.analysis, ui.summaryParsed, ui.groups, ui.excludedWells);
+      if (!core || !ui.analysis) return;
+      const csv = typeof core.exportTidyLongCsv === "function"
+        ? core.exportTidyLongCsv(buildExportPayload(), { includeBom: true })
+        : core.buildTidyLongCsv(ui.analysis, ui.summaryParsed, ui.groups, ui.excludedWells);
       downloadTextFile(csv, `${getExportBasename()}_tidy_long.csv`, "text/csv;charset=utf-8");
-      toast("Downloaded Tidy Long CSV");
+      toast("Downloaded Tidy Long CSV (UTF-8 BOM)");
     });
 
     bindExport("exportSummaryBtn", () => {
       const core = getCore();
       if (!core || !ui.analysis) return;
-      const csv = core.buildWellSummaryCsv(ui.analysis);
+      const csv = typeof core.exportWellSummaryCsv === "function"
+        ? core.exportWellSummaryCsv(buildExportPayload(), { includeBom: true })
+        : core.buildWellSummaryCsv(ui.analysis);
       downloadTextFile(csv, `${getExportBasename()}_well_summary.csv`, "text/csv;charset=utf-8");
-      toast("Downloaded Well Summary CSV");
+      toast("Downloaded Well Summary CSV (UTF-8 BOM)");
     });
 
     bindExport("exportPrismBtn", triggerPrismExport);
@@ -3267,22 +4768,36 @@
     bindExport("copyPrismBtn", () => {
       const core = getCore();
       if (!core || !ui.analysis) return;
-      const tsv = typeof core.buildPrismGroupedTsv === "function"
-        ? core.buildPrismGroupedTsv(ui.analysis, ui.prismMetric)
-        : core.buildPrismGroupedCsv(ui.analysis, ui.prismMetric, { delimiter: "\t" });
+      const tsv = typeof core.exportPrismGroupedTsv === "function"
+        ? core.exportPrismGroupedTsv(buildExportPayload(), ui.prismMetric)
+        : core.buildPrismGroupedTsv(ui.analysis, ui.prismMetric);
       copyTextToClipboard(tsv).then(() => toast("Copied Prism table to clipboard (tab-separated)"));
+    });
+
+    bindExport("exportCleaningLogBtn", () => {
+      const core = getCore();
+      if (!core || !ui.analysis || typeof core.exportCleaningLogTxt !== "function") return;
+      const txt = core.exportCleaningLogTxt(buildExportPayload());
+      downloadTextFile(txt, `${getExportBasename()}_cleaning_log.txt`, "text/plain;charset=utf-8");
+      toast("Downloaded Methods-ready cleaning_log.txt");
     });
 
     bindExport("exportPythonBtn", () => {
       const core = getCore();
-      if (!core || !ui.analysis || !ui.summaryParsed) return;
-      const py = core.buildPythonTemplate(ui.analysis, ui.summaryParsed);
+      if (!core || !ui.analysis) return;
+      const py = typeof core.exportPythonScript === "function"
+        ? core.exportPythonScript(buildExportPayload())
+        : core.buildPythonTemplate(ui.analysis, ui.summaryParsed);
       downloadTextFile(py, `${getExportBasename()}_analysis.py`, "text/x-python;charset=utf-8");
-      toast("Downloaded Python analysis script (.py)");
+      toast("Downloaded Python verification script (.py)");
     });
   }
 
   function init() {
+    const core = getCore();
+    if (core && typeof core.normalizeQcThresholds === "function") {
+      ui.qcThresholds = core.normalizeQcThresholds("default", null);
+    }
     if (typeof loadInitialPlateConfig === "function") {
       try { loadInitialPlateConfig(); } catch (_) {}
     }
@@ -3298,7 +4813,9 @@
       loadLatestBuilderConfig,
       clearAll: clearAllData,
       goToPage,
-      recomputeAndRender
+      recomputeAndRender,
+      switchActiveRun,
+      buildExportPayload
     };
   }
 

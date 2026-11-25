@@ -1,4 +1,4 @@
-/* Zantiks MWP CSV Analyzer - 5-step wizard matching Script Builder, QC KPIs, plate/maze maps, pure-SVG charts, exports */
+/* Zantiks MWP Data Prep & Analyzer - 5-step wizard, multi-run pooling, QC thresholds, multi-factor plate painter, pure-SVG charts & screening stats */
 
 body.analyzer-body {
   --danger: #cf222e;
@@ -85,7 +85,7 @@ body.analyzer-body {
 .az-select-topbar {
   padding: 7px 30px 7px 12px;
   font-weight: 500;
-  min-width: 148px;
+  min-width: 158px;
 }
 
 .az-select-sm {
@@ -124,7 +124,7 @@ body.analyzer-body {
   border-color: var(--danger);
 }
 
-/* Step 1: Dropzone, Context Row, Overview, Demo Grid */
+/* Step 1: Dropzone, Context Row, Loaded Runs, Overview, Demo 2x2 Grid */
 .az-dropzone {
   display: flex;
   align-items: center;
@@ -151,8 +151,8 @@ body.analyzer-body {
 }
 
 .az-drop-icon {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -185,9 +185,16 @@ body.analyzer-body {
 }
 
 .az-drop-sub {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-muted);
   margin-top: 3px;
+}
+
+.az-drop-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .az-browse-btn {
@@ -195,7 +202,7 @@ body.analyzer-body {
 }
 
 .az-context-row {
-  margin-top: 14px;
+  margin-top: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -304,7 +311,7 @@ body.analyzer-body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 280px;
+  max-width: 260px;
 }
 
 .az-file-chip-meta {
@@ -329,26 +336,126 @@ body.analyzer-body {
   background: var(--danger-soft);
 }
 
+/* Multi-Run List on Step 1 */
+.az-runs-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.az-run-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-muted);
+  background: var(--surface-subtle);
+  transition: border-color 0.12s, background-color 0.12s;
+}
+
+.az-run-item.is-active {
+  border-color: var(--accent);
+  background: #f0f8ff;
+}
+
+.az-run-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.az-run-select-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.az-run-item.is-active .az-run-select-btn {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.az-run-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.az-run-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.az-run-field input[type="text"],
+.az-run-field input[type="date"] {
+  height: 26px;
+  padding: 0 7px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.az-run-field input[type="text"] {
+  width: 118px;
+}
+
+.az-run-field input[type="date"] {
+  width: 132px;
+}
+
+.az-run-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.14);
+}
+
+.az-run-item-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
 /* Loaded Overview Metrics Grid */
 .az-overview-grid {
-  margin-top: 14px;
-  padding-top: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--border-muted);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .az-ov-cell {
   background: var(--surface-subtle);
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  padding: 9px 11px;
   min-width: 0;
 }
 
 .az-ov-label {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -358,7 +465,7 @@ body.analyzer-body {
 .az-ov-val {
   margin-top: 3px;
   font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -375,23 +482,23 @@ body.analyzer-body {
   text-overflow: ellipsis;
 }
 
-/* Step 1 Demo 3-card Grid */
-.az-demo-grid-3 {
+/* Step 1 Demo 2x2 Grid */
+.az-demo-grid-2x2 {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
 .az-demo-card {
   width: 100%;
-  padding: 13px 14px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
 }
 
 .az-demo-card .tile-meta {
-  margin-top: 6px;
+  margin-top: 5px;
   line-height: 1.45;
 }
 
@@ -422,6 +529,70 @@ body.analyzer-body {
   flex-wrap: wrap;
 }
 
+/* Multi-Run Switcher Bar (Steps 2 & 3, shown only when runs.length > 1) */
+.az-run-switcher-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: var(--card-gap);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.az-run-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.az-run-pill-lbl {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.az-run-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.az-run-pill:hover {
+  border-color: #8c959f;
+}
+
+.az-run-pill.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.az-run-pill-meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.az-run-pill.active .az-run-pill-meta {
+  color: var(--accent);
+}
+
 /* Step 2: 4-Card QC KPI Strip */
 .az-kpi-strip-4 {
   display: grid;
@@ -434,7 +605,7 @@ body.analyzer-body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 13px 15px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -511,6 +682,70 @@ body.analyzer-body {
   flex-shrink: 0;
 }
 
+/* Step 2: QC Thresholds & Trim Window Grid */
+.az-qc-thresholds-card {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.az-qc-params-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.az-num-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.az-num-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.az-num-field input[type="number"] {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.az-num-field input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.14);
+}
+
+.az-num-sm {
+  width: 68px;
+  height: 26px;
+  padding: 0 7px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.az-num-sm:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.14);
+}
+
 /* Inline controls & legends */
 .az-inline-control {
   display: inline-flex;
@@ -532,8 +767,8 @@ body.analyzer-body {
   justify-content: space-between;
   gap: 14px 24px;
   flex-wrap: wrap;
-  padding: 10px 14px;
-  margin-bottom: 14px;
+  padding: 9px 14px;
+  margin-bottom: 12px;
   border-radius: var(--radius-sm);
   background: var(--surface-subtle);
   border: 1px solid var(--border-muted);
@@ -605,7 +840,7 @@ body.analyzer-body {
   border: 1px solid #afb8c1;
 }
 
-/* Large Spacious Plate / Maze SVG Containers (Steps 2 & 3) */
+/* Plate / Maze SVG Containers (Steps 2 & 3) */
 .az-plate-svg-wrap {
   position: relative;
   border: 1px solid var(--border-muted);
@@ -629,44 +864,6 @@ body.analyzer-body {
 
 .az-brush-plate-stage .az-plate-svg {
   max-width: 520px;
-}
-
-/* Step 3 side-by-side Plate Painter + Group Manager */
-.az-groups-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--card-gap);
-  align-items: start;
-  margin-bottom: var(--card-gap);
-}
-
-.az-groups-canvas-card,
-.az-groups-panel-card {
-  margin-bottom: 0;
-}
-
-.az-group-manager-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-muted);
-}
-
-.az-brush-section-lbl {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  margin-top: 4px;
-}
-
-.az-brush-io {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .az-well-hit {
@@ -719,24 +916,141 @@ body.analyzer-body {
   text-align: center;
 }
 
-/* Step 3: Group Swatches & Manager */
+/* Step 3: Side-by-Side Plate Painter + Group & Factor Manager */
+.az-groups-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 336px;
+  gap: var(--card-gap);
+  align-items: start;
+  margin-bottom: var(--card-gap);
+}
+
+.az-groups-canvas-card,
+.az-groups-panel-card {
+  margin-bottom: 0;
+}
+
+.az-factor-box {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.az-factor-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.az-factor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.az-factor-pill.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.az-factor-rm {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.az-factor-rm:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+
+.az-factor-add-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.az-factor-input-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.az-factor-input-wrap label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.az-factor-input-wrap input[type="text"] {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.az-factor-input-wrap input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.14);
+}
+
+.az-factor-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.az-combine-btn {
+  width: 100%;
+  justify-content: center;
+}
+
 .az-brush-swatches {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 7px;
+  margin-top: 6px;
+  margin-bottom: 12px;
 }
 
 .az-swatch-btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
   cursor: pointer;
@@ -762,39 +1076,46 @@ body.analyzer-body {
 
 .az-swatch-count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
   color: var(--text-muted);
 }
 
-.az-group-manager-grid {
+.az-group-manager-stack {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px 16px;
-  flex-wrap: wrap;
-  padding-top: 14px;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
   border-top: 1px solid var(--border-muted);
+}
+
+.az-brush-section-lbl {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-top: 4px;
 }
 
 .az-brush-rename {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .az-brush-rename label {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
 }
 
 .az-brush-rename input[type="text"] {
   width: 100%;
-  height: 32px;
-  padding: 0 10px;
-  font-size: 13px;
+  height: 30px;
+  padding: 0 9px;
+  font-size: 12.5px;
   font-family: var(--font-sans);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -814,10 +1135,11 @@ body.analyzer-body {
 }
 
 .az-brush-btns,
-.az-brush-shortcuts {
-  display: inline-flex;
+.az-brush-shortcuts,
+.az-brush-io {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
 }
 
@@ -828,7 +1150,28 @@ body.analyzer-body {
   font-weight: 600;
 }
 
-/* Step 4: Spacious 3-Tab Pure-SVG Charting Studio */
+/* Step 4: Scope & Batch Normalization Bar */
+.az-scope-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.az-scope-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Step 4: Spacious 4-Tab Pure-SVG Charting Studio */
 .az-charts-panel {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -840,13 +1183,13 @@ body.analyzer-body {
 
 .az-chart-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   background: #f3f5f8;
   border-bottom: 1px solid var(--border);
 }
 
 .az-chart-tab {
-  padding: 13px 18px;
+  padding: 12px 15px;
   border: none;
   border-right: 1px solid var(--border-muted);
   border-bottom: 2px solid transparent;
@@ -873,7 +1216,7 @@ body.analyzer-body {
 
 .az-tab-kicker {
   display: block;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -886,8 +1229,8 @@ body.analyzer-body {
 
 .az-tab-name {
   display: block;
-  margin-top: 3px;
-  font-size: 13.5px;
+  margin-top: 2px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -897,7 +1240,7 @@ body.analyzer-body {
 
 .az-tab-pane {
   display: none;
-  padding: 18px 22px 22px;
+  padding: 16px 20px 20px;
 }
 
 .az-tab-pane.active {
@@ -910,7 +1253,39 @@ body.analyzer-body {
   justify-content: space-between;
   gap: 10px 14px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+}
+
+.az-sub-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 7px 11px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-muted);
+}
+
+.az-auc-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.az-auc-lbl {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.az-auc-sublbl {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .az-toolbar-left,
@@ -955,7 +1330,7 @@ body.analyzer-body {
   gap: 8px 16px;
   flex-wrap: wrap;
   min-height: 24px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   font-size: 12.5px;
 }
 
@@ -1023,7 +1398,7 @@ body.analyzer-body {
   font-size: 11.5px;
   line-height: 1.45;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.22);
-  max-width: 260px;
+  max-width: 280px;
   white-space: nowrap;
 }
 
@@ -1055,16 +1430,16 @@ body.analyzer-body {
   font-weight: 600;
 }
 
-/* Comparison Summary Cards */
+/* Comparison & Spatial Summary Cards */
 .az-comp-summary {
-  margin-top: 14px;
+  margin-top: 12px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 10px;
 }
 
 .az-stat-mini {
-  padding: 11px 13px;
+  padding: 10px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-muted);
   background: var(--surface-subtle);
@@ -1082,20 +1457,106 @@ body.analyzer-body {
 .az-stat-mini-val {
   margin-top: 4px;
   font-family: var(--font-mono);
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text);
 }
 
 .az-stat-mini-sub {
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-muted);
 }
 
-/* Zone Events (_ZCHANGE) Tab */
+/* Quick Screening Statistics Panel */
+.az-stats-panel {
+  margin-top: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  padding: 12px 14px;
+}
+
+.az-stats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.az-stats-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.az-stats-omnibus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.az-stats-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.az-stats-chip code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.az-sig-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #eaeef2;
+  color: var(--text-muted);
+}
+
+.az-sig-pill.is-sig {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.az-stats-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  margin-bottom: 8px;
+}
+
+.az-stats-disclaimer {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.az-stats-disclaimer code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--accent);
+}
+
+/* Zone Events (_ZCHANGE) & Spatial (_XY) Empty / Layout */
 .az-zchange-empty {
-  padding: 40px 24px;
+  padding: 38px 24px;
   text-align: center;
   background: var(--surface-subtle);
   border: 1px dashed var(--border);
@@ -1157,7 +1618,7 @@ body.analyzer-body {
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-sm);
   background: var(--surface-subtle);
-  padding: 16px 18px;
+  padding: 15px 17px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1172,9 +1633,15 @@ body.analyzer-body {
 
 .az-export-panel-desc {
   margin: -6px 0 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.45;
+}
+
+.az-export-panel-desc code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent);
 }
 
 .az-export-panel-controls {
@@ -1216,7 +1683,7 @@ body.analyzer-body {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-muted);
-  padding: 9px 11px;
+  padding: 9px 10px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
@@ -1232,7 +1699,7 @@ body.analyzer-body {
 }
 
 .az-table td {
-  padding: 8px 11px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--border-muted);
   vertical-align: middle;
   color: var(--text);
@@ -1265,6 +1732,16 @@ body.analyzer-body {
 .az-well-id-cell {
   font-family: var(--font-mono);
   font-weight: 700;
+}
+
+.az-reason-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-muted);
+  color: var(--text-muted);
 }
 
 .az-group-tag {
@@ -1353,6 +1830,10 @@ body.analyzer-body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .az-qc-params-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .az-export-hub-grid,
   .az-groups-split {
     grid-template-columns: 1fr;
@@ -1360,11 +1841,15 @@ body.analyzer-body {
 }
 
 @media (max-width: 780px) {
-  .az-demo-grid-3,
+  .az-demo-grid-2x2,
   .az-zchange-viz-grid,
   .az-zchange-kpis,
   .az-chart-tabs {
     grid-template-columns: 1fr;
+  }
+
+  .az-qc-params-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .az-dropzone {
