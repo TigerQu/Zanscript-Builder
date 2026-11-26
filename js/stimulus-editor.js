@@ -382,6 +382,7 @@ function renderStimParams() {
               <option value="opto_strobe">Preset: Opto Strobe (10 Hz)</option>
               <option value="rgb_overlap">Preset: RGB Overlap</option>
               <option value="sequential">Preset: Seq Sweep</option>
+              <option value="run_through">Preset: Full Hardware Run-Through (All 13 Tracks)</option>
             </select>
             <div class="nle-toolbar-right">
               <button type="button" class="btn btn-xs${state.showUnderTracks ? " btn-toggle-active" : ""}" id="nleToggleUnderBtn">Bottom LEDs (Ch 8-13)</button>
@@ -1480,6 +1481,60 @@ function renderStimParams() {
           { id: ++_nextClipId, track: "GREEN", startSec: 75,  endSec: 105, val: 100 },
           { id: ++_nextClipId, track: "RED",   startSec: 130, endSec: 160, val: 100 }
         ];
+      } else if (pType === "run_through") {
+        state.showUnderTracks = true;
+        const warmT = Math.min(40, Number((baseT + 2).toFixed(1)));
+        state.timelineClips = [
+          // 0-10s: IR Dark baseline (no visible LEDs)
+          // Top LEDs (Ch 0, 1, 3, 4, 5) — curves, steady channels & strobes
+          { id: ++_nextClipId, track: "WHITE",   startSec: 10,  endSec: 30,  val: 0, endVal: 100, curve: "gamma", rampSteps: 8 },
+          { id: ++_nextClipId, track: "BLUE",    startSec: 30,  endSec: 40,  val: 100 },
+          { id: ++_nextClipId, track: "GREEN",   startSec: 40,  endSec: 50,  val: 100 },
+          { id: ++_nextClipId, track: "RED",     startSec: 50,  endSec: 60,  val: 100 },
+          { id: ++_nextClipId, track: "UV",      startSec: 60,  endSec: 70,  val: 100 },
+          // Bottom LEDs (Ch 8, 9, 11, 12, 13) — sine curve & steady channels
+          { id: ++_nextClipId, track: "U_WHITE", startSec: 70,  endSec: 85,  val: 5, endVal: 100, curve: "sine", rampSteps: 6 },
+          { id: ++_nextClipId, track: "U_BLUE",  startSec: 85,  endSec: 95,  val: 100 },
+          { id: ++_nextClipId, track: "U_GREEN", startSec: 95,  endSec: 105, val: 100 },
+          { id: ++_nextClipId, track: "U_RED",   startSec: 105, endSec: 115, val: 100 },
+          { id: ++_nextClipId, track: "U_UV",    startSec: 115, endSec: 125, val: 100 },
+          // 125-140s: Mixed-frequency strobe (BLUE 2 Hz + RED 10 Hz) over steady U_WHITE 35%
+          { id: ++_nextClipId, track: "BLUE",    startSec: 125, endSec: 140, val: 100, strobeHz: 2 },
+          { id: ++_nextClipId, track: "RED",     startSec: 125, endSec: 140, val: 100, strobeHz: 10 },
+          { id: ++_nextClipId, track: "U_WHITE", startSec: 125, endSec: 140, val: 35 },
+          // 140-152s: GREEN 5 Hz strobe + all 4 stepper vibration levels (U3 -> U2 -> U1 -> U0)
+          { id: ++_nextClipId, track: "GREEN",   startSec: 140, endSec: 152, val: 100, strobeHz: 5 },
+          { id: ++_nextClipId, track: "VIB",     startSec: 140, endSec: 143, val: 3 },
+          { id: ++_nextClipId, track: "VIB",     startSec: 143, endSec: 146, val: 2 },
+          { id: ++_nextClipId, track: "VIB",     startSec: 146, endSec: 149, val: 1 },
+          { id: ++_nextClipId, track: "VIB",     startSec: 149, endSec: 152, val: 0 },
+          // 152-164s: Custom keyframe WHITE envelope + both AUDIO modes ("tone" & "mono")
+          {
+            id: ++_nextClipId, track: "WHITE", startSec: 152, endSec: 164, val: 0, endVal: 0,
+            curve: "custom", rampSteps: 6,
+            keyframes: [
+              { t: 0,    y: 0 },
+              { t: 0.25, y: 100 },
+              { t: 0.55, y: 20 },
+              { t: 0.8,  y: 80 },
+              { t: 1,    y: 0 }
+            ]
+          },
+          { id: ++_nextClipId, track: "AUDIO",   startSec: 152, endSec: 158, val: "tone" },
+          { id: ++_nextClipId, track: "AUDIO",   startSec: 158, endSec: 164, val: "mono" },
+          // 164-180s: Combined finale (WHITE 50% + U_WHITE 50% + repeating VIB U1 q4s + repeating AUDIO tone q8s)
+          { id: ++_nextClipId, track: "WHITE",   startSec: 164, endSec: 180, val: 50 },
+          { id: ++_nextClipId, track: "U_WHITE", startSec: 164, endSec: 180, val: 50 },
+          { id: ++_nextClipId, track: "VIB",     startSec: 164, endSec: 180, val: 1, repeatSec: 4 },
+          { id: ++_nextClipId, track: "AUDIO",   startSec: 164, endSec: 180, val: "tone", repeatSec: 8 },
+          // Continuous thermostat profile: baseline -> +2 C step -> restore baseline
+          { id: ++_nextClipId, track: "TEMP",    startSec: 0,   endSec: 90,  val: baseT },
+          { id: ++_nextClipId, track: "TEMP",    startSec: 90,  endSec: 160, val: warmT },
+          { id: ++_nextClipId, track: "TEMP",    startSec: 160, endSec: 180, val: baseT }
+        ];
+        if (typeof showToast === "function") {
+          showToast("Loaded 180s Full Hardware Run-Through (all 10 LEDs, curves, 2/5/10 Hz strobes, U0–U3 vib, audio & temp)");
+        }
       } else {
         return;
       }

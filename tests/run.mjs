@@ -1322,6 +1322,116 @@ try {
       await page.close();
     }
 
+    // 6p. Full Hardware Run-Through (All 13 Tracks) preset
+    {
+      const { page, errors } = await openFreshPage("#stimulus");
+      const rtCheck = await page.evaluate(() => {
+        // Choose 24well & multi_phase, then trigger #nlePresetSel = "run_through"
+        state.plateId = "24well";
+        state.stimId = "multi_phase";
+        renderStimGrid();
+        renderStimParams();
+        const presetSel = document.getElementById("nlePresetSel");
+        presetSel.value = "run_through";
+        presetSel.dispatchEvent(new Event("change"));
+
+        const clips = state.timelineClips;
+        const tracks = new Set(clips.map((c) => c.track));
+        // Verify zero same-track overlaps
+        let overlapCount = 0;
+        for (const tr of tracks) {
+          const list = clips.filter((c) => c.track === tr).sort((a, b) => a.startSec - b.startSec);
+          for (let i = 1; i < list.length; i++) {
+            if (list[i].startSec < list[i - 1].endSec) overlapCount++;
+          }
+        }
+
+        const code = refreshAll._latestBundle[4].code;
+        const actionCount = (code.match(/^ACTION /gm) || []).length;
+        const completeCount = (code.match(/^COMPLETE$/gm) || []).length;
+
+        // Check all 10 visible Z3 X_LED_DRIVE channels driven > 0, and IR Ch 2 / Ch 10 untouched
+        const visChs = [0, 1, 3, 4, 5, 8, 9, 11, 12, 13];
+        const all10LedChannelsDriven = visChs.every((ch) => new RegExp(`SET\\(X_LED_DRIVE,${ch},[1-9]\\d*\\)`).test(code));
+        const irUntouched = !/SET\(X_LED_DRIVE,(?:2|10),/.test(code);
+        const all4PortGates = ["LIGHT13", "LIGHT14", "LIGHT15", "LIGHT16"].every(
+          (g) => code.includes(`LIGHTS(${g},ON)`) && code.includes(`LIGHTS(${g},OFF)`)
+        );
+
+        // Strobes, stepper levels U0-U3, audio tone/mono, thermostat step + restore
+        const hasMixedAnd5HzStrobes = code.includes("2_10HZ") && code.includes("5HZ");
+        const hasAll4VibLevels = ["U0", "U1", "U2", "U3"].every((u) => code.includes(`ZCOMMAND("${u} `));
+        const hasBothAudio = code.includes('LOAD(AUDIO_FILE,"tone")') && code.includes('LOAD(AUDIO_FILE,"mono")');
+        const baseT = parseFloat(document.getElementById("thermostatTemp").value) || 22;
+        const warmT = Math.min(40, Number((baseT + 2).toFixed(1)));
+        const tempMatches = [...code.matchAll(/SET\(THERMOSTAT,([0-9.]+)\)/g)].map((m) => parseFloat(m[1]));
+        const hasTempStepAndRestore = tempMatches.includes(baseT) && tempMatches.includes(warmT) &&
+          tempMatches.lastIndexOf(baseT) > tempMatches.indexOf(warmT);
+
+        // Every trigger inside SAMPLE_S* occurs strictly after DATA_SNAPSHOT("begin") and before "end"; zero triggers in RUN_S*
+        const runBlocks = code.split(/^ACTION RUN_S/gm).slice(1).map((b) => b.split("\nCOMPLETE")[0]);
+        const noRunTriggers = runBlocks.every((b) => !b.includes("ZCOMMAND(") && !b.includes("LOAD(AUDIO_FILE,"));
+        const sampleBlocks = code.split(/^ACTION SAMPLE_S/gm).slice(1).map((b) => b.split("\nCOMPLETE")[0]);
+        const triggerBlocks = sampleBlocks.filter((b) => b.includes("ZCOMMAND(") || b.includes("LOAD(AUDIO_FILE,"));
+        const allTriggersAfterBegin = triggerBlocks.length >= 6 && triggerBlocks.every((b) => {
+          const beg = b.indexOf('LOGDATA(DATA_SNAPSHOT,"begin")');
+          const end = b.indexOf('LOGDATA(DATA_SNAPSHOT,"end")');
+          const idxs = [...b.matchAll(/(?:ZCOMMAND\(|LOAD\(AUDIO_FILE,)/g)].map((m) => m.index);
+          return beg >= 0 && end > beg && idxs.every((i) => i > beg && i < end);
+        });
+
+        // Simulate Sequence Preview across the entire 180s timeline cleanly
+        const cfg = readConfig();
+        const tOffset = (parseFloat(cfg.sp?.acclimSec) || 0) + (parseFloat(cfg.autorefTimeout) || 0);
+        const probeSecs = [5, 25, 35, 65, 78, 90, 120, 125.02, 140.2, 149.2, 152.2, 155, 158.2, 164.2, 179];
+        const simResults = probeSecs.map((sec) => {
+          setSimulatorTime(tOffset + sec);
+          return sampleAssayStateAtTime(cfg, tOffset + sec);
+        });
+        const simOk =
+          simResults.every((r) => r && r.phaseName) &&
+          Object.values(simResults[0].topChannels).every((v) => v === 0) && // 5s IR Dark
+          simResults[1].topChannels.WHITE > 0 &&                           // 25s Gamma WHITE
+          simResults[3].topChannels.UV === 100 &&                          // 65s Top UV
+          simResults[4].bottomChannels.WHITE > 0 &&                        // 78s Sine U_WHITE
+          simResults[6].bottomChannels.UV === 100 &&                       // 120s Bot UV
+          simResults[7].topChannels.BLUE === 100 && simResults[7].topChannels.RED === 100 && simResults[7].bottomChannels.WHITE === 35 && // 125.02s mixed strobe
+          simResults[8].vibration === "U3" &&                              // 140.2s U3 onset
+          simResults[9].vibration === "U0" &&                              // 149.2s U0 onset
+          simResults[10].audio === "tone" &&                               // 152.2s AUDIO tone onset
+          simResults[11].topChannels.WHITE === 100 &&                      // 155s custom WHITE 100% peak (t=0.25)
+          simResults[12].audio === "mono" &&                               // 158.2s AUDIO mono onset
+          simResults[13].topChannels.WHITE === 50 && simResults[13].bottomChannels.WHITE === 50; // 164.2s finale
+
+        // Round-trip save & reopen preserves all 28 clips
+        const saved = buildExperimentPayload();
+        applyExperimentData(saved);
+        const roundTripOk = state.timelineClips.length === 28 &&
+          JSON.stringify(buildExperimentPayload().experiment) === JSON.stringify(saved.experiment);
+
+        return {
+          all13Tracks: tracks.size === 13 && clips.length === 28 && overlapCount === 0,
+          underShownAndPlatePreserved: state.showUnderTracks === true && state.plateId === "24well" && state.stimParams.mpTimelineSec === 180,
+          balancedActions: actionCount > 20 && actionCount === completeCount,
+          all10LedChannelsDriven,
+          irUntouched,
+          all4PortGates,
+          hasMixedAnd5HzStrobes,
+          hasAll4VibLevels,
+          hasBothAudio,
+          hasTempStepAndRestore,
+          noRunTriggers,
+          allTriggersAfterBegin,
+          simOk,
+          roundTripOk
+        };
+      });
+      const ok = errors.length === 0 && Object.values(rtCheck).every(Boolean);
+      report(ok, "Full Hardware Run-Through preset populates all 13 tracks without overlaps, drives all 10 LEDs/strobes/U0-U3/audio/temp & simulates cleanly",
+        ok ? "" : JSON.stringify({ errors, rtCheck }));
+      await page.close();
+    }
+
     // ---------------------------------------------------------------- 7. CSV Analyzer companion page
     const analyzerUrl = pathToFileURL(path.join(root, "zantiks_csv_analyzer.html")).href;
 
