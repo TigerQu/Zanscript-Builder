@@ -1048,22 +1048,22 @@ function generateStep4(cfg) {
       `DEFINE ITI_BINS ${itiBins}`
     );
     if (strobeHz > 0) {
+      const periodSec = Number((1 / strobeHz).toFixed(3));
       const strobeHalfSec = Number((0.5 / strobeHz).toFixed(3));
       if (subBinPulse) {
-        const strobeCycles = Math.max(1, Math.round(pulseDur * strobeHz));
-        const actualBurstSec = Number((strobeCycles * 2 * strobeHalfSec).toFixed(3));
-        const remWait = Math.max(0, Number((bin - actualBurstSec).toFixed(3)));
+        const fullCycles = Math.floor((pulseDur + 1e-9) / periodSec);
+        const remWait = Math.max(0, Number((bin - pulseDur).toFixed(3)));
         topDefines.push(
           `DEFINE STROBE_HALF_SEC ${strobeHalfSec}  # ${strobeHz} Hz strobe (50% duty)`,
-          `DEFINE STROBE_CYCLES ${strobeCycles}`,
+          ...(fullCycles > 0 ? [`DEFINE STROBE_CYCLES ${fullCycles}`] : []),
           `DEFINE POST_PULSE_WAIT ${remWait}`
         );
       } else {
-        const strobeCyclesPerBin = Math.max(1, Math.round(bin * strobeHz));
+        const fullCyclesPerBin = Math.floor((bin + 1e-9) / periodSec);
         topDefines.push(
           `DEFINE PULSE_BINS ${pulseBins}`,
           `DEFINE STROBE_HALF_SEC ${strobeHalfSec}  # ${strobeHz} Hz strobe (50% duty)`,
-          `DEFINE STROBE_CYCLES_PER_BIN ${strobeCyclesPerBin}`
+          ...(fullCyclesPerBin > 0 ? [`DEFINE STROBE_CYCLES_PER_BIN ${fullCyclesPerBin}`] : [])
         );
       }
     } else if (subBinPulse) {
@@ -1092,6 +1092,25 @@ function generateStep4(cfg) {
     mainSchedule.push("    INVOKE(FLASH_TRIAL,NUM_PULSES)");
 
     if (strobeHz > 0) {
+      const periodSec = Number((1 / strobeHz).toFixed(3));
+      const strobeHalfSec = Number((0.5 / strobeHz).toFixed(3));
+      const buildPartialStrobeLines = (remSec) => {
+        if (remSec < 0.001) return [];
+        if (remSec <= strobeHalfSec + 1e-9) {
+          return [
+            "    INVOKE(LIGHTS_ON,1)",
+            `    WAIT(${remSec})`,
+            "    INVOKE(LIGHTS_OFF,1)"
+          ];
+        }
+        const remOff = Number((remSec - strobeHalfSec).toFixed(3));
+        return [
+          "    INVOKE(LIGHTS_ON,1)",
+          "    WAIT(STROBE_HALF_SEC)",
+          "    INVOKE(LIGHTS_OFF,1)",
+          ...(remOff >= 0.001 ? [`    WAIT(${remOff})`] : [])
+        ];
+      };
       const strobeCycleAction = [
         "ACTION STROBE_CYCLE",
         "",
@@ -1104,9 +1123,10 @@ function generateStep4(cfg) {
       ].join("\n");
 
       if (subBinPulse) {
-        const strobeCycles = Math.max(1, Math.round(pulseDur * strobeHz));
-        const strobeHalfSec = Number((0.5 / strobeHz).toFixed(3));
-        const remWait = Math.max(0, Number((bin - strobeCycles * 2 * strobeHalfSec).toFixed(3)));
+        const fullCycles = Math.floor((pulseDur + 1e-9) / periodSec);
+        const remPulseSec = Number((pulseDur - fullCycles * periodSec).toFixed(3));
+        const remWait = Math.max(0, Number((bin - pulseDur).toFixed(3)));
+        const remPulseLines = buildPartialStrobeLines(remPulseSec);
         extraActions.push(
           [
             "ACTION FLASH_TRIAL",
@@ -1123,7 +1143,8 @@ function generateStep4(cfg) {
             "    SET(COUNTER1,COUNTER_INC)",
             '    LOGDATA(DATA_SNAPSHOT,"begin")',
             `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(activeLightTag + " " + strobeHz + "HZ")}")`,
-            "    INVOKE(STROBE_CYCLE,STROBE_CYCLES)",
+            ...(fullCycles > 0 ? ["    INVOKE(STROBE_CYCLE,STROBE_CYCLES)"] : []),
+            ...remPulseLines,
             ...(remWait > 0 ? ["    WAIT(POST_PULSE_WAIT)"] : []),
             '    LOGDATA(DATA_SNAPSHOT,"end")',
             '    LOGDATA(DATA_SELECT,"begin")',
@@ -1137,9 +1158,12 @@ function generateStep4(cfg) {
             "",
             "COMPLETE"
           ].join("\n"),
-          strobeCycleAction
+          ...(fullCycles > 0 ? [strobeCycleAction] : [])
         );
       } else {
+        const fullCyclesPerBin = Math.floor((bin + 1e-9) / periodSec);
+        const remBinSec = Number((bin - fullCyclesPerBin * periodSec).toFixed(3));
+        const remBinLines = buildPartialStrobeLines(remBinSec);
         extraActions.push(
           [
             "ACTION FLASH_TRIAL",
@@ -1157,7 +1181,8 @@ function generateStep4(cfg) {
             "",
             "    SET(COUNTER1,COUNTER_INC)",
             '    LOGDATA(DATA_SNAPSHOT,"begin")',
-            "    INVOKE(STROBE_CYCLE,STROBE_CYCLES_PER_BIN)",
+            ...(fullCyclesPerBin > 0 ? ["    INVOKE(STROBE_CYCLE,STROBE_CYCLES_PER_BIN)"] : []),
+            ...remBinLines,
             '    LOGDATA(DATA_SNAPSHOT,"end")',
             '    LOGDATA(DATA_SELECT,"begin")',
             '    LOGDATA(DATA_DELTA,"end")',
@@ -1170,7 +1195,7 @@ function generateStep4(cfg) {
             "",
             "COMPLETE"
           ].join("\n"),
-          strobeCycleAction
+          ...(fullCyclesPerBin > 0 ? [strobeCycleAction] : [])
         );
       }
     } else if (subBinPulse) {
@@ -1683,20 +1708,88 @@ function generateStep4(cfg) {
     const comp = compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp);
     const bin = comp.bin;
 
+    const gcdInt = (a, b) => (b === 0 ? a : gcdInt(b, a % b));
+    const lcmInt = (a, b) => (a && b ? Math.round((a / gcdInt(a, b)) * b) : 0);
+    const getStrobeSchedule = (sl) => {
+      const hzList = (sl.strobeHzList && sl.strobeHzList.length)
+        ? sl.strobeHzList
+        : (sl.strobeHz > 0 ? [sl.strobeHz] : []);
+      if (hzList.length === 0) return null;
+      const periodMs = hzList.reduce((acc, f) => lcmInt(acc, Math.round(1000 / f)), 1);
+      const periodSec = Number((periodMs / 1000).toFixed(3));
+      const fullCycles = Math.floor((bin + 1e-9) / periodSec);
+      const remSec = Number((bin - fullCycles * periodSec).toFixed(3));
+      return {
+        hzList,
+        isMultiFreq: hzList.length > 1,
+        periodMs,
+        periodSec,
+        halfSec: hzList.length === 1 ? Number((0.5 / hzList[0]).toFixed(3)) : null,
+        fullCycles,
+        remSec: remSec >= 0.001 ? remSec : 0
+      };
+    };
+    const buildStrobeIntervalLines = (sl, hzList, spanSec, manageBot, endSteadyTop, endSteadyBot, ensureSteadyEnd) => {
+      const spanMs = Math.round(spanSec * 1000);
+      if (spanMs <= 0) return [];
+      const edgeSet = new Set([0, spanMs]);
+      for (const f of hzList) {
+        const halfMs = Math.round(500 / f);
+        for (let tMs = halfMs; tMs < spanMs; tMs += halfMs) edgeSet.add(tMs);
+      }
+      const edges = [...edgeSet].sort((a, b) => a - b);
+      const segs = [];
+      for (let i = 0; i < edges.length - 1; i++) {
+        const durMs = edges[i + 1] - edges[i];
+        if (durMs <= 0) continue;
+        const midMs = (edges[i] + edges[i + 1]) / 2;
+        const isLit = (l) => (!l.strobeHz || (Math.floor((midMs + 1e-9) / Math.round(500 / l.strobeHz)) % 2 === 0));
+        const top = sl.topLights.filter(isLit);
+        const bot = sl.bottomLights.filter(isLit);
+        const lightLines = buildSliceLightLines(cfg, top, bot, manageBot);
+        const key = lightLines.join("\n");
+        const prev = segs[segs.length - 1];
+        if (prev && prev.key === key) {
+          prev.durMs += durMs;
+        } else {
+          segs.push({ key, lightLines, durMs });
+        }
+      }
+      const out = [];
+      for (const seg of segs) {
+        const dtSec = Number((seg.durMs / 1000).toFixed(3));
+        out.push(...seg.lightLines, `    WAIT(${dtSec})`);
+      }
+      if (ensureSteadyEnd && segs.length > 0) {
+        const steadyLines = buildSliceLightLines(cfg, endSteadyTop, endSteadyBot, manageBot);
+        if (segs[segs.length - 1].key !== steadyLines.join("\n")) {
+          out.push(...steadyLines);
+        }
+      }
+      return out;
+    };
+
     topDefines.push(
       `DEFINE ACCLIMATION_SEC ${acclim}`,
       `DEFINE TIME_BIN ${bin}`,
       `DEFINE NUM_CYCLES ${cycles}`
     );
+    const sliceStrobeSchedules = new Map();
     for (const sl of comp.slices) {
       topDefines.push(`DEFINE S${sl.idx}_BINS ${sl.bins}  # ${sl.startSec}s-${sl.endSec}s (${sl.csvTag})`);
-      if (sl.strobeHz > 0) {
-        const halfSec = Number((0.5 / sl.strobeHz).toFixed(3));
-        const cyclesPerBin = Math.max(1, Math.round(bin * sl.strobeHz));
-        topDefines.push(
-          `DEFINE S${sl.idx}_STROBE_HALF ${halfSec}  # ${sl.strobeHz} Hz strobe`,
-          `DEFINE S${sl.idx}_STROBE_CYCLES ${cyclesPerBin}`
-        );
+      const sched = getStrobeSchedule(sl);
+      if (sched) {
+        sliceStrobeSchedules.set(sl.idx, sched);
+        if (!sched.isMultiFreq) {
+          topDefines.push(`DEFINE S${sl.idx}_STROBE_HALF ${sched.halfSec}  # ${sched.hzList[0]} Hz strobe`);
+          if (sched.fullCycles > 0) {
+            topDefines.push(`DEFINE S${sl.idx}_STROBE_CYCLES ${sched.fullCycles}`);
+          }
+        } else if (sched.fullCycles > 0) {
+          topDefines.push(
+            `DEFINE S${sl.idx}_STROBE_CYCLES ${sched.fullCycles}  # ${sched.hzList.join("+")} Hz multi-strobe (${sched.periodSec}s LCM period)`
+          );
+        }
       }
     }
 
@@ -1738,9 +1831,17 @@ function generateStep4(cfg) {
     extraActions.push(seqLines.join("\n"));
 
     for (const sl of comp.slices) {
-      const isStrobeSlice = sl.strobeHz > 0;
+      const sched = sliceStrobeSchedules.get(sl.idx) || null;
+      const isStrobeSlice = Boolean(sched);
       const steadyTop = isStrobeSlice ? sl.topLights.filter(l => !l.strobeHz) : sl.topLights;
       const steadyBot = isStrobeSlice ? sl.bottomLights.filter(l => !l.strobeHz) : sl.bottomLights;
+      const triggerLines = [];
+      if (sl.vibTrigger) {
+        triggerLines.push(`    ZCOMMAND("${sl.vibCode} D1000 M1 M-1 M1 M-1 M1 M-1 M1 M-1 M1 M-1")`);
+      }
+      if (sl.audioTrigger) {
+        triggerLines.push(`    LOAD(AUDIO_FILE,"${sl.audioFile}")`);
+      }
       const runLines = [
         `ACTION RUN_S${sl.idx}`,
         "",
@@ -1748,12 +1849,6 @@ function generateStep4(cfg) {
       ];
       if (sl.effectiveTemp !== null) {
         runLines.push(`    SET(THERMOSTAT,${sl.effectiveTemp})`);
-      }
-      if (sl.vibTrigger) {
-        runLines.push(`    ZCOMMAND("${sl.vibCode} D1000 M1 M-1 M1 M-1 M1 M-1 M1 M-1 M1 M-1")`);
-      }
-      if (sl.audioTrigger) {
-        runLines.push(`    LOAD(AUDIO_FILE,"${sl.audioFile}")`);
       }
       runLines.push(
         `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(sl.overlayText)}")`,
@@ -1763,12 +1858,17 @@ function generateStep4(cfg) {
       );
 
       if (isStrobeSlice) {
+        const remLines = sched.remSec >= 0.001
+          ? buildStrobeIntervalLines(sl, sched.hzList, sched.remSec, manageBottom, steadyTop, steadyBot, true)
+          : [];
         const sampleStrobeAction = [
           `ACTION SAMPLE_S${sl.idx}`,
           "",
           "    SET(COUNTER1,COUNTER_INC)",
           '    LOGDATA(DATA_SNAPSHOT,"begin")',
-          `    INVOKE(STROBE_S${sl.idx},S${sl.idx}_STROBE_CYCLES)`,
+          ...triggerLines,
+          ...(sched.fullCycles > 0 ? [`    INVOKE(STROBE_S${sl.idx},S${sl.idx}_STROBE_CYCLES)`] : []),
+          ...remLines,
           '    LOGDATA(DATA_SNAPSHOT,"end")',
           '    LOGDATA(DATA_SELECT,"begin")',
           '    LOGDATA(DATA_DELTA,"end")',
@@ -1781,17 +1881,47 @@ function generateStep4(cfg) {
           "",
           "COMPLETE"
         ].join("\n");
-        const strobeHelperAction = [
-          `ACTION STROBE_S${sl.idx}`,
+        const actionsToPush = [runLines.join("\n"), sampleStrobeAction];
+        if (sched.fullCycles > 0) {
+          const strobeBody = !sched.isMultiFreq
+            ? [
+                ...buildSliceLightLines(cfg, sl.topLights, sl.bottomLights, manageBottom),
+                `    WAIT(S${sl.idx}_STROBE_HALF)`,
+                ...buildSliceLightLines(cfg, steadyTop, steadyBot, manageBottom),
+                `    WAIT(S${sl.idx}_STROBE_HALF)`
+              ]
+            : buildStrobeIntervalLines(sl, sched.hzList, sched.periodSec, manageBottom, steadyTop, steadyBot, false);
+          const strobeHelperAction = [
+            `ACTION STROBE_S${sl.idx}`,
+            "",
+            ...strobeBody,
+            "",
+            "COMPLETE"
+          ].join("\n");
+          actionsToPush.push(strobeHelperAction);
+        }
+        extraActions.push(...actionsToPush);
+      } else if (triggerLines.length > 0) {
+        const sampleTriggerAction = [
+          `ACTION SAMPLE_S${sl.idx}`,
           "",
-          ...buildSliceLightLines(cfg, sl.topLights, sl.bottomLights, manageBottom),
-          `    WAIT(S${sl.idx}_STROBE_HALF)`,
-          ...buildSliceLightLines(cfg, steadyTop, steadyBot, manageBottom),
-          `    WAIT(S${sl.idx}_STROBE_HALF)`,
+          "    SET(COUNTER1,COUNTER_INC)",
+          '    LOGDATA(DATA_SNAPSHOT,"begin")',
+          ...triggerLines,
+          "    WAIT(TIME_BIN)",
+          '    LOGDATA(DATA_SNAPSHOT,"end")',
+          '    LOGDATA(DATA_SELECT,"begin")',
+          '    LOGDATA(DATA_DELTA,"end")',
+          "",
+          ...wrapSummaryLog([
+            `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${sl.csvTag}|COUNTER2|COUNTER1")`,
+            ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+            "    LOGRUN()"
+          ]),
           "",
           "COMPLETE"
         ].join("\n");
-        extraActions.push(runLines.join("\n"), sampleStrobeAction, strobeHelperAction);
+        extraActions.push(runLines.join("\n"), sampleTriggerAction);
       } else {
         extraActions.push(
           runLines.join("\n"),

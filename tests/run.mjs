@@ -672,8 +672,13 @@ try {
         refreshAll();
 
         const code = refreshAll._latestBundle[4].code;
-        const s2Block = code.split("ACTION RUN_S2")[1].split("COMPLETE")[0];
-        const s3Block = code.split("ACTION RUN_S3")[1].split("COMPLETE")[0];
+        const runS2Block = code.split("ACTION RUN_S2")[1].split("COMPLETE")[0];
+        const sampleS2Block = code.split("ACTION SAMPLE_S2")[1].split("COMPLETE")[0];
+        const sampleS3Block = code.split("ACTION SAMPLE_S3")[1].split("COMPLETE")[0];
+        const beginIdx = sampleS2Block.indexOf('LOGDATA(DATA_SNAPSHOT,"begin")');
+        const vibIdx = sampleS2Block.indexOf('ZCOMMAND("U1 D1000 M1 M-1 M1 M-1 M1 M-1 M1 M-1 M1 M-1")');
+        const audIdx = sampleS2Block.indexOf('LOAD(AUDIO_FILE,"alarm.wav")');
+        const endIdx = sampleS2Block.indexOf('LOGDATA(DATA_SNAPSHOT,"end")');
 
         // Scrub into S2 onset bin (acclim 120 + autoref 60 + 20.4s = 200.4s -> fires)
         setSimulatorTime(200.4);
@@ -704,9 +709,9 @@ try {
 
         return {
           hwBadgeAlt: badgeTxt === "MWP Z3 · GRB-Shift" && document.getElementById("hwBadge").classList.contains("is-alt"),
-          s2TriggersBoth: s2Block.includes('ZCOMMAND("U1 D1000 M1 M-1 M1 M-1 M1 M-1 M1 M-1 M1 M-1")') &&
-            s2Block.includes('LOAD(AUDIO_FILE,"alarm.wav")'),
-          s3NoDuplicateTrigger: !s3Block.includes("ZCOMMAND(") && !s3Block.includes("LOAD(AUDIO_FILE"),
+          s2TriggersInSampleAfterBegin: beginIdx >= 0 && vibIdx > beginIdx && audIdx > beginIdx && endIdx > vibIdx && endIdx > audIdx &&
+            !runS2Block.includes("ZCOMMAND(") && !runS2Block.includes("LOAD(AUDIO_FILE"),
+          s3NoDuplicateTrigger: !sampleS3Block.includes("ZCOMMAND(") && !sampleS3Block.includes("LOAD(AUDIO_FILE"),
           simBadgesActiveOnset: vibTxtOnset === "TAP U1" && audTxtOnset === "AUD: alarm.wav",
           simBadgesIdleAfterOnset: vibTxtAfter === "Motor Armed" && audTxtAfter === "Audio Armed",
           repeatModeFires4x: repVibCount === 4,
@@ -1058,11 +1063,17 @@ try {
         refreshAll();
         const circLinearCode = refreshAll._latestBundle[4].code;
 
+        const s10 = comp.slices.find((s) => s.idx === 10);
+        const s14 = comp.slices.find((s) => s.idx === 14);
+
         return {
           gammaPerceptualMath: linMid === 50 && gamDawnMid < 26 && gamDuskMid < 26 && Math.abs(gamDawnMid - gamDuskMid) <= 1,
           sinePulseMath: sineStart === 5 && sineMid === 100 && sineEnd === 5,
-          customCurveUi: clipHasInlineCurve && kfHandlesCount === 6 && comp.slices.length === 12,
-          customCurveCode: code.includes("DEFINE S12_BINS") && !code.includes("DEFINE S13_BINS"),
+          customCurveUi: clipHasInlineCurve && kfHandlesCount === 6 && comp.slices.length === 17 &&
+            s10?.startSec === 130 && s10?.endSec === 131 && s10?.topLights?.[0]?.pct === 25 &&
+            s14?.startSec === 153 && s14?.endSec === 154 && s14?.topLights?.[0]?.pct === 70,
+          customCurveCode: code.includes("DEFINE S17_BINS") && !code.includes("DEFINE S18_BINS") &&
+            code.includes("SET(X_LED_DRIVE,1,1024)") && code.includes("SET(X_LED_DRIVE,1,2867)"),
           roundTripOk,
           circGammaVsLinear: circGammaCode.includes("SET(X_LED_DRIVE,4,82)") && circLinearCode.includes("SET(X_LED_DRIVE,4,614)")
         };
@@ -1070,6 +1081,244 @@ try {
       const ok = Object.values(curveCheck).every(Boolean);
       report(ok, "Custom PWM curves (Gamma 2.2, Sine, Custom Keyframes, Steps, inline envelopes & Circadian Gamma) work and round-trip",
         ok ? "" : JSON.stringify(curveCheck));
+      await page.close();
+    }
+
+    // 6o. Multi-Track compiler edge-case regression suite (mixed-Hz strobes, 120 repeat cap + preflight, keyframe peaks, snapshot ordering, fractional strobe durations)
+    {
+      const { page } = await openFreshPage("#stimulus");
+      const regCheck = await page.evaluate(() => {
+        // Helper: parse generated .zs STROBE_S1 + SAMPLE_S1 timeline into interval states for exact WAIT sum & sampler parity
+        const parseStrobeBin = (code, sliceIdx) => {
+          const defs = {};
+          for (const m of code.matchAll(/^DEFINE\s+(\S+)\s+([0-9.]+)/gm)) {
+            defs[m[1]] = parseFloat(m[2]);
+          }
+          const resolveNum = (tok) => (defs[tok] !== undefined ? defs[tok] : parseFloat(tok));
+          const getBlock = (name) => {
+            const parts = code.split(`ACTION ${name}\n`);
+            if (parts.length < 2) return "";
+            return parts[1].split("\nCOMPLETE")[0];
+          };
+          const strobeBody = getBlock(`STROBE_S${sliceIdx}`);
+          const sampleBody = getBlock(`SAMPLE_S${sliceIdx}`);
+          const parseLines = (body) => {
+            const segs = [];
+            let cur = { BLUE: 0, RED: 0, GREEN: 0, WHITE: 0 };
+            for (const raw of body.split("\n")) {
+              const line = raw.trim();
+              const drv = line.match(/^SET\(X_LED_DRIVE,(\d+),(\d+)\)$/);
+              if (drv) {
+                const ch = parseInt(drv[1], 10);
+                const pwm = parseInt(drv[2], 10);
+                if (ch === 1) cur.BLUE = pwm;
+                if (ch === 3) cur.GREEN = pwm;
+                if (ch === 4) cur.WHITE = pwm;
+                if (ch === 5) cur.RED = pwm;
+              }
+              const wm = line.match(/^WAIT\(([^)]+)\)$/);
+              if (wm) segs.push({ dt: resolveNum(wm[1]), state: { ...cur } });
+            }
+            return segs;
+          };
+          const cycMatch = sampleBody.match(new RegExp(`INVOKE\\(STROBE_S${sliceIdx},([^)]+)\\)`));
+          const cycCount = cycMatch ? Math.round(resolveNum(cycMatch[1])) : 0;
+          const cycSegs = cycCount > 0 ? parseLines(strobeBody) : [];
+          // Remainder lines appear after INVOKE(STROBE_S*,...) and before DATA_SNAPSHOT,"end"
+          const afterInvoke = cycMatch ? sampleBody.split(cycMatch[0])[1] : sampleBody;
+          const remPart = afterInvoke.split('LOGDATA(DATA_SNAPSHOT,"end")')[0];
+          const remSegs = parseLines(remPart);
+          const allSegs = [];
+          for (let i = 0; i < cycCount; i++) {
+            for (const s of cycSegs) allSegs.push({ dt: s.dt, state: { ...s.state } });
+          }
+          for (const s of remSegs) allSegs.push({ dt: s.dt, state: { ...s.state } });
+          const totalWait = Number(allSegs.reduce((acc, s) => acc + s.dt, 0).toFixed(4));
+          return { totalWait, segs: allSegs, sampleBody, strobeBody, defs };
+        };
+
+        const stateAtT = (segs, tSec) => {
+          let acc = 0;
+          for (const s of segs) {
+            if (tSec < acc + s.dt - 1e-6) return s.state;
+            acc += s.dt;
+          }
+          return segs[segs.length - 1]?.state || { BLUE: 0, RED: 0, GREEN: 0, WHITE: 0 };
+        };
+
+        // --- Bug 1: Overlapping multi-frequency strobe ({2, 10}, {2, 5}, {5, 10}) + sampler.js parity ---
+        state.stimId = "multi_phase";
+        state.stimParams.acclimSec = 0;
+        state.stimParams.mpTimelineSec = 4;
+        state.stimParams.mpCycles = 1;
+        state.stimParams.timeBinSec = 1;
+        state.timelineClips = [
+          { id: 1, track: "BLUE", startSec: 0, endSec: 4, val: 100, strobeHz: 2 },
+          { id: 2, track: "RED",  startSec: 0, endSec: 4, val: 100, strobeHz: 10 }
+        ];
+        refreshAll();
+        const cfg210 = readConfig();
+        const comp210 = compileMultiTrackSlices(state.timelineClips, 4, 1, 22);
+        const code210 = refreshAll._latestBundle[4].code;
+        const parsed210 = parseStrobeBin(code210, 1);
+        const hasBlueOnly = parsed210.segs.some((s) => s.state.BLUE === 4095 && s.state.RED === 0);
+        const hasRedOnly = parsed210.segs.some((s) => s.state.BLUE === 0 && s.state.RED === 4095);
+        const hasBoth = parsed210.segs.some((s) => s.state.BLUE === 4095 && s.state.RED === 4095);
+        const hasNeither = parsed210.segs.some((s) => s.state.BLUE === 0 && s.state.RED === 0);
+
+        // Verify 100% phase parity between parsed .zs and sampler.js across bin 1 (0..1s) and bin 2 (1..2s)
+        let parity210Ok = true;
+        const autoref = cfg210.autorefTimeout || 0;
+        for (const tBin of [0.02, 0.07, 0.12, 0.17, 0.22, 0.27, 0.32, 0.37, 0.42, 0.47, 0.52, 0.77, 0.97]) {
+          for (const binOff of [0, 1]) {
+            const zs = stateAtT(parsed210.segs, tBin);
+            const smp = sampleAssayStateAtTime(cfg210, autoref + binOff + tBin);
+            if ((zs.BLUE > 0) !== (smp.topChannels.BLUE > 0) || (zs.RED > 0) !== (smp.topChannels.RED > 0)) {
+              parity210Ok = false;
+            }
+          }
+        }
+
+        // Also check {2, 5} Hz (1.0s LCM) & {5, 10} Hz (0.2s LCM)
+        const checkCombo = (f1, f2, expectedTag) => {
+          state.timelineClips = [
+            { id: 1, track: "BLUE", startSec: 0, endSec: 2, val: 100, strobeHz: f1 },
+            { id: 2, track: "RED",  startSec: 0, endSec: 2, val: 100, strobeHz: f2 }
+          ];
+          refreshAll();
+          const c = compileMultiTrackSlices(state.timelineClips, 2, 1, 22);
+          const p = parseStrobeBin(refreshAll._latestBundle[4].code, 1);
+          return c.slices[0].strobeHzList.join(",") === `${f1},${f2}` &&
+            c.slices[0].csvTag.includes(expectedTag) &&
+            Math.abs(p.totalWait - 1.0) < 1e-6 &&
+            p.segs.some((s) => s.state.BLUE > 0 && s.state.RED === 0) &&
+            p.segs.some((s) => s.state.BLUE === 0 && s.state.RED > 0);
+        };
+        const bug1Ok =
+          comp210.slices[0].strobeHzList.join(",") === "2,10" &&
+          comp210.slices[0].csvTag.includes("2_10HZ") &&
+          comp210.slices[0].overlayText.includes("2+10Hz") &&
+          Math.abs(parsed210.totalWait - 1.0) < 1e-6 &&
+          hasBlueOnly && hasRedOnly && hasBoth && hasNeither &&
+          parity210Ok &&
+          checkCombo(2, 5, "2_5HZ") &&
+          checkCombo(5, 10, "5_10HZ");
+
+        // --- Bug 2: Repeat cap raised to 120 + preflight warning when exceeded ---
+        state.stimParams.mpTimelineSec = 180;
+        state.stimParams.timeBinSec = 1;
+        state.timelineClips = [{ id: 1, track: "VIB", startSec: 0, endSec: 180, val: 0, repeatSec: 5 }];
+        refreshAll();
+        const comp36 = compileMultiTrackSlices(state.timelineClips, 180, 1, 22);
+        const code36 = refreshAll._latestBundle[4].code;
+        const vib36Count = (code36.match(/ZCOMMAND\("U0 /g) || []).length;
+        const checks36 = computePreflightChecks();
+
+        state.stimParams.mpTimelineSec = 300;
+        state.timelineClips = [{ id: 1, track: "VIB", startSec: 0, endSec: 300, val: 0, repeatSec: 1 }];
+        refreshAll();
+        const compCap = compileMultiTrackSlices(state.timelineClips, 300, 1, 22);
+        const codeCap = refreshAll._latestBundle[4].code;
+        const vibCapCount = (codeCap.match(/ZCOMMAND\("U0 /g) || []).length;
+        const checksCap = computePreflightChecks();
+        const bug2Ok =
+          vib36Count === 36 &&
+          comp36.truncatedRepeats.length === 0 &&
+          !checks36.some((c) => c.title.includes("Repeat triggers capped")) &&
+          vibCapCount === 120 &&
+          compCap.truncatedRepeats.length === 1 &&
+          compCap.truncatedRepeats[0].expected === 300 &&
+          compCap.truncatedRepeats[0].capped === 120 &&
+          checksCap.some((c) => c.level === "warn" && c.title.includes("Repeat triggers capped at 120"));
+
+        // --- Bug 3: Custom Keyframe narrow 100% peak & 10% trough preserved even at rampSteps = 4 ---
+        state.stimParams.mpTimelineSec = 100;
+        state.stimParams.timeBinSec = 1;
+        state.timelineClips = [{
+          id: 1, track: "BLUE", startSec: 0, endSec: 100, val: 0, endVal: 0,
+          curve: "custom", rampSteps: 4,
+          keyframes: [{ t: 0, y: 0 }, { t: 0.35, y: 100 }, { t: 0.45, y: 10 }, { t: 0.7, y: 60 }, { t: 1, y: 0 }]
+        }];
+        refreshAll();
+        const compKf = compileMultiTrackSlices(state.timelineClips, 100, 1, 22);
+        const codeKf = refreshAll._latestBundle[4].code;
+        const peakSlice = compKf.slices.find((s) => s.startSec === 35 && s.endSec === 36);
+        const troughSlice = compKf.slices.find((s) => s.startSec === 45 && s.endSec === 46);
+        const secondPeakSlice = compKf.slices.find((s) => s.startSec === 70 && s.endSec === 71);
+        const bug3Ok =
+          peakSlice?.topLights?.[0]?.pct === 100 &&
+          troughSlice?.topLights?.[0]?.pct === 10 &&
+          secondPeakSlice?.topLights?.[0]?.pct === 60 &&
+          codeKf.includes("SET(X_LED_DRIVE,1,4095)") &&
+          codeKf.includes("SET(X_LED_DRIVE,1,410)");
+
+        // --- Bug 4: VIB + AUDIO triggers strictly AFTER DATA_SNAPSHOT("begin") in both normal & strobe slices ---
+        state.stimParams.mpTimelineSec = 10;
+        state.stimParams.timeBinSec = 1;
+        state.timelineClips = [
+          { id: 1, track: "BLUE",  startSec: 0, endSec: 5, val: 100, strobeHz: 5 },
+          { id: 2, track: "VIB",   startSec: 0, endSec: 5, val: 0 },
+          { id: 3, track: "AUDIO", startSec: 0, endSec: 5, val: "tone" },
+          { id: 4, track: "VIB",   startSec: 6, endSec: 9, val: 1 }
+        ];
+        refreshAll();
+        const codeTrig = refreshAll._latestBundle[4].code;
+        const runS1T = codeTrig.split("ACTION RUN_S1\n")[1].split("\nCOMPLETE")[0];
+        const smpS1T = codeTrig.split("ACTION SAMPLE_S1\n")[1].split("\nCOMPLETE")[0];
+        const s1Beg = smpS1T.indexOf('LOGDATA(DATA_SNAPSHOT,"begin")');
+        const s1Vib = smpS1T.indexOf('ZCOMMAND("U0 ');
+        const s1Aud = smpS1T.indexOf('LOAD(AUDIO_FILE,"tone")');
+        const s1Inv = smpS1T.indexOf("INVOKE(STROBE_S1,");
+        const s1End = smpS1T.indexOf('LOGDATA(DATA_SNAPSHOT,"end")');
+
+        // Normal (non-strobe) trigger slice at 6s (find its slice idx from compiled slices)
+        const compTrig = compileMultiTrackSlices(state.timelineClips, 10, 1, 22);
+        const normTrigSl = compTrig.slices.find((s) => s.startSec === 6);
+        const runNorm = codeTrig.split(`ACTION RUN_S${normTrigSl.idx}\n`)[1].split("\nCOMPLETE")[0];
+        const smpNorm = codeTrig.split(`ACTION SAMPLE_S${normTrigSl.idx}\n`)[1].split("\nCOMPLETE")[0];
+        const nBeg = smpNorm.indexOf('LOGDATA(DATA_SNAPSHOT,"begin")');
+        const nVib = smpNorm.indexOf('ZCOMMAND("U1 ');
+        const nWait = smpNorm.indexOf("WAIT(TIME_BIN)");
+        const nEnd = smpNorm.indexOf('LOGDATA(DATA_SNAPSHOT,"end")');
+        const bug4Ok =
+          !runS1T.includes("ZCOMMAND(") && !runS1T.includes("LOAD(AUDIO_FILE") &&
+          s1Beg >= 0 && s1Vib > s1Beg && s1Aud > s1Beg && s1Inv > s1Vib && s1Inv > s1Aud && s1End > s1Inv &&
+          !runNorm.includes("ZCOMMAND(") &&
+          nBeg >= 0 && nVib > nBeg && nWait > nVib && nEnd > nWait;
+
+        // --- Bug 5: Exact fractional TIME_BIN (1.2s @ 2 Hz) & light_on_pulse fractional pulseDurSec (0.7s @ 2 Hz) ---
+        state.stimParams.mpTimelineSec = 6;
+        state.stimParams.timeBinSec = 1.2;
+        state.timelineClips = [{ id: 1, track: "BLUE", startSec: 0, endSec: 6, val: 100, strobeHz: 2 }];
+        refreshAll();
+        const codeFracMp = refreshAll._latestBundle[4].code;
+        const parsedFracMp = parseStrobeBin(codeFracMp, 1);
+
+        state.stimId = "light_on_pulse";
+        state.stimParams.timeBinSec = 2;
+        state.stimParams.pulseDurSec = 0.7;
+        state.stimParams.strobeHz = 2;
+        state.stimParams.numPulses = 2;
+        refreshAll();
+        const codeFracFlash = refreshAll._latestBundle[4].code;
+        const flashBinBlock = codeFracFlash.split("ACTION LIGHT_FLASH_BIN\n")[1].split("\nCOMPLETE")[0];
+        const strobeDefCycles = codeFracFlash.match(/DEFINE STROBE_CYCLES (\d+)/)?.[1];
+        const postPulseWait = codeFracFlash.match(/DEFINE POST_PULSE_WAIT ([0-9.]+)/)?.[1];
+        const bug5Ok =
+          Math.abs(parsedFracMp.totalWait - 1.2) < 1e-6 &&
+          codeFracMp.includes("DEFINE S1_STROBE_CYCLES 2") &&
+          parsedFracMp.sampleBody.includes("WAIT(0.2)") &&
+          strobeDefCycles === "1" &&
+          postPulseWait === "1.3" &&
+          flashBinBlock.includes("INVOKE(STROBE_CYCLE,STROBE_CYCLES)") &&
+          flashBinBlock.includes("WAIT(0.2)") &&
+          flashBinBlock.includes("WAIT(POST_PULSE_WAIT)");
+
+        return { bug1Ok, bug2Ok, bug3Ok, bug4Ok, bug5Ok };
+      });
+      const ok = Object.values(regCheck).every(Boolean);
+      report(ok, "Multi-Track compiler fixes (mixed-Hz strobes + sampler parity, 120 repeat cap + preflight, keyframe peaks, snapshot ordering & fractional strobe waits) pass",
+        ok ? "" : JSON.stringify(regCheck));
       await page.close();
     }
 

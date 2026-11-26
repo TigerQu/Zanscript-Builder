@@ -154,6 +154,8 @@ function sampleClipCurveToKeyframes(clip, count) {
   return pts;
 }
 
+const MAX_REPEAT_TRIGGERS = 120;
+
 function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp) {
   const bin = Math.max(1, parseFloat(binRaw) || 1);
   const totalBins = Math.max(1, Math.round((Math.max(bin, parseFloat(timelineSecRaw) || 180)) / bin));
@@ -161,6 +163,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
   const baseT = Math.min(40, Math.max(10, Number((parseFloat(fallbackTemp) || 22).toFixed(1))));
 
   const norm = [];
+  const truncatedRepeats = [];
   for (const c of (clipsRaw || [])) {
     const sBin = Math.max(0, Math.min(totalBins, Math.round((parseFloat(c.startSec) || 0) / bin)));
     const eBin = Math.max(0, Math.min(totalBins, Math.round((parseFloat(c.endSec) || 0) / bin)));
@@ -179,8 +182,16 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
         triggerBins.add(sBin);
         if (repeatSec > 0) {
           const stepBins = Math.max(1, Math.round(repeatSec / bin));
-          for (let k = 1; k < 24 && (sBin + k * stepBins) < eBin; k++) {
+          const expectedTriggers = Math.floor((eBin - 1 - sBin) / stepBins) + 1;
+          for (let k = 1; k < MAX_REPEAT_TRIGGERS && (sBin + k * stepBins) < eBin; k++) {
             triggerBins.add(sBin + k * stepBins);
+          }
+          if (expectedTriggers > MAX_REPEAT_TRIGGERS) {
+            truncatedRepeats.push({
+              track: trId,
+              expected: expectedTriggers,
+              capped: MAX_REPEAT_TRIGGERS
+            });
           }
         }
       }
@@ -214,9 +225,26 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
         ptSet.add(Math.min(c.eBin, tb + 1));
       }
     } else if (c.hasRamp) {
-      const steps = Math.min(c.rampSteps || 8, Math.max(2, c.eBin - c.sBin));
+      const span = c.eBin - c.sBin;
+      const steps = Math.min(c.rampSteps || 8, Math.max(2, span));
       for (let k = 0; k <= steps; k++) {
-        ptSet.add(Math.round(c.sBin + (c.eBin - c.sBin) * (k / steps)));
+        ptSet.add(Math.round(c.sBin + span * (k / steps)));
+      }
+      if (c.keyframes && c.keyframes.length >= 2) {
+        for (let ki = 1; ki < c.keyframes.length - 1; ki++) {
+          const kf = c.keyframes[ki];
+          const prevKf = c.keyframes[ki - 1];
+          const nextKf = c.keyframes[ki + 1];
+          const kfBin = Math.round(c.sBin + span * kf.t);
+          ptSet.add(kfBin);
+          if ((kf.y - prevKf.y) * (kf.y - nextKf.y) > 0) {
+            if (kfBin < c.eBin) {
+              ptSet.add(Math.min(c.eBin, kfBin + 1));
+            } else if (kfBin > c.sBin) {
+              ptSet.add(Math.max(c.sBin, kfBin - 1));
+            }
+          }
+        }
       }
     } else {
       ptSet.add(c.sBin);
@@ -237,6 +265,20 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     const midBin = (b0 + b1) / 2;
     const resolveLightPct = (hit) => {
       if (hit.hasRamp) {
+        if (b1 - b0 === 1 && hit.keyframes && hit.keyframes.length >= 3) {
+          const span = hit.eBin - hit.sBin;
+          for (let ki = 1; ki < hit.keyframes.length - 1; ki++) {
+            const kf = hit.keyframes[ki];
+            const prevKf = hit.keyframes[ki - 1];
+            const nextKf = hit.keyframes[ki + 1];
+            if ((kf.y - prevKf.y) * (kf.y - nextKf.y) > 0) {
+              const kfBin = Math.round(hit.sBin + span * kf.t);
+              if (kfBin === b0 || (kfBin === hit.eBin && b1 === hit.eBin)) {
+                return Math.min(100, Math.max(0, Math.round(kf.y)));
+              }
+            }
+          }
+        }
         const frac = Math.max(0, Math.min(1, (midBin - hit.sBin) / Math.max(1, hit.eBin - hit.sBin)));
         return evaluateLightCurvePct(hit, frac);
       }
@@ -275,11 +317,11 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     const audioTrigger = Boolean(audioHit);
     const audioFile = audioTrigger ? audioHit.val : null;
 
-    const sliceStrobeHz = Math.max(
-      0,
-      ...topLights.map(l => l.strobeHz || 0),
-      ...bottomLights.map(l => l.strobeHz || 0)
-    );
+    const strobeHzSet = new Set();
+    for (const l of topLights) if (l.strobeHz > 0) strobeHzSet.add(l.strobeHz);
+    for (const l of bottomLights) if (l.strobeHz > 0) strobeHzSet.add(l.strobeHz);
+    const strobeHzList = [...strobeHzSet].sort((a, b) => a - b);
+    const sliceStrobeHz = strobeHzList.length > 0 ? strobeHzList[strobeHzList.length - 1] : 0;
 
     const sig = "T:" + topLights.map(l => `${l.id}:${l.pct}${l.strobeHz ? `@${l.strobeHz}` : ""}`).join("+") +
       "|B:" + bottomLights.map(l => `${l.id}:${l.pct}${l.strobeHz ? `@${l.strobeHz}` : ""}`).join("+") +
@@ -294,7 +336,8 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     } else {
       rawSlices.push({
         b0, b1, bins: b1 - b0, topLights, bottomLights, effectiveTemp,
-        vibTrigger, vibCode, audioTrigger, audioFile, strobeHz: sliceStrobeHz, sig
+        vibTrigger, vibCode, audioTrigger, audioFile,
+        strobeHz: sliceStrobeHz, strobeHzList, sig
       });
     }
   }
@@ -307,7 +350,10 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     const tempSuffix = s.effectiveTemp !== null ? `_${s.effectiveTemp}C` : "";
     const stimTagParts = [];
     const stimOvParts = [];
-    if (s.strobeHz > 0) {
+    if (s.strobeHzList.length > 1) {
+      stimTagParts.push(`${s.strobeHzList.join("_")}HZ`);
+      stimOvParts.push(`${s.strobeHzList.join("+")}Hz`);
+    } else if (s.strobeHz > 0) {
       stimTagParts.push(`${s.strobeHz}HZ`);
       stimOvParts.push(`${s.strobeHz}Hz`);
     }
@@ -378,6 +424,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       audioTrigger: s.audioTrigger,
       audioFile: s.audioFile,
       strobeHz: s.strobeHz,
+      strobeHzList: s.strobeHzList,
       csvTag,
       overlayText
     };
@@ -389,6 +436,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
   return {
     totalBins, totalSec, bin, hasAnyTempClip, hasAnyBottomClip,
     hasAnyVibClip, hasAnyAudioClip, hasAnyRampClip, hasAnyStrobeClip,
+    truncatedRepeats,
     initialTemp, anyTempChange, slices
   };
 }

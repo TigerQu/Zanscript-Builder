@@ -142,7 +142,8 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
         if (inPulse) {
           if (strobeHz > 0) {
             const halfPeriod = 0.5 / strobeHz;
-            if (Math.floor(inTrial / halfPeriod) % 2 === 0) setSingleChannelOn(colId);
+            const strobeClock = subBinPulse ? inTrial : Math.max(0, inTrial - Math.floor((inTrial + 1e-9) / bin) * bin);
+            if (Math.floor((strobeClock + 1e-9) / halfPeriod) % 2 === 0) setSingleChannelOn(colId);
           } else {
             setSingleChannelOn(colId);
           }
@@ -385,7 +386,8 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
       const sl = comp.slices.find(s => lookupSec >= s.startSec && lookupSec < s.endSec) || comp.slices[comp.slices.length - 1];
       if (sl) {
         const inSlice = Math.max(0, lookupSec - sl.startSec);
-        const isLitNow = (l) => (!l.strobeHz || Math.floor(inSlice / (0.5 / l.strobeHz)) % 2 === 0);
+        const inBin = Math.max(0, inSlice - Math.floor((inSlice + 1e-9) / comp.bin) * comp.bin);
+        const isLitNow = (l) => (!l.strobeHz || Math.floor((inBin + 1e-9) / (0.5 / l.strobeHz)) % 2 === 0);
         if (hw === "Z3") {
           for (const l of sl.topLights) {
             if (isLitNow(l)) topChannels[l.id] = l.pct;

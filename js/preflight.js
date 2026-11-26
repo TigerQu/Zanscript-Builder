@@ -197,6 +197,16 @@ function computePreflightChecks(cfgIn, bundleIn) {
       add("info", "No LED clips on the timeline", "Visible LEDs stay off (IR tracking only) while environment / stimulus tracks run.", "stimulus");
     }
 
+    if (mpComp && Array.isArray(mpComp.truncatedRepeats) && mpComp.truncatedRepeats.length > 0) {
+      const capLim = typeof MAX_REPEAT_TRIGGERS !== "undefined" ? MAX_REPEAT_TRIGGERS : 120;
+      const summaryStr = mpComp.truncatedRepeats
+        .map(tr => `${tr.track} (${tr.capped} of ${tr.expected} triggers)`)
+        .join(", ");
+      add("warn", `Repeat triggers capped at ${capLim} per clip`,
+        `Repeat count exceeded the ${capLim}-trigger limit: ${summaryStr}. Use a larger repeat interval or switch to a dedicated Startle protocol.`,
+        "stimulus");
+    }
+
     if (cfg.hw !== "Z3") {
       if (hasCompiledLight) {
         add("info", "Brightness levels need an MWP Z3", "On Z2 / Z2S units LED clips simply switch lights on or off.", "study");
