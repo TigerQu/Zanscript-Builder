@@ -187,6 +187,14 @@
     if (el) el.textContent = text;
   }
 
+  function setTextWithTitle(id, text) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = text;
+      el.title = text || "";
+    }
+  }
+
   function fmtNum(val, decimals) {
     if (val === null || val === undefined || !Number.isFinite(Number(val))) return "—";
     const d = decimals !== undefined ? decimals : 1;
@@ -1316,6 +1324,9 @@
     if (opts && opts.onDatasetLoad && ui.analysis && ui.analysis.capabilities) {
       if (ui.activeChartTab === "spatial" && !ui.analysis.capabilities.hasXy) ui.activeChartTab = "timeseries";
       if (ui.activeChartTab === "zchange" && !ui.analysis.capabilities.hasZchange) ui.activeChartTab = "timeseries";
+      const fDetails = document.getElementById("factorLayersDetails");
+      const activeRun = getActiveRun();
+      if (fDetails) fDetails.open = Boolean(activeRun && activeRun.factorNames && activeRun.factorNames.length > 0);
     }
 
     // Validate trace view (if no periStimulus, fall back to full)
@@ -1652,20 +1663,20 @@
       setText("statDuration", "—");
       setText("statGroups", "—");
       setText("statFlagged", "—");
-      setText("sumDataTitle", "No CSV loaded");
-      setText("sumDataSub", ui.context && ui.context.valid
+      setTextWithTitle("sumDataTitle", "No CSV loaded");
+      setTextWithTitle("sumDataSub", ui.context && ui.context.valid
         ? `Context: ${ui.context.plateName || ui.context.plateId}`
         : "Drop CSV or pick a demo");
-      setText("sumQcTitle", "—");
-      setText("sumQcSub", "");
+      setTextWithTitle("sumQcTitle", "—");
+      setTextWithTitle("sumQcSub", "");
       const qcRow = document.getElementById("sumQcRow");
       if (qcRow) qcRow.classList.remove("has-warn");
-      setText("sumGroupsTitle", "—");
-      setText("sumGroupsSub", "");
-      setText("sumPlotsTitle", "Time Series");
-      setText("sumPlotsSub", "Load CSV to plot");
-      setText("sumExportTitle", "Prism · CSV · Log · Py");
-      setText("sumExportSub", "");
+      setTextWithTitle("sumGroupsTitle", "—");
+      setTextWithTitle("sumGroupsSub", "");
+      setTextWithTitle("sumPlotsTitle", "Time Series");
+      setTextWithTitle("sumPlotsSub", "Load CSV to plot");
+      setTextWithTitle("sumExportTitle", "Prism · CSV · Log · Py");
+      setTextWithTitle("sumExportSub", "");
       return;
     }
 
@@ -1680,44 +1691,44 @@
 
     // Row 1: Data
     if (ui.runs.length > 1) {
-      setText("sumDataTitle", `${ui.runs.length} runs (${ui.scope === "pooled" ? "Pooled" : "Active"})`);
-      setText("sumDataSub", ui.runs.map(r => r.runId).slice(0, 3).join(", ") + (a.capabilities.hasXy ? " + _XY" : ""));
+      setTextWithTitle("sumDataTitle", `${ui.runs.length} runs (${ui.scope === "pooled" ? "Pooled" : "Active"})`);
+      setTextWithTitle("sumDataSub", ui.runs.map(r => r.runId).slice(0, 3).join(", ") + (a.capabilities.hasXy ? " + _XY" : ""));
     } else {
-      setText("sumDataTitle", p.filename || "Summary CSV");
+      setTextWithTitle("sumDataTitle", p.filename || "Summary CSV");
       const extras = [ui.zchangeParsed ? "_ZCHANGE" : "", ui.xyParsed ? "_XY" : ""].filter(Boolean).join(" + ");
-      setText("sumDataSub", `${a.layout.name || "Plate"} · ${k.rowCount} rows${extras ? " + " + extras : ""}`);
+      setTextWithTitle("sumDataSub", `${a.layout.name || "Plate"} · ${k.rowCount} rows${extras ? " + " + extras : ""}`);
     }
 
     // Row 2: QC
     const qcRow = document.getElementById("sumQcRow");
     if (qcRow) qcRow.classList.toggle("has-warn", unexcludedFlagged > 0);
-    if (unexcludedFlagged > 0) setText("sumQcTitle", `${unexcludedFlagged} flagged to review`);
-    else if (k.excludedWells > 0) setText("sumQcTitle", `${k.excludedWells} excluded · clean`);
-    else setText("sumQcTitle", "All wells clean");
+    if (unexcludedFlagged > 0) setTextWithTitle("sumQcTitle", `${unexcludedFlagged} flagged to review`);
+    else if (k.excludedWells > 0) setTextWithTitle("sumQcTitle", `${k.excludedWells} excluded · clean`);
+    else setTextWithTitle("sumQcTitle", "All wells clean");
 
     const qcParts = [];
     if (k.emptyCount > 0) qcParts.push(`${k.emptyCount} empty`);
     if (k.spikeCount > 0) qcParts.push(`${k.spikeCount} spike`);
     if (a.capabilities.hasTemp && Number.isFinite(k.tempMean)) qcParts.push(`${k.tempMean.toFixed(1)} °C`);
-    setText("sumQcSub", qcParts.join(" · ") || "No anomalies");
+    setTextWithTitle("sumQcSub", qcParts.join(" · ") || "No anomalies");
 
     // Row 3: Groups
     const grpNames = (a.groups || []).map(g => g.group);
     const fNames = a.factorNames || [];
-    setText("sumGroupsTitle", grpNames.length === 1 && grpNames[0] === ALL_WELLS
+    setTextWithTitle("sumGroupsTitle", grpNames.length === 1 && grpNames[0] === ALL_WELLS
       ? "All Wells (1 group)"
       : `${grpNames.length} group${grpNames.length === 1 ? "" : "s"}${fNames.length ? ` · ${fNames.length}F` : ""}`);
-    setText("sumGroupsSub", fNames.length ? fNames.join(" × ") : (grpNames.slice(0, 3).join(", ") + (grpNames.length > 3 ? "…" : "")));
+    setTextWithTitle("sumGroupsSub", fNames.length ? fNames.join(" × ") : (grpNames.slice(0, 3).join(", ") + (grpNames.length > 3 ? "…" : "")));
 
     // Row 4: Plots
     const tabLabels = { timeseries: "Time Series", comparison: "Phase & Group", zchange: "Zone Events", spatial: "Spatial (_XY)" };
-    setText("sumPlotsTitle", tabLabels[ui.activeChartTab] || "Time Series");
+    setTextWithTitle("sumPlotsTitle", tabLabels[ui.activeChartTab] || "Time Series");
     const tsLbl = (a.timeSeries && a.timeSeries.metricLabel) ? a.timeSeries.metricLabel.split(" ")[0] : "Distance";
-    setText("sumPlotsSub", `${tsLbl} · ${ui.tsBinGroupSize}x bin${ui.normalizeToControl ? " · % Ctrl" : ""}`);
+    setTextWithTitle("sumPlotsSub", `${tsLbl} · ${ui.tsBinGroupSize}x bin${ui.normalizeToControl ? " · % Ctrl" : ""}`);
 
     // Row 5: Export
-    setText("sumExportTitle", "Ready to export");
-    setText("sumExportSub", `${k.activeWells} active wells · UTF-8 BOM`);
+    setTextWithTitle("sumExportTitle", "Ready to export");
+    setTextWithTitle("sumExportSub", `${k.activeWells} active wells · UTF-8 BOM`);
   }
 
   // ---------------------------------------------------------------------------
@@ -1816,7 +1827,15 @@
     if (qcExclBtn) qcExclBtn.disabled = unexcludedFlagged.length === 0;
 
     const restBtn = document.getElementById("restoreAllWellsBtn");
-    if (restBtn) restBtn.style.display = k.excludedWells > 0 ? "" : "none";
+    if (restBtn) restBtn.disabled = k.excludedWells === 0;
+
+    const actionNote = document.getElementById("qcActionBarNote");
+    if (actionNote) {
+      const rPrefix = ui.runs.length > 1 ? `${run.runId}: ` : "";
+      actionNote.textContent = unexcludedFlagged.length > 0
+        ? `${rPrefix}${unexcludedFlagged.length} flagged well${unexcludedFlagged.length === 1 ? "" : "s"} awaiting review · ${k.excludedWells} excluded`
+        : `${rPrefix}No unexcluded QC flags · ${k.excludedWells} excluded`;
+    }
 
     if (a.capabilities.hasTemp && Number.isFinite(k.tempMin) && Number.isFinite(k.tempMax)) {
       setText("kpiTempRange", `${k.tempMin.toFixed(1)}–${k.tempMax.toFixed(1)} °C`);
@@ -1997,6 +2016,17 @@
 
     const combBtn = document.getElementById("combineFactorsBtn");
     if (combBtn) combBtn.style.display = run.factorNames.length > 0 ? "" : "none";
+
+    const fDetails = document.getElementById("factorLayersDetails");
+    const fSummary = document.getElementById("factorLayersSummary");
+    if (fDetails && run.factorNames.length > 0) {
+      fDetails.open = true;
+    }
+    if (fSummary) {
+      fSummary.textContent = run.factorNames.length > 0
+        ? `Active factors (${run.factorNames.length}) & combine`
+        : "Custom factor layers & combine";
+    }
 
     // Step 3 Swatches (Primary Groups OR Active Factor Levels)
     const swWrap = document.getElementById("groupSwatchList");
@@ -2666,9 +2696,16 @@
     const unitWrap = document.getElementById("plotUnitToggleWrap");
     const unitWellsBtn = document.getElementById("unitWellsBtn");
     const unitPlatesBtn = document.getElementById("unitPlatesBtn");
-    if (unitWrap) unitWrap.style.display = (multi && ui.scope === "pooled") ? "" : "none";
-    if (unitWellsBtn) unitWellsBtn.classList.toggle("active", ui.unitOfAnalysis !== "plates");
-    if (unitPlatesBtn) unitPlatesBtn.classList.toggle("active", ui.unitOfAnalysis === "plates");
+    const unitActive = multi && ui.scope === "pooled";
+    if (unitWrap) unitWrap.classList.toggle("is-disabled", !unitActive);
+    if (unitWellsBtn) {
+      unitWellsBtn.disabled = !unitActive;
+      unitWellsBtn.classList.toggle("active", ui.unitOfAnalysis !== "plates");
+    }
+    if (unitPlatesBtn) {
+      unitPlatesBtn.disabled = !unitActive;
+      unitPlatesBtn.classList.toggle("active", ui.unitOfAnalysis === "plates");
+    }
 
     const normChk = document.getElementById("normControlChk");
     if (normChk) normChk.checked = ui.normalizeToControl;
@@ -2678,7 +2715,9 @@
     const ctrlSel = document.getElementById("normControlGroupSel");
     if (ctrlWrap && ctrlSel) {
       const avail = pm.availableControlGroups || (a.groups || []).map(g => g.group);
-      ctrlWrap.style.display = ui.normalizeToControl && avail.length > 0 ? "" : "none";
+      const normEnabled = ui.normalizeToControl && avail.length > 0;
+      ctrlWrap.classList.toggle("is-disabled", !normEnabled);
+      ctrlSel.disabled = !normEnabled;
       ctrlSel.innerHTML = avail.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("");
       ctrlSel.value = pm.controlGroupName || ui.controlGroupName || avail[0] || "";
     }
@@ -2753,7 +2792,7 @@
     if (winE) winE.classList.toggle("is-invalid", Boolean(winWarn));
     const winClear = document.getElementById("tsWinClearBtn");
     const winReadout = document.getElementById("tsWinAucReadout");
-    if (winClear) winClear.style.display = (winCfg || winWarn) ? "" : "none";
+    if (winClear) winClear.disabled = !(winCfg || winWarn);
     if (winReadout) {
       winReadout.classList.toggle("az-inline-warn", Boolean(winWarn));
       if (winWarn) {
@@ -2776,8 +2815,11 @@
     if (showStatsChk) showStatsChk.checked = ui.compShowStats;
     const tfWrap = document.getElementById("compTestFamilyWrap");
     const tfSel = document.getElementById("compTestFamilySel");
-    if (tfWrap) tfWrap.style.display = ui.compShowStats ? "" : "none";
-    if (tfSel) tfSel.value = ui.primaryTestFamily || "parametric";
+    if (tfWrap) tfWrap.classList.toggle("is-disabled", !ui.compShowStats);
+    if (tfSel) {
+      tfSel.disabled = !ui.compShowStats;
+      tfSel.value = ui.primaryTestFamily || "parametric";
+    }
 
     const xyInp = document.getElementById("xyFreezeInput");
     if (xyInp && document.activeElement !== xyInp) xyInp.value = String(ui.xyFreezeSpeedMmS);
@@ -4204,9 +4246,17 @@
     const thead = document.getElementById("wellTableHead");
     if (thead) {
       thead.innerHTML = "<tr>" + cols.map(c => {
-        const cls = [c.num ? "num" : "", c.sortable ? "sortable" : ""].filter(Boolean).join(" ");
-        const arrow = c.sortable && ui.tableSortKey === c.key ? (ui.tableSortDir > 0 ? " ▲" : " ▼") : "";
-        return `<th class="${cls}"${c.sortable ? ` data-sort-key="${esc(c.key)}"` : ""}>${esc(c.label)}${arrow}</th>`;
+        const isSorted = c.sortable && ui.tableSortKey === c.key;
+        const cls = [
+          c.num ? "num" : "",
+          c.sortable ? "sortable" : "",
+          isSorted ? "is-sorted" : "",
+          c.key === "qcReason" ? "az-col-qcreason" : ""
+        ].filter(Boolean).join(" ");
+        const indHtml = c.sortable
+          ? `<span class="sort-ind" aria-hidden="true">${isSorted ? (ui.tableSortDir > 0 ? "▲" : "▼") : "▲"}</span>`
+          : "";
+        return `<th class="${cls}"${c.sortable ? ` data-sort-key="${esc(c.key)}"` : ""}>${esc(c.label)}${indHtml}</th>`;
       }).join("") + "</tr>";
 
       thead.querySelectorAll("[data-sort-key]").forEach(th => {
@@ -4287,7 +4337,7 @@
       }
       const qReason = w.qcReason || (w.qc && w.qc.qcReason) || "ok";
       const postTag = w.afterStatsViewed ? `<span class="az-poststats-badge">After stats</span>` : "";
-      cells += `<td>${buildQcPillsHtml(w)}</td><td><span class="az-reason-code">${esc(qReason)}</span>${postTag}</td>`;
+      cells += `<td>${buildQcPillsHtml(w)}</td><td class="az-col-qcreason"><span class="az-reason-code">${esc(qReason)}</span>${postTag}</td>`;
       cells += `<td class="num">${fmtNum(w.totalDist, 1)}</td><td class="num">${fmtNum(w.meanDist, 2)}</td>`;
       if (ui.normalizeToControl && a.wells.some(x => x.normalized && x.normalized.totalDistPctCtrl !== null)) {
         cells += `<td class="num">${w.normalized && Number.isFinite(w.normalized.totalDistPctCtrl) ? fmtNum(w.normalized.totalDistPctCtrl, 1) + "%" : "—"}</td>`;

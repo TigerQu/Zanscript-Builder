@@ -373,15 +373,19 @@ body.analyzer-body {
 .az-run-select-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  min-width: 66px;
   padding: 3px 9px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   font-size: 11.5px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .az-run-item.is-active .az-run-select-btn {
@@ -593,12 +597,71 @@ body.analyzer-body {
   color: var(--accent);
 }
 
-/* Step 2: 4-Card QC KPI Strip */
+/* Step 2: 4-Card QC KPI Strip & Dedicated Bulk Action Bar */
 .az-kpi-strip-4 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+  margin-bottom: 10px;
+}
+
+.az-qc-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
   margin-bottom: var(--card-gap);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.az-qc-action-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.az-qc-action-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+#excludeFlaggedBtn {
+  min-width: 146px;
+  justify-content: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+#restoreAllWellsBtn {
+  min-width: 96px;
+  justify-content: center;
+  font-weight: 600;
+}
+
+#qcExcludeFlaggedBtn {
+  min-width: 114px;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.az-qc-diag-header {
+  gap: 10px 12px;
+  flex-wrap: nowrap;
+}
+
+.az-qc-diag-title {
+  min-width: 0;
+}
+
+.az-qc-diag-controls {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .az-kpi-card {
@@ -909,6 +972,13 @@ body.analyzer-body {
   font-family: var(--font-mono);
 }
 
+#qcWellInspectorExcludeBtn {
+  min-width: 104px;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 .az-plate-foot-hint {
   margin-top: 10px;
   font-size: 12px;
@@ -919,7 +989,7 @@ body.analyzer-body {
 /* Step 3: Side-by-Side Plate Painter + Group & Factor Manager */
 .az-groups-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 336px;
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: var(--card-gap);
   align-items: start;
   margin-bottom: var(--card-gap);
@@ -931,11 +1001,37 @@ body.analyzer-body {
 }
 
 .az-factor-box {
+  margin-top: 6px;
   padding: 10px 12px;
-  margin-bottom: 12px;
   border-radius: var(--radius-sm);
   background: var(--surface-subtle);
   border: 1px solid var(--border-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.az-factor-details {
+  border-top: 1px solid var(--border-muted);
+  padding-top: 7px;
+}
+
+.az-factor-details summary {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: disclosure-closed;
+}
+
+.az-factor-details[open] summary {
+  list-style: disclosure-open;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.az-factor-details-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1023,9 +1119,16 @@ body.analyzer-body {
 }
 
 .az-factor-presets {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+
+.az-factor-presets .btn {
+  justify-content: center;
+  padding-left: 6px;
+  padding-right: 6px;
+  white-space: nowrap;
 }
 
 .az-combine-btn {
@@ -1036,7 +1139,9 @@ body.analyzer-body {
 .az-brush-swatches {
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
   gap: 7px;
+  min-height: 70px;
   margin-top: 6px;
   margin-bottom: 12px;
 }
@@ -1137,10 +1242,21 @@ body.analyzer-body {
 .az-brush-btns,
 .az-brush-shortcuts,
 .az-brush-io {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
-  flex-wrap: wrap;
+}
+
+.az-brush-btns .btn,
+.az-brush-shortcuts .btn,
+.az-brush-io .btn {
+  justify-content: center;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+#brushExcludeBtn {
+  grid-column: 1 / -1;
 }
 
 .az-brush-shortcuts .btn.active {
@@ -1150,13 +1266,11 @@ body.analyzer-body {
   font-weight: 600;
 }
 
-/* Step 4: Scope & Batch Normalization Bar */
+/* Step 4: Scope & Batch Normalization Bar (2 stable rows, 0px toggle jump) */
 .az-scope-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 14px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px 14px;
   margin-bottom: 14px;
   border-radius: var(--radius);
@@ -1164,11 +1278,48 @@ body.analyzer-body {
   border: 1px solid var(--border);
 }
 
+.az-scope-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  min-height: 28px;
+}
+
+.az-scope-row-norm {
+  justify-content: flex-start;
+  gap: 12px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-muted);
+}
+
 .az-scope-left {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+.az-scope-bar .maze-seg-toggle .btn {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.az-scope-bar .is-disabled,
+.az-chart-toolbar .is-disabled {
+  opacity: 0.48;
+  transition: opacity 0.12s ease;
+}
+
+.az-scope-bar .maze-seg-toggle.is-disabled {
+  pointer-events: none;
+}
+
+.az-shift-badge {
+  margin-left: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Step 4: Spacious 4-Tab Pure-SVG Charting Studio */
@@ -1256,24 +1407,62 @@ body.analyzer-body {
   margin-bottom: 10px;
 }
 
+.az-comp-toolbar {
+  flex-wrap: nowrap;
+  gap: 8px 10px;
+}
+
+.az-comp-toolbar .az-toolbar-left {
+  gap: 8px 10px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.az-comp-toolbar .az-toolbar-right {
+  flex-shrink: 0;
+}
+
+#compViewSel {
+  max-width: 230px;
+}
+
+#compTestFamilySel {
+  max-width: 196px;
+}
+
 .az-sub-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px 16px;
+  gap: 10px 14px;
   flex-wrap: wrap;
   padding: 7px 11px;
   margin-bottom: 10px;
   border-radius: var(--radius-sm);
   background: var(--surface-subtle);
   border: 1px solid var(--border-muted);
+  min-height: 42px;
 }
 
 .az-auc-controls {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 7px;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#tsWinClearBtn {
+  min-width: 52px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.az-auc-readout {
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .az-auc-lbl {
@@ -1760,12 +1949,75 @@ body.analyzer-body {
   flex-wrap: wrap;
 }
 
+.az-export-prism-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.az-export-metric-row {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.az-export-metric-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.az-export-prism-controls .btn,
+.az-export-grid-2x2 .btn {
+  justify-content: center;
+  width: 100%;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.az-export-grid-2x2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 /* Tables (Step 2 QC & Step 5 Per-Well) */
 .az-qc-table-wrap {
   max-height: 300px;
   overflow: auto;
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-sm);
+}
+
+.az-qc-table {
+  table-layout: fixed;
+  min-width: 932px;
+}
+
+.az-qc-table th:nth-child(1) { width: 44px; }
+.az-qc-table th:nth-child(2) { width: 54px; }
+.az-qc-table th:nth-child(3) { width: 140px; }
+.az-qc-table th:nth-child(4) { width: 176px; }
+.az-qc-table th:nth-child(5) { width: auto; min-width: 194px; }
+.az-qc-table th:nth-child(6) { width: 88px; }
+.az-qc-table th:nth-child(7) { width: 84px; }
+.az-qc-table th:nth-child(8) { width: 54px; }
+.az-qc-table th:nth-child(9) { width: 98px; }
+
+.az-qc-table td {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.az-qc-table td:nth-child(3) .az-group-tag {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.az-qc-table [data-qc-toggle] {
+  min-width: 72px;
+  justify-content: center;
+  font-weight: 600;
 }
 
 .az-table-wrap {
@@ -1800,6 +2052,26 @@ body.analyzer-body {
 .az-table th.sortable {
   cursor: pointer;
   user-select: none;
+}
+
+.az-table th.sortable .sort-ind {
+  display: inline-block;
+  width: 12px;
+  margin-left: 3px;
+  text-align: center;
+  font-size: 9.5px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.az-table th.sortable.is-sorted .sort-ind {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.az-table th.az-col-qcreason,
+.az-table td.az-col-qcreason {
+  min-width: 146px;
 }
 
 .az-table th.sortable:hover {
@@ -1933,14 +2205,23 @@ body.analyzer-body {
 }
 
 /* Responsive Breakpoints */
+@media (max-width: 1380px) {
+  .az-qc-params-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1120px) {
   .az-kpi-strip-4,
   .az-overview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .az-qc-params-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .az-comp-toolbar,
+  .az-comp-toolbar .az-toolbar-left,
+  .az-qc-diag-header,
+  .az-qc-diag-controls {
+    flex-wrap: wrap;
   }
 
   .az-export-hub-grid,

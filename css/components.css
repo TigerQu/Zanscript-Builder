@@ -523,6 +523,7 @@ details.geo-inline-box summary::-webkit-details-marker {
 
 .maze-seg-toggle .btn {
   border-radius: 0;
+  font-weight: 600;
 }
 
 .maze-seg-toggle .btn:first-child {
@@ -540,7 +541,6 @@ details.geo-inline-box summary::-webkit-details-marker {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
-  font-weight: 600;
 }
 
 .maze-canvas-wrap {

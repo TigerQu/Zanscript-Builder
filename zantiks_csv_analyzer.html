@@ -163,7 +163,7 @@
         <!-- Multi-Run Switcher Bar (hidden when single run) -->
         <div class="az-run-switcher-bar" id="qcRunSwitcher" style="display:none;"></div>
 
-        <!-- 4-Card QC KPI Strip -->
+        <!-- 4-Card QC KPI Strip (calm pure metrics, zero height jitter) -->
         <div class="az-kpi-strip-4" id="kpiStrip" aria-label="Quality control overview">
           <div class="az-kpi-card">
             <div class="az-kpi-label">Active Wells</div>
@@ -177,19 +177,22 @@
           </div>
           <div class="az-kpi-card" id="kpiSpikeCard">
             <div class="az-kpi-label">Spike Glitches</div>
-            <div class="az-kpi-mid-row">
-              <div class="az-kpi-value" id="kpiSpikeCount">0</div>
-              <button type="button" class="btn btn-xs btn-warn" id="excludeFlaggedBtn">Exclude Flagged</button>
-            </div>
-            <div class="az-kpi-bot-row">
-              <div class="az-kpi-sub" id="kpiSpikeList">No reflection spikes</div>
-              <button type="button" class="btn btn-xs" id="restoreAllWellsBtn" style="display:none;">Include All</button>
-            </div>
+            <div class="az-kpi-value" id="kpiSpikeCount">0</div>
+            <div class="az-kpi-sub" id="kpiSpikeList">No reflection spikes</div>
           </div>
           <div class="az-kpi-card">
             <div class="az-kpi-label">Chamber Temp (TEMP_C)</div>
             <div class="az-kpi-value" id="kpiTempRange">—</div>
             <div class="az-kpi-sub" id="kpiTempSub">No temperature column</div>
+          </div>
+        </div>
+
+        <!-- Dedicated Bulk QC Action Bar (fixed button widths -> 0px KPI card shift) -->
+        <div class="az-qc-action-bar" id="qcActionBar">
+          <span class="az-qc-action-note" id="qcActionBarNote">Bulk QC actions for active plate</span>
+          <div class="az-qc-action-btns">
+            <button type="button" class="btn btn-xs btn-warn" id="excludeFlaggedBtn">Exclude Flagged</button>
+            <button type="button" class="btn btn-xs" id="restoreAllWellsBtn" disabled>Include All</button>
           </div>
         </div>
 
@@ -290,24 +293,24 @@
 
         <!-- Card 3: QC Diagnostics Table -->
         <div class="card">
-          <div class="card-header">
-            <div>
+          <div class="card-header az-qc-diag-header">
+            <div class="az-qc-diag-title">
               <h3 class="card-title">QC Diagnostics &amp; Anomaly Table</h3>
-              <span class="card-hint">Anomalies sorted first · Explicit QC reason &amp; audit trail per well</span>
+              <span class="card-hint">Anomalies first · QC reason &amp; audit trail</span>
             </div>
-            <div class="az-toolbar-left">
+            <div class="az-toolbar-left az-qc-diag-controls">
               <select id="qcFilterSel" class="az-select az-select-sm" aria-label="Filter QC table">
-                <option value="flagged" selected>Flagged &amp; Excluded Only</option>
+                <option value="flagged" selected>Flagged &amp; Excluded</option>
                 <option value="all">All Wells</option>
               </select>
               <select id="qcSortSel" class="az-select az-select-sm" aria-label="Sort QC table">
                 <option value="severity" selected>Sort: Severity</option>
-                <option value="spikes">Sort: Spike Count</option>
-                <option value="dist_asc">Sort: Lowest Distance</option>
-                <option value="dist_desc">Sort: Highest Distance</option>
+                <option value="spikes">Sort: Spikes</option>
+                <option value="dist_asc">Sort: Low Dist</option>
+                <option value="dist_desc">Sort: High Dist</option>
                 <option value="well">Sort: Well ID</option>
               </select>
-              <button type="button" class="btn btn-xs btn-warn" id="qcExcludeFlaggedBtn">Exclude All Flagged</button>
+              <button type="button" class="btn btn-xs btn-warn" id="qcExcludeFlaggedBtn">Exclude Flagged</button>
             </div>
           </div>
 
@@ -376,32 +379,14 @@
             <div class="az-plate-foot-hint" id="brushPlateFootHint">Click or drag across wells to paint the active group. Excluded wells stay dimmed and crossed out.</div>
           </div>
 
-          <!-- Right: Multi-Factor Layer Bar, Swatches, Rename, Quick Fill & Plate Map JSON -->
+          <!-- Right: Primary Swatches on TOP, Multi-Factor Layers cleanly below -->
           <div class="card az-groups-panel-card">
             <div class="card-header">
               <h3 class="card-title">Group &amp; Factor Manager</h3>
               <span class="card-hint" id="activeLayerHint">Primary Group</span>
             </div>
 
-            <!-- Factor Layers Bar -->
-            <div class="az-factor-box">
-              <div class="az-brush-section-lbl" style="margin-top:0;">Factor Layers</div>
-              <div class="az-factor-pills" id="factorLayerBar"></div>
-              <div class="az-factor-add-row">
-                <div class="az-factor-input-wrap">
-                  <label for="newFactorInput">Add factor</label>
-                  <input type="text" id="newFactorInput" autocomplete="off" maxlength="24">
-                </div>
-                <button type="button" class="btn btn-xs" id="addFactorBtn">+ Add</button>
-              </div>
-              <div class="az-factor-presets">
-                <button type="button" class="btn btn-xs" id="presetGenoTreatBtn">+ genotype &times; treatment</button>
-                <button type="button" class="btn btn-xs" id="presetTreatDoseBtn">+ treatment &times; dose</button>
-              </div>
-              <button type="button" class="btn btn-xs btn-primary az-combine-btn" id="combineFactorsBtn" style="display:none;">Combine Factors &rarr; Groups</button>
-            </div>
-
-            <div class="az-brush-section-lbl" id="swatchSectionLbl">Group Swatches</div>
+            <div class="az-brush-section-lbl" id="swatchSectionLbl" style="margin-top:0;">Group Swatches</div>
             <div class="az-brush-swatches" id="groupSwatchList" role="group" aria-label="Treatment groups"></div>
 
             <div class="az-group-manager-stack">
@@ -427,6 +412,29 @@
                 <button type="button" class="btn btn-sm" id="savePlateMapBtn">Save Map (.json)</button>
                 <button type="button" class="btn btn-sm" id="loadPlateMapBtn">Load Map (.json)</button>
                 <input type="file" id="plateMapFileInput" accept=".json,application/json" hidden>
+              </div>
+
+              <!-- Multi-Factor Layers (collapsible details, auto-opens when factors exist; quick presets always 1-click accessible) -->
+              <div class="az-factor-box">
+                <div class="az-brush-section-lbl" style="margin-top:0;">Multi-Factor Layers</div>
+                <div class="az-factor-presets">
+                  <button type="button" class="btn btn-xs" id="presetGenoTreatBtn">+ genotype &times; treatment</button>
+                  <button type="button" class="btn btn-xs" id="presetTreatDoseBtn">+ treatment &times; dose</button>
+                </div>
+                <details class="az-factor-details" id="factorLayersDetails">
+                  <summary id="factorLayersSummary">Custom factor layers &amp; combine</summary>
+                  <div class="az-factor-details-body">
+                    <div class="az-factor-pills" id="factorLayerBar"></div>
+                    <div class="az-factor-add-row">
+                      <div class="az-factor-input-wrap">
+                        <label for="newFactorInput">Add factor</label>
+                        <input type="text" id="newFactorInput" autocomplete="off" maxlength="24">
+                      </div>
+                      <button type="button" class="btn btn-xs" id="addFactorBtn">+ Add</button>
+                    </div>
+                    <button type="button" class="btn btn-xs btn-primary az-combine-btn" id="combineFactorsBtn" style="display:none;">Combine Factors &rarr; Groups</button>
+                  </div>
+                </details>
               </div>
             </div>
           </div>
@@ -455,24 +463,28 @@
       </div>
 
       <div data-requires-csv-body style="display:none;">
-        <!-- Multi-Run Scope & Batch Normalization Bar (hidden when single run) -->
+        <!-- Multi-Run Scope & Batch Normalization Bar (2 stable rows, 0px toggle jump) -->
         <div class="az-scope-bar" id="plotScopeBar" style="display:none;">
-          <div class="az-scope-left">
-            <div class="maze-seg-toggle" role="group" aria-label="Plot analysis scope">
-              <button type="button" class="btn btn-xs active" id="plotScopePooledBtn">Pooled (2 runs)</button>
-              <button type="button" class="btn btn-xs" id="plotScopeActiveBtn">Active Run</button>
+          <div class="az-scope-row">
+            <div class="az-scope-left">
+              <div class="maze-seg-toggle" role="group" aria-label="Plot analysis scope">
+                <button type="button" class="btn btn-xs active" id="plotScopePooledBtn">Pooled (2 runs)</button>
+                <button type="button" class="btn btn-xs" id="plotScopeActiveBtn">Active Run</button>
+              </div>
+              <div class="maze-seg-toggle" id="plotUnitToggleWrap" role="group" aria-label="Unit of analysis">
+                <button type="button" class="btn btn-xs active" id="unitWellsBtn" title="Individual wells across pooled plates">n = Wells</button>
+                <button type="button" class="btn btn-xs" id="unitPlatesBtn" title="Per-plate group means (1 observation per biological replicate plate)">Plate Means (n = Plates)</button>
+              </div>
             </div>
-            <div class="maze-seg-toggle" id="plotUnitToggleWrap" role="group" aria-label="Unit of analysis" style="display:none;">
-              <button type="button" class="btn btn-xs active" id="unitWellsBtn" title="Individual wells across pooled plates">n = Wells</button>
-              <button type="button" class="btn btn-xs" id="unitPlatesBtn" title="Per-plate group means (1 observation per biological replicate plate)">Plate Means (n = Plates)</button>
-            </div>
+            <span class="badge-warn az-shift-badge" id="batchShiftBadge" style="display:none;">Plate shift 0%</span>
+          </div>
+          <div class="az-scope-row az-scope-row-norm">
             <label class="az-toggle-pill"><input type="checkbox" id="normControlChk"> <span>Normalize to Control (%)</span></label>
-            <div class="az-inline-control" id="normControlGroupWrap" style="display:none;">
+            <div class="az-inline-control" id="normControlGroupWrap">
               <label for="normControlGroupSel">Control</label>
               <select id="normControlGroupSel" class="az-select az-select-sm"></select>
             </div>
           </div>
-          <span class="badge-warn" id="batchShiftBadge" style="display:none;">Plate shift 0%</span>
         </div>
 
         <div class="az-charts-panel">
@@ -541,8 +553,8 @@
                 <input type="number" id="tsWinStartInput" class="az-num-sm" min="0" step="10" value="">
                 <label for="tsWinEndInput" class="az-auc-sublbl">End</label>
                 <input type="number" id="tsWinEndInput" class="az-num-sm" min="0" step="10" value="">
-                <button type="button" class="btn btn-xs" id="tsWinClearBtn" style="display:none;">Clear</button>
-                <span class="card-hint" id="tsWinAucReadout"></span>
+                <button type="button" class="btn btn-xs" id="tsWinClearBtn" disabled>Clear</button>
+                <span class="card-hint az-auc-readout" id="tsWinAucReadout"></span>
               </div>
             </div>
 
@@ -555,7 +567,7 @@
 
           <!-- TAB 2: PHASE & GROUP COMPARISON + QUICK SCREENING STATS -->
           <div class="az-tab-pane" id="tabPane-comparison" role="tabpanel">
-            <div class="az-chart-toolbar">
+            <div class="az-chart-toolbar az-comp-toolbar">
               <div class="az-toolbar-left">
                 <div class="az-inline-control">
                   <label for="compViewSel">Comparison</label>
@@ -565,8 +577,8 @@
                 <div class="az-inline-control" id="compTestFamilyWrap">
                   <label for="compTestFamilySel">Primary test</label>
                   <select id="compTestFamilySel" class="az-select az-select-sm">
-                    <option value="parametric" selected>Parametric (Welch / ANOVA)</option>
-                    <option value="nonparametric">Non-Parametric (MWU / Kruskal)</option>
+                    <option value="parametric" selected>Parametric (Welch/ANOVA)</option>
+                    <option value="nonparametric">Non-Param (MWU/Kruskal)</option>
                   </select>
                 </div>
               </div>
@@ -684,8 +696,8 @@
             <div class="az-export-panel">
               <div class="az-export-panel-title">GraphPad Prism Grouped Table</div>
               <p class="az-export-panel-desc">Exports active wells arranged side-by-side by treatment group (UTF-8 BOM CSV for Excel/Prism, or clean tab-separated clipboard paste).</p>
-              <div class="az-export-panel-controls">
-                <div class="az-inline-control">
+              <div class="az-export-panel-controls az-export-prism-controls">
+                <div class="az-inline-control az-export-metric-row">
                   <label for="prismMetricSel">Metric</label>
                   <select id="prismMetricSel" class="az-select az-select-sm"></select>
                 </div>
@@ -697,7 +709,7 @@
             <div class="az-export-panel">
               <div class="az-export-panel-title">Cleaned Tables, Audit Log &amp; Python Verification</div>
               <p class="az-export-panel-desc">Download non-destructive long/summary CSVs with <code>run_id</code>, factor columns &amp; <code>qc_reason</code>, a Methods-ready <code>cleaning_log.txt</code>, or a <code>scipy.stats</code> Python script.</p>
-              <div class="az-export-panel-controls">
+              <div class="az-export-panel-controls az-export-grid-2x2">
                 <button type="button" class="btn btn-sm" id="exportTidyBtn">Tidy Long CSV</button>
                 <button type="button" class="btn btn-sm" id="exportSummaryBtn">Well Summary CSV</button>
                 <button type="button" class="btn btn-sm" id="exportCleaningLogBtn">Cleaning Log (.txt)</button>

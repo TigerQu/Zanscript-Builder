@@ -28,15 +28,26 @@ function setText(id, text) {
   if (el) el.textContent = text;
 }
 
-function renderRunSummary(cfg, s4, orgObj) {
-  setText("sumResearcher", cfg.userFullClean || "Name not set");
-  setText("sumFolder", s4.filename);
+function setSummaryText(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const val = text || "";
+  el.textContent = val;
+  el.title = val;
+  if (el.tagName === "CODE" && el.parentElement && el.parentElement.classList.contains("summary-sub")) {
+    el.parentElement.title = val;
+  }
+}
 
-  setText("sumHw", "MWP " + cfg.hw);
+function renderRunSummary(cfg, s4, orgObj) {
+  setSummaryText("sumResearcher", cfg.userFullClean || "Name not set");
+  setSummaryText("sumFolder", s4.filename);
+
+  setSummaryText("sumHw", "MWP " + cfg.hw);
   if (cfg.hw === "Z3") {
     if (cfg.stimId === "multi_phase") {
       const hasBotClips = (cfg.timelineClips || []).some(c => String(c.track || "").startsWith("U_"));
-      setText("sumHwSub", hasBotClips
+      setSummaryText("sumHwSub", hasBotClips
         ? "Top + Underneath LED tracks"
         : (cfg.ledMount === "BOTH" ? "Multi-wavelength (Top+Bot)" : (cfg.ledMount === "UNDERNEATH" ? "Multi-wavelength (Bot acclim)" : "Multi-wavelength LEDs")));
     } else {
@@ -46,10 +57,10 @@ function renderRunSummary(cfg, s4, orgObj) {
       const colLbl = (cfg.ledColor === "WHITE" && cfg.ledMount === "OVERHEAD")
         ? "Overhead LED"
         : `${mountLbl} ${cfg.ledColorObj.short}`;
-      setText("sumHwSub", `${colLbl} ${cfg.ledPct}%`);
+      setSummaryText("sumHwSub", `${colLbl} ${cfg.ledPct}%`);
     }
   } else {
-    setText("sumHwSub", `GPO6-8 (${cfg.stimId === "multi_phase" ? "multi-color" : cfg.ledColorObj.short})`);
+    setSummaryText("sumHwSub", `GPO6-8 (${cfg.stimId === "multi_phase" ? "multi-color" : cfg.ledColorObj.short})`);
   }
 
   let tempSummary;
@@ -69,19 +80,19 @@ function renderRunSummary(cfg, s4, orgObj) {
     tempSummary = cfg.useThermostat ? cfg.thermostatTemp + " °C" : "ambient";
   }
 
-  setText("sumOrganism", orgObj ? orgObj.label : "Custom");
-  setText("sumOrganismSub",
+  setSummaryText("sumOrganism", orgObj ? orgObj.label : "Custom");
+  setSummaryText("sumOrganismSub",
     `${cfg.targetSize} mm · threshold ${cfg.detThreshold} · ${tempSummary}`);
 
-  setText("sumPlate", cfg.plate.name);
+  setSummaryText("sumPlate", cfg.plate.name);
   const plateMetaText = cfg.isMaze
     ? `${cfg.numWells} arena${cfg.numWells === 1 ? "" : "s"} · ${cfg.numZones} zone${cfg.numZones === 1 ? "" : "s"}`
     : cfg.plate.meta;
-  setText("sumPlateSub", `${plateMetaText} · ${cfg.arenaBmp || cfg.plate.arenaBmp}.bmp`);
+  setSummaryText("sumPlateSub", `${plateMetaText} · ${cfg.arenaBmp || cfg.plate.arenaBmp}.bmp`);
 
   const stim = STIMULI.find(s => s.id === state.stimId);
-  setText("sumStim", stim ? stim.name : state.stimId);
-  setText("sumStimSub", document.getElementById("timelineDesc").textContent);
+  setSummaryText("sumStim", stim ? stim.name : state.stimId);
+  setSummaryText("sumStimSub", document.getElementById("timelineDesc").textContent);
 
   const metrics = [];
   if (cfg.useDist) metrics.push("Distance");
@@ -89,12 +100,12 @@ function renderRunSummary(cfg, s4, orgObj) {
   if (cfg.useZones) metrics.push("Zones");
   if (cfg.useZoneChanges) metrics.push("Zone Events");
   if (cfg.useXy) metrics.push("Raw XY");
-  setText("sumData", metrics.join(" · "));
+  setSummaryText("sumData", metrics.join(" · "));
   const extras = [];
   if (cfg.useTracks) extras.push("tracks");
   if (cfg.useHeatmap) extras.push("heatmap");
   if (cfg.usePicture) extras.push("photo");
-  setText("sumDataSub", (VIDEO_LABELS[cfg.videoMode] || cfg.videoMode) + (extras.length ? " · " + extras.join(" + ") : ""));
+  setSummaryText("sumDataSub", (VIDEO_LABELS[cfg.videoMode] || cfg.videoMode) + (extras.length ? " · " + extras.join(" + ") : ""));
 }
 
 function pageIndexOf(id) {

@@ -259,11 +259,18 @@ function renderConfigModalTable() {
 function updateConfigStatusBadges() {
   const customCount = countCustomizedPlates();
   const topBadge = document.getElementById("topCustomCountBadge");
+  const configBtn = document.getElementById("openConfigModalBtn");
   if (customCount > 0) {
+    const plural = customCount === 1 ? "" : "s";
     topBadge.style.display = "inline-block";
-    topBadge.textContent = `${customCount} custom`;
+    topBadge.textContent = String(customCount);
+    topBadge.setAttribute("aria-label", `${customCount} customized plate${plural}`);
+    if (configBtn) configBtn.title = `Plate Config (${customCount} customized plate${plural})`;
   } else {
     topBadge.style.display = "none";
+    topBadge.textContent = "0";
+    topBadge.removeAttribute("aria-label");
+    if (configBtn) configBtn.title = "Plate Config (factory defaults)";
   }
 
   const activeCustom = isPlateCustomized(state.plateId);
