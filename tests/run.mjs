@@ -4434,6 +4434,102 @@ try {
         pyRampTemplateOk &&
         pyExecRes.ok;
 
+      // 3. High-index (>= 106 slices) extreme-suffix token-boundary compaction & Analyzer consecutive stimulusMarkers check
+      const highIdxRes = await page.evaluate(() => {
+        const core = window.ZANTIKS_ANALYZER_CORE;
+        const cp = core.classifyPhase;
+        const allLedTracks = ["WHITE", "BLUE", "GREEN", "RED", "UV", "U_WHITE", "U_BLUE", "U_GREEN", "U_RED", "U_UV"];
+        const highClips = [
+          // 104 consecutive 1s VIB pulses -> slices S1..S104 (0..104s)
+          { id: "pad_vib", track: "VIB", startSec: 0, endSec: 104, val: "U1", repeatSec: 1 },
+          // S105 & S106 (104..106s): consecutive WHITE ramp + 24.5C + 10Hz + VU1 + AUD triggers
+          { id: "h_w", track: "WHITE", startSec: 104, endSec: 106, val: 20, endVal: 100, curve: "linear", rampSteps: 2, strobeHz: 10 },
+          { id: "h_t", track: "TEMP", startSec: 104, endSec: 108, val: 24.5 },
+          { id: "h_v", track: "VIB", startSec: 104, endSec: 106, val: "U1", repeatSec: 1 },
+          { id: "h_a", track: "AUDIO", startSec: 104, endSec: 106, val: "tone.wav", repeatSec: 1 },
+          // S107 (106..107s): worst-case 10 LEDs + ramp + 24.5C + 2+5+10Hz + VU1 + AUD
+          { id: "w10_w", track: "WHITE", startSec: 106, endSec: 107, val: 20, endVal: 100, curve: "linear", rampSteps: 2, strobeHz: 2 },
+          { id: "w10_b", track: "BLUE", startSec: 106, endSec: 107, val: 100, strobeHz: 5 },
+          { id: "w10_g", track: "GREEN", startSec: 106, endSec: 107, val: 100, strobeHz: 10 },
+          ...allLedTracks.filter((tr) => !["WHITE", "BLUE", "GREEN"].includes(tr)).map((tr, i) => ({
+            id: `w10_${i}`, track: tr, startSec: 106, endSec: 107, val: 100
+          })),
+          { id: "w10_v", track: "VIB", startSec: 106, endSec: 107, val: "U1" },
+          { id: "w10_a", track: "AUDIO", startSec: 106, endSec: 107, val: "tone.wav" },
+          // S108 (107..108s): worst-case non-stim 10 LEDs + ramp + 24.5C
+          { id: "n10_w", track: "WHITE", startSec: 107, endSec: 108, val: 20, endVal: 100, curve: "linear", rampSteps: 2 },
+          ...allLedTracks.filter((tr) => tr !== "WHITE").map((tr, i) => ({
+            id: `n10_${i}`, track: tr, startSec: 107, endSec: 108, val: 100
+          }))
+        ];
+        const highComp = compileMultiTrackSlices(highClips, 108, 1, 22);
+        const sls = highComp.slices;
+        const s105 = sls[104];
+        const s106 = sls[105];
+        const s107 = sls[106];
+        const s108 = sls[107];
+
+        const allLenOk = sls.every((sl) => sl.csvTag.length <= 24);
+        const allPrefixOk = sls.every((sl) => sl.csvTag.startsWith(`S${sl.idx}_`));
+        const noMidTokenChop = sls.every((sl) => !/(_AU|_VU|_RAM|_DAR|_TEM|_H|_)$/.test(sl.csvTag));
+        const allAdjDistinct = sls.every((sl, i) => i === 0 || sl.csvTag !== sls[i - 1].csvTag);
+        const allClassOk = sls.every((sl) => {
+          const c = cp(sl.csvTag);
+          const isStimSlice = sl.vibTrigger || sl.audioTrigger || sl.strobeHz > 0;
+          if (isStimSlice) return c.kind === "stim" && c.isStim === true;
+          if (sl.isRamp) return c.kind === "transition" && c.colorHint === "ramp" && c.isTransition === true;
+          return true;
+        });
+
+        const exactTagsOk =
+          sls.length === 108 &&
+          s105?.csvTag === "S105_W_RAMP_10HZ_VU1_AUD" &&
+          s106?.csvTag === "S106_W_RAMP_10HZ_VU1_AUD" &&
+          s107?.csvTag === "S107_2_5_10HZ_VU1_AUD" &&
+          s108?.csvTag === "S108_MIX_RAMP" &&
+          cp(s105.csvTag).kind === "stim" &&
+          cp(s106.csvTag).kind === "stim" &&
+          cp(s107.csvTag).kind === "stim" &&
+          cp(s108.csvTag).kind === "transition" &&
+          cp(s108.csvTag).colorHint === "ramp";
+
+        // Feed consecutive S105_* and S106_* rows (same TRIAL=1) into computeAnalysis -> must remain 2 distinct stimulusMarkers
+        const stimCsv = [
+          "RUNTIME,TEMP_C,TRIAL,PHASE,TIME_BIN,DIST_A1,DIST_A2",
+          `1,24.5,1,${s105.csvTag},1,15.0,16.0`,
+          `2,24.5,1,${s106.csvTag},2,18.0,19.0`
+        ].join("\n") + "\n";
+        const stimParsed = core.parseZantiksCsv(stimCsv, "high_idx_consecutive_stim.csv");
+        const stimAnalysis = core.computeAnalysis({ parsed: stimParsed });
+        const markers = stimAnalysis?.timeSeries?.stimulusMarkers || [];
+        const markersOk =
+          markers.length === 2 &&
+          markers[0].phase === s105.csvTag &&
+          markers[1].phase === s106.csvTag;
+
+        return {
+          sliceCount: sls.length,
+          allLenOk,
+          allPrefixOk,
+          noMidTokenChop,
+          allAdjDistinct,
+          allClassOk,
+          exactTagsOk,
+          markersCount: markers.length,
+          markersOk,
+          sampleTags: [s105?.csvTag, s106?.csvTag, s107?.csvTag, s108?.csvTag]
+        };
+      });
+
+      const highIdxOk =
+        highIdxRes.allLenOk &&
+        highIdxRes.allPrefixOk &&
+        highIdxRes.noMidTokenChop &&
+        highIdxRes.allAdjDistinct &&
+        highIdxRes.allClassOk &&
+        highIdxRes.exactTagsOk &&
+        highIdxRes.markersOk;
+
       const ok =
         errors.length === 0 &&
         compileRes.rampSlicesOk &&
@@ -4441,9 +4537,10 @@ try {
         compileRes.comboOk &&
         compileRes.classifyRampOk &&
         compileRes.contextScheduleOk &&
-        mtAnalyzerOk;
-      report(ok, "Multi-Track _RAMP transition tagging, 24-char combo guard, Analyzer ramp VMR exclusion & Python parity pass",
-        ok ? "" : JSON.stringify({ errors, compileRes: { ...compileRes, slices: compileRes.slices.length }, mtRes: { ...mtRes, pyTemplate: undefined }, pyRampTemplateOk, pyExecRes }));
+        mtAnalyzerOk &&
+        highIdxOk;
+      report(ok, "Multi-Track _RAMP transition tagging, token-boundary 24-char compaction (S105-S108), Analyzer VMR exclusion & Python parity pass",
+        ok ? "" : JSON.stringify({ errors, compileRes: { ...compileRes, slices: compileRes.slices.length }, mtRes: { ...mtRes, pyTemplate: undefined }, pyRampTemplateOk, pyExecRes, highIdxRes }));
       await page.close();
     }
   }

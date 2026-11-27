@@ -411,11 +411,35 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       }
     }
 
-    const tail = `${rampSuffix}${tempSuffix}${stimSuffix}`;
-    const baseTag = `S${sNum}_${lightTag}`;
-    const csvTag = (baseTag.length + tail.length <= 24)
-      ? `${baseTag}${tail}`
-      : (baseTag.slice(0, Math.max(1, 24 - tail.length)) + tail).slice(0, 24);
+    const prefix = `S${sNum}`;
+    const isDarkSlice = (tLen === 0 && bLen === 0);
+    const compactLight = isDarkSlice
+      ? "DARK"
+      : (bLen === 0
+        ? s.topLights.map(l => shortMap[l.id]).join("")
+        : (tLen === 0
+          ? "U" + s.bottomLights.map(l => shortMap[l.id]).join("")
+          : "T" + s.topLights.map(l => shortMap[l.id]).join("") + "_U" + s.bottomLights.map(l => shortMap[l.id]).join("")));
+    const candidates = [
+      `${prefix}_${lightTag}${rampSuffix}${tempSuffix}${stimSuffix}`,
+      `${prefix}_${compactLight}${rampSuffix}${tempSuffix}${stimSuffix}`,
+      `${prefix}_${compactLight}${rampSuffix}${stimSuffix}`
+    ];
+    if (stimSuffix) {
+      candidates.push(
+        `${prefix}_${compactLight}${stimSuffix}`,
+        `${prefix}${stimSuffix}`
+      );
+    } else if (rampSuffix) {
+      candidates.push(
+        `${prefix}_MIX${rampSuffix}`,
+        `${prefix}${rampSuffix}`
+      );
+    }
+    if (isDarkSlice) candidates.push(`${prefix}_DARK`);
+    candidates.push(`${prefix}_MIX`);
+    const csvTag = candidates.find(c => c.length <= 24) ||
+      `${prefix}${stimTagParts.length ? "_" + stimTagParts[stimTagParts.length - 1] : (rampSuffix || (isDarkSlice ? "_DARK" : ""))}`.slice(0, 24);
     const overlayText = `S${sNum} ${ovLight}${s.effectiveTemp !== null ? " " + s.effectiveTemp + "C" : ""}${stimOv}`;
     return {
       idx: sNum,
