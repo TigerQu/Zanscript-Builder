@@ -290,7 +290,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
         const pct = resolveLightPct(hitTop);
         if (pct > 0) {
           const pwm = Math.round((pct / 100) * 4095);
-          topLights.push({ id: lid, trackId: lid, mount: "TOP", pct, pwm, strobeHz: hitTop.strobeHz || 0, colObj: LED_COLORS[lid] });
+          topLights.push({ id: lid, trackId: lid, mount: "TOP", pct, pwm, strobeHz: hitTop.strobeHz || 0, isRamp: Boolean(hitTop.hasRamp), colObj: LED_COLORS[lid] });
         }
       }
       const botTrack = "U_" + lid;
@@ -299,7 +299,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
         const pct = resolveLightPct(hitBot);
         if (pct > 0) {
           const pwm = Math.round((pct / 100) * 4095);
-          bottomLights.push({ id: lid, trackId: botTrack, mount: "BOT", pct, pwm, strobeHz: hitBot.strobeHz || 0, colObj: LED_COLORS[lid] });
+          bottomLights.push({ id: lid, trackId: botTrack, mount: "BOT", pct, pwm, strobeHz: hitBot.strobeHz || 0, isRamp: Boolean(hitBot.hasRamp), colObj: LED_COLORS[lid] });
         }
       }
     }
@@ -323,11 +323,13 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     const strobeHzList = [...strobeHzSet].sort((a, b) => a - b);
     const sliceStrobeHz = strobeHzList.length > 0 ? strobeHzList[strobeHzList.length - 1] : 0;
 
+    const isRamp = topLights.some(l => l.isRamp) || bottomLights.some(l => l.isRamp);
     const sig = "T:" + topLights.map(l => `${l.id}:${l.pct}${l.strobeHz ? `@${l.strobeHz}` : ""}`).join("+") +
       "|B:" + bottomLights.map(l => `${l.id}:${l.pct}${l.strobeHz ? `@${l.strobeHz}` : ""}`).join("+") +
       "|C:" + (effectiveTemp !== null ? effectiveTemp : "none") +
       "|V:" + (vibTrigger ? ("TRIG:" + vibCode) : "none") +
-      "|A:" + (audioTrigger ? ("TRIG:" + audioFile) : "none");
+      "|A:" + (audioTrigger ? ("TRIG:" + audioFile) : "none") +
+      `|R:${isRamp ? 1 : 0}`;
     const prev = rawSlices[rawSlices.length - 1];
     // Never merge a slice that fires a one-shot trigger (vibTrigger or audioTrigger) into the previous slice
     if (prev && !vibTrigger && !audioTrigger && !prev.vibTrigger && !prev.audioTrigger && prev.sig === sig) {
@@ -337,7 +339,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       rawSlices.push({
         b0, b1, bins: b1 - b0, topLights, bottomLights, effectiveTemp,
         vibTrigger, vibCode, audioTrigger, audioFile,
-        strobeHz: sliceStrobeHz, strobeHzList, sig
+        strobeHz: sliceStrobeHz, strobeHzList, isRamp, sig
       });
     }
   }
@@ -347,6 +349,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     const sNum = idx + 1;
     const tLen = s.topLights.length;
     const bLen = s.bottomLights.length;
+    const rampSuffix = s.isRamp ? "_RAMP" : "";
     const tempSuffix = s.effectiveTemp !== null ? `_${s.effectiveTemp}C` : "";
     const stimTagParts = [];
     const stimOvParts = [];
@@ -398,7 +401,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
     } else {
       if (tLen === 1 && bLen === 1) {
         const fullCombo = `${s.topLights[0].id}_U_${s.bottomLights[0].id}`;
-        lightTag = (`S${sNum}_${fullCombo}${tempSuffix}${stimSuffix}`).length <= 24
+        lightTag = (`S${sNum}_${fullCombo}${rampSuffix}${tempSuffix}${stimSuffix}`).length <= 24
           ? fullCombo
           : `T${shortMap[s.topLights[0].id]}_U${shortMap[s.bottomLights[0].id]}`;
         ovLight = `T:${shortMap[s.topLights[0].id]} B:${shortMap[s.bottomLights[0].id]}`;
@@ -408,7 +411,11 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       }
     }
 
-    const csvTag = `S${sNum}_${lightTag}${tempSuffix}${stimSuffix}`.slice(0, 24);
+    const tail = `${rampSuffix}${tempSuffix}${stimSuffix}`;
+    const baseTag = `S${sNum}_${lightTag}`;
+    const csvTag = (baseTag.length + tail.length <= 24)
+      ? `${baseTag}${tail}`
+      : (baseTag.slice(0, Math.max(1, 24 - tail.length)) + tail).slice(0, 24);
     const overlayText = `S${sNum} ${ovLight}${s.effectiveTemp !== null ? " " + s.effectiveTemp + "C" : ""}${stimOv}`;
     return {
       idx: sNum,
@@ -425,6 +432,7 @@ function compileMultiTrackSlices(clipsRaw, timelineSecRaw, binRaw, fallbackTemp)
       audioFile: s.audioFile,
       strobeHz: s.strobeHz,
       strobeHzList: s.strobeHzList,
+      isRamp: s.isRamp,
       csvTag,
       overlayText
     };

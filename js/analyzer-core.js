@@ -1529,7 +1529,15 @@
           const s1 = t + sl.endSec;
           const slTemp = sl.effectiveTemp !== null ? sl.effectiveTemp : (thermEnabled ? defaultTemp : null);
           const isDark = sl.topLights.length === 0 && sl.bottomLights.length === 0;
-          phaseSchedule.push({ startSec: s0, endSec: s1, phase: sl.csvTag, label: sl.overlayText, kind: isDark ? "dark" : "light", tempC: slTemp });
+          phaseSchedule.push({
+            startSec: s0,
+            endSec: s1,
+            phase: sl.csvTag,
+            label: sl.overlayText,
+            kind: isDark ? "dark" : (sl.isRamp ? "transition" : "light"),
+            colorHint: isDark ? "dark" : (sl.isRamp ? "ramp" : "light"),
+            tempC: slTemp
+          });
           if (slTemp !== null) {
             tempSchedule.push({ startSec: s0, endSec: s1, tempC: slTemp, label: `${slTemp}°C` });
           }
@@ -3035,7 +3043,7 @@
     if (/^PPI_TRIAL\b/.test(p)) {
       return { kind: "stim", colorHint: "ppi", isLight: false, isDark: false, isTransition: false, isStim: true, stimType: "ppi" };
     }
-    if (/^(STARTLE|VIBRATION|AUDIO_PULSE)\b/.test(p) || /(_FLASH|_HZ|_VU[0-3]|_AUD)$/.test(p)) {
+    if (/^(STARTLE|VIBRATION|AUDIO_PULSE)\b/.test(p) || /(_FLASH|_(?:\d+_)*\d*HZ|_VU[0-3]|_AUD)$/.test(p)) {
       const stimType = /VIB|_VU[0-3]/.test(p) ? "vib" : (/AUD/.test(p) ? "audio" : "light_pulse");
       return { kind: "stim", colorHint: "stim", isLight: false, isDark: false, isTransition: false, isStim: true, stimType };
     }
@@ -3044,6 +3052,9 @@
     }
     if (/^DUSK\b/.test(p)) {
       return { kind: "transition", colorHint: "dusk", isLight: false, isDark: false, isTransition: true, isStim: false, stimType: null };
+    }
+    if (/_RAMP(_|$)/.test(p)) {
+      return { kind: "transition", colorHint: "ramp", isLight: false, isDark: false, isTransition: true, isStim: false, stimType: null };
     }
     if (/^DARK\b/.test(p) || /^S\d+_DARK(_|$)/.test(p)) {
       return { kind: "dark", colorHint: "dark", isLight: false, isDark: true, isTransition: false, isStim: false, stimType: null };
@@ -7761,12 +7772,12 @@
     } else if (caps.hasVmr) {
       extraProtocolLines.push(
         "",
-        "    # --- Visual Motor Response (VMR: steady Light vs steady Dark; excludes DAWN/DUSK & stimuli) ---",
+        "    # --- Visual Motor Response (VMR: steady Light vs steady Dark; excludes DAWN/DUSK/_RAMP & stimuli) ---",
         "    phase_up = long_df['PHASE'].fillna('').astype(str).str.strip().str.upper()",
         "    is_excl = (",
         "        phase_up.str.match(r'^(?:DAWN|DUSK|PULSE_ALONE|PPI_TRIAL|STARTLE|VIBRATION|AUDIO_PULSE|BASELINE|ITI)\\b')",
         "        | phase_up.str.match(r'^TEMP_[\\d.]+C$')",
-        "        | phase_up.str.contains(r'(?:_FLASH|_HZ|_VU[0-3]|_AUD)$', regex=True)",
+        "        | phase_up.str.contains(r'(?:_FLASH|_(?:\\d+_)*\\d*HZ|_VU[0-3]|_AUD)$|_RAMP(?:_|$)', regex=True)",
         "    )",
         "    is_dark = (~is_excl) & (phase_up.str.match(r'^DARK\\b') | phase_up.str.match(r'^S\\d+_DARK(?:_|$)'))",
         "    is_light = (~is_excl) & (~is_dark) & (phase_up.str.match(r'^(?:LIGHT|WHITE|BLUE|GREEN|RED|UV)\\b') | phase_up.str.match(r'^S\\d+_'))",
@@ -7775,7 +7786,7 @@
         "    vmr = vmr_df.groupby(['well', 'group', 'cond'])['value'].mean().unstack()",
         "    if {'LIGHT', 'DARK'}.issubset(vmr.columns):",
         "        vmr['dark_minus_light'] = vmr['DARK'] - vmr['LIGHT']",
-        "        print('\\nVMR Summary by Group (steady LIGHT vs steady DARK; excludes DAWN/DUSK):')",
+        "        print('\\nVMR Summary by Group (steady LIGHT vs steady DARK; excludes DAWN/DUSK/_RAMP):')",
         "        print(vmr.groupby('group')[['LIGHT', 'DARK', 'dark_minus_light']].mean())",
         "        vmr.reset_index().to_csv('well_vmr_summary.csv', index=False)"
       );
@@ -7868,6 +7879,8 @@
       "                    ax.axvspan(t0, t1, color='#fdba74', alpha=0.30, zorder=0)",
       "                elif ph_up.startswith('DUSK'):",
       "                    ax.axvspan(t0, t1, color='#a5b4fc', alpha=0.28, zorder=0)",
+      "                elif '_RAMP_' in ph_up or ph_up.endswith('_RAMP'):",
+      "                    ax.axvspan(t0, t1, color='#fdba74', alpha=0.24, zorder=0)",
       "                elif ph_up.startswith('DARK') or '_DARK' in ph_up:",
       "                    ax.axvspan(t0, t1, color='#cbd5e1', alpha=0.35, zorder=0)",
       "                start_i = i",

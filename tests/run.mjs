@@ -3991,6 +3991,59 @@ try {
       await page.close();
     }
 
+    // Helper: execute generated Python VMR template end-to-end; fail loudly in CI if python3/deps are missing, log explicit SKIP locally
+    function runPythonVmrTemplateCheck(label, csvFilename, csvText, pyTemplate, expectedA1) {
+      const pyCheck = spawnSync("python3", ["-c", "import pandas, numpy, matplotlib"], { encoding: "utf8" });
+      if (pyCheck.status !== 0) {
+        if (process.env.CI) {
+          return {
+            ok: false,
+            skipped: false,
+            error: `${label}: CI requires python3 with pandas, numpy, and matplotlib (${(pyCheck.stderr || pyCheck.error?.message || "missing python3/deps").trim()})`
+          };
+        }
+        console.log(`  SKIP  ${label} Python execution (python3 pandas/numpy/matplotlib not installed locally)`);
+        return { ok: true, skipped: true };
+      }
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "zantiks-py-"));
+      try {
+        fs.writeFileSync(path.join(tmpDir, csvFilename), csvText, "utf8");
+        const scriptPath = path.join(tmpDir, "analyze_vmr.py");
+        fs.writeFileSync(scriptPath, "import matplotlib\nmatplotlib.use('Agg')\n" + pyTemplate, "utf8");
+        const pyRun = spawnSync("python3", [scriptPath], { cwd: tmpDir, encoding: "utf8" });
+        if (pyRun.status !== 0) {
+          return {
+            ok: false,
+            skipped: false,
+            error: `${label}: python3 exited ${pyRun.status}: ${(pyRun.stderr || pyRun.stdout || "").trim()}`
+          };
+        }
+        const vmrPath = path.join(tmpDir, "well_vmr_summary.csv");
+        if (!fs.existsSync(vmrPath)) {
+          return { ok: false, skipped: false, error: `${label}: well_vmr_summary.csv not generated` };
+        }
+        const vmrCsv = fs.readFileSync(vmrPath, "utf8").trim().split("\n");
+        const cols = vmrCsv[0].split(",");
+        const rowA1 = vmrCsv.slice(1).map((l) => l.split(",")).find((r) => r[cols.indexOf("well")] === "A1");
+        const pyLight = rowA1 ? parseFloat(rowA1[cols.indexOf("LIGHT")]) : NaN;
+        const pyDark = rowA1 ? parseFloat(rowA1[cols.indexOf("DARK")]) : NaN;
+        const pyDelta = rowA1 ? parseFloat(rowA1[cols.indexOf("dark_minus_light")]) : NaN;
+        const ok =
+          Math.abs(pyLight - expectedA1.light) < 1e-9 &&
+          Math.abs(pyDark - expectedA1.dark) < 1e-9 &&
+          Math.abs(pyDelta - expectedA1.delta) < 1e-9;
+        return ok
+          ? { ok: true, skipped: false, pyLight, pyDark, pyDelta }
+          : {
+            ok: false,
+            skipped: false,
+            error: `${label}: expected LIGHT=${expectedA1.light}, DARK=${expectedA1.dark}, delta=${expectedA1.delta}; got LIGHT=${pyLight}, DARK=${pyDark}, delta=${pyDelta}`
+          };
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    }
+
     // 7p. Analyzer DAWN/DUSK transition phase classification, hasVmrBurst gating (ramped circadian vs abrupt L/D) & Python VMR parity
     {
       const { page, errors } = await openFreshAnalyzer();
@@ -4029,10 +4082,11 @@ try {
           rampedRows.push([tSec, "22.0", ph, binIdx, ...vals].join(","));
         }
       }
+      const rampedCsvText = rampedRows.join("\n") + "\n";
       await page.setInputFiles("#analyzerFileInput", {
         name: "ramped_circadian_2d_6w.csv",
         mimeType: "text/csv",
-        buffer: Buffer.from(rampedRows.join("\n") + "\n", "utf8")
+        buffer: Buffer.from(rampedCsvText, "utf8")
       });
       await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "ramped_circadian_2d_6w.csv");
       await page.click('#analyzerStepper [data-goto="groups"]');
@@ -4085,33 +4139,13 @@ try {
         rampedRes.pyTemplate.includes("startswith('DUSK')") &&
         !rampedRes.pyTemplate.includes("np.where(is_dark, 'DARK', 'LIGHT')");
 
-      // Execute the generated Python template end-to-end against ramped_circadian_2d_6w.csv if python3 + pandas/numpy/matplotlib are available
-      let pyExecOk = true;
-      const pyCheck = spawnSync("python3", ["-c", "import pandas, numpy, matplotlib"], { encoding: "utf8" });
-      if (pyCheck.status === 0) {
-        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "zantiks-7p-"));
-        try {
-          fs.writeFileSync(path.join(tmpDir, "ramped_circadian_2d_6w.csv"), rampedRows.join("\n") + "\n", "utf8");
-          const scriptPath = path.join(tmpDir, "analyze_ramped.py");
-          fs.writeFileSync(scriptPath, "import matplotlib\nmatplotlib.use('Agg')\n" + rampedRes.pyTemplate, "utf8");
-          const pyRun = spawnSync("python3", [scriptPath], { cwd: tmpDir, encoding: "utf8" });
-          if (pyRun.status !== 0) {
-            pyExecOk = false;
-          } else {
-            const vmrCsv = fs.readFileSync(path.join(tmpDir, "well_vmr_summary.csv"), "utf8").trim().split("\n");
-            const cols = vmrCsv[0].split(",");
-            const rowA1 = vmrCsv.slice(1).map((l) => l.split(",")).find((r) => r[cols.indexOf("well")] === "A1");
-            const pyLight = rowA1 ? parseFloat(rowA1[cols.indexOf("LIGHT")]) : NaN;
-            const pyDark = rowA1 ? parseFloat(rowA1[cols.indexOf("DARK")]) : NaN;
-            const pyDelta = rowA1 ? parseFloat(rowA1[cols.indexOf("dark_minus_light")]) : NaN;
-            pyExecOk = Math.abs(pyLight - 10) < 1e-9 &&
-              Math.abs(pyDark - 40) < 1e-9 &&
-              Math.abs(pyDelta - 30) < 1e-9;
-          }
-        } finally {
-          fs.rmSync(tmpDir, { recursive: true, force: true });
-        }
-      }
+      const pyExecRes = runPythonVmrTemplateCheck(
+        "7p (DAWN/DUSK)",
+        "ramped_circadian_2d_6w.csv",
+        rampedCsvText,
+        rampedRes.pyTemplate,
+        { light: 10, dark: 40, delta: 30 }
+      );
 
       const rampedOk =
         Math.abs(rampedRes.lightMeanA1 - 10) < 1e-9 &&
@@ -4136,7 +4170,7 @@ try {
         !rampedRes.v2Header.includes("vmr_dark_onset_burst") &&
         !rampedRes.v1Header.includes("vmr_dark_onset_burst") &&
         pyExclRegexOk &&
-        pyExecOk;
+        pyExecRes.ok;
 
       // 3. Non-ramped abrupt L/D demo (ld_24w) retains hasVmrBurst=true, burst bar & vmr_dark_onset_burst column
       await page.selectOption("#demoPresetSelect", "ld_24w");
@@ -4173,7 +4207,243 @@ try {
 
       const ok = errors.length === 0 && Object.values(classifyCheck).every(Boolean) && rampedOk && abruptOk;
       report(ok, "Analyzer DAWN/DUSK transition phase classification, hasVmrBurst gating (ramped circadian vs abrupt L/D) & Python VMR parity pass",
-        ok ? "" : JSON.stringify({ errors, classifyCheck, rampedRes: { ...rampedRes, pyTemplate: undefined }, pyExclRegexOk, pyExecOk, abruptRes }));
+        ok ? "" : JSON.stringify({ errors, classifyCheck, rampedRes: { ...rampedRes, pyTemplate: undefined }, pyExclRegexOk, pyExecRes, abruptRes }));
+      await page.close();
+    }
+
+    // 7q. Multi-Track _RAMP transition tagging, 24-char combo guard, Analyzer ramp VMR exclusion & Python parity
+    {
+      const { page, errors } = await openFreshAnalyzer();
+
+      // 1. Compile DARK (60s) -> 5-min ramp-up WHITE (0->100%) -> steady WHITE (120s) -> 5-min ramp-down WHITE (100->0%) -> DARK (60s)
+      //    plus a long combo ramp+temp+vib clip and a ramp+strobe clip + 100%-ramp-next-to-steady-100% merge-boundary check
+      const compileRes = await page.evaluate(() => {
+        const core = window.ZANTIKS_ANALYZER_CORE;
+        const cp = core.classifyPhase;
+        const rampClips = [
+          { id: "r_up", track: "WHITE", startSec: 60, endSec: 360, val: 0, endVal: 100, curve: "linear", rampSteps: 8 },
+          { id: "steady_w", track: "WHITE", startSec: 360, endSec: 480, val: 100 },
+          { id: "r_dn", track: "WHITE", startSec: 480, endSec: 780, val: 100, endVal: 0, curve: "linear", rampSteps: 8 }
+        ];
+        const comp = compileMultiTrackSlices(rampClips, 840, 10, 22);
+        const slices = comp.slices;
+
+        // Verify ramp slices (60..360 and 480..780), steady WHITE (360..480), and DARK (0..60 and 780..840)
+        const darkSlices = slices.filter((sl) => sl.topLights.length === 0 && sl.bottomLights.length === 0);
+        const rampUpSlices = slices.filter((sl) => sl.startSec >= 60 && sl.endSec <= 360 && sl.topLights.length > 0);
+        const steadyWhiteSlices = slices.filter((sl) => sl.startSec >= 360 && sl.endSec <= 480);
+        const rampDownSlices = slices.filter((sl) => sl.startSec >= 480 && sl.endSec <= 780 && sl.topLights.length > 0);
+        const litRampSlices = [...rampUpSlices, ...rampDownSlices];
+
+        const rampSlicesOk =
+          rampUpSlices.length >= 6 &&
+          rampDownSlices.length >= 6 &&
+          litRampSlices.every((sl) => sl.isRamp === true && sl.csvTag.includes("_RAMP") && sl.csvTag.length <= 24) &&
+          darkSlices.length >= 2 &&
+          darkSlices.every((sl) => sl.isRamp === false && !sl.csvTag.includes("_RAMP") && sl.csvTag.includes("_DARK")) &&
+          steadyWhiteSlices.length === 1 &&
+          steadyWhiteSlices[0].isRamp === false &&
+          steadyWhiteSlices[0].startSec === 360 &&
+          steadyWhiteSlices[0].endSec === 480 &&
+          !steadyWhiteSlices[0].csvTag.includes("_RAMP") &&
+          steadyWhiteSlices[0].csvTag.includes("_WHITE");
+
+        // Verify merge-signature isolation: ramp ending at 100% never merges into adjacent steady 100% slice
+        const edgeComp = compileMultiTrackSlices([
+          { id: "r99", track: "WHITE", startSec: 0, endSec: 20, val: 99, endVal: 100, curve: "linear", rampSteps: 2 },
+          { id: "s100", track: "WHITE", startSec: 20, endSec: 40, val: 100 }
+        ], 40, 10, 22);
+        const noRampSteadyMergeOk =
+          edgeComp.slices.length >= 2 &&
+          edgeComp.slices[edgeComp.slices.length - 1].startSec === 20 &&
+          edgeComp.slices[edgeComp.slices.length - 1].isRamp === false &&
+          edgeComp.slices[edgeComp.slices.length - 2].isRamp === true;
+
+        // Verify 24-char guard & stim precedence on long combo ramp + temp + vib + strobe clips
+        const comboComp = compileMultiTrackSlices([
+          { id: "c_w", track: "WHITE", startSec: 0, endSec: 60, val: 10, endVal: 100, curve: "linear", rampSteps: 4 },
+          { id: "c_g", track: "GREEN", startSec: 0, endSec: 60, val: 100 },
+          { id: "c_t", track: "TEMP", startSec: 0, endSec: 60, val: 28.5 },
+          { id: "c_v", track: "VIB", startSec: 0, endSec: 60, val: "U2" },
+          { id: "c_s", track: "BLUE", startSec: 60, endSec: 120, val: 10, endVal: 100, curve: "linear", rampSteps: 4, strobeHz: 10 }
+        ], 120, 10, 22);
+        const vibSlice = comboComp.slices.find((sl) => sl.vibTrigger);
+        const strobeSlice = comboComp.slices.find((sl) => sl.strobeHz === 10);
+        const vibCls = vibSlice ? cp(vibSlice.csvTag) : null;
+        const strobeCls = strobeSlice ? cp(strobeSlice.csvTag) : null;
+        const comboOk =
+          Boolean(vibSlice) &&
+          vibSlice.isRamp === true &&
+          vibSlice.csvTag.length <= 24 &&
+          vibSlice.csvTag.includes("_RAMP") &&
+          /_VU[0-3]$/.test(vibSlice.csvTag) &&
+          vibCls?.kind === "stim" &&
+          vibCls?.stimType === "vib" &&
+          vibCls?.isLight === false &&
+          Boolean(strobeSlice) &&
+          strobeSlice.isRamp === true &&
+          strobeSlice.csvTag.length <= 24 &&
+          strobeSlice.csvTag.includes("_RAMP") &&
+          strobeSlice.csvTag.endsWith("_10HZ") &&
+          strobeCls?.kind === "stim" &&
+          strobeCls?.stimType === "light_pulse" &&
+          strobeCls?.isLight === false;
+
+        // Verify classifyPhase("S2_WHITE_RAMP") and parseExperimentContext schedule metadata
+        const clsRamp = cp("S2_WHITE_RAMP");
+        const classifyRampOk =
+          clsRamp.kind === "transition" &&
+          clsRamp.colorHint === "ramp" &&
+          clsRamp.isLight === false &&
+          clsRamp.isDark === false &&
+          clsRamp.isTransition === true &&
+          clsRamp.isStim === false;
+
+        const ctx = core.parseExperimentContext({
+          plateId: "24well",
+          stimId: "multi_phase",
+          inputs: { thermEnabled: false, defaultTemp: 22 },
+          stimParams: { mpTimelineSec: 840, timeBinSec: 10, mpCycles: 1 },
+          timelineClips: rampClips
+        }, "multitrack_ramp.json");
+        const ctxRampSpans = (ctx?.phaseSchedule || []).filter((ps) => ps.phase.includes("_RAMP"));
+        const ctxSteadySpan = (ctx?.phaseSchedule || []).find((ps) => ps.startSec === 360 && ps.endSec === 480);
+        const ctxDarkSpans = (ctx?.phaseSchedule || []).filter((ps) => ps.phase.includes("_DARK"));
+        const contextScheduleOk =
+          ctxRampSpans.length === litRampSlices.length &&
+          ctxRampSpans.every((ps) => ps.kind === "transition" && ps.colorHint === "ramp") &&
+          ctxSteadySpan?.kind === "light" &&
+          ctxSteadySpan?.colorHint === "light" &&
+          ctxDarkSpans.length >= 2 &&
+          ctxDarkSpans.every((ps) => ps.kind === "dark" && ps.colorHint === "dark");
+
+        return {
+          rampSlicesOk,
+          noRampSteadyMergeOk,
+          comboOk,
+          classifyRampOk,
+          contextScheduleOk,
+          vibTag: vibSlice?.csvTag,
+          strobeTag: strobeSlice?.csvTag,
+          slices: slices.map((sl) => ({
+            startSec: sl.startSec,
+            endSec: sl.endSec,
+            bins: sl.bins,
+            isRamp: sl.isRamp,
+            isDark: sl.topLights.length === 0 && sl.bottomLights.length === 0,
+            csvTag: sl.csvTag
+          }))
+        };
+      });
+
+      // 2. Feed synthetic Multi-Track CSV built directly from those exact compiled slice phase tags:
+      //    DARK = 40, ramp-up *_RAMP = 90, steady WHITE = 10, ramp-down *_RAMP = 80, final DARK = 40
+      const wells6 = ["A1", "A2", "A3", "B1", "B2", "B3"];
+      const mtRows = [["RUNTIME", "TEMP_C", "PHASE", "TIME_BIN", ...wells6.map((w) => "DIST_" + w)].join(",")];
+      let binIdx = 0;
+      for (const sl of compileRes.slices) {
+        let baseVal;
+        if (sl.isDark) baseVal = 40;
+        else if (sl.isRamp) baseVal = sl.startSec < 360 ? 90 : 80;
+        else baseVal = 10;
+        for (let b = 0; b < sl.bins; b++) {
+          binIdx++;
+          const tSec = sl.startSec + (b + 1) * 10;
+          const vals = wells6.map((w) => (w.startsWith("A") ? baseVal : baseVal + 2).toFixed(2));
+          mtRows.push([tSec, "22.0", sl.csvTag, binIdx, ...vals].join(","));
+        }
+      }
+      const mtCsvText = mtRows.join("\n") + "\n";
+
+      await page.setInputFiles("#analyzerFileInput", {
+        name: "multitrack_ramped_vmr_6w.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(mtCsvText, "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "multitrack_ramped_vmr_6w.csv");
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click("#addGroupBtn");
+      await page.click("#addGroupBtn");
+      await page.click("#autoAssignRowsBtn");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="timeseries"]');
+      const tsBandHtml = await page.evaluate(() => document.getElementById("tsChartSvg")?.innerHTML || "");
+
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      await page.selectOption("#compViewSel", "vmr");
+      const mtRes = await page.evaluate(() => {
+        const core = window.ZANTIKS_ANALYZER_CORE;
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const a = st.analysis;
+        const wsA1 = a.wellsById.A1;
+        const vmrOptText = document.querySelector('#compViewSel option[value="vmr"]')?.textContent?.trim() || "";
+        const compSvgTxt = document.getElementById("compChartSvg")?.textContent || "";
+        const prismMetrics = core.getAvailablePrismMetrics(a).map((m) => m.id);
+        const exportPayload = window.ZANTIKS_ANALYZER_UI.buildExportPayload();
+        const wellCsvV2 = core.exportWellSummaryCsv(exportPayload);
+        const wellCsvV1 = core.buildWellSummaryCsv(a);
+        const pyTemplate = core.buildPythonTemplate(a, st.summaryParsed);
+        return {
+          lightMeanA1: wsA1?.vmr?.lightMean,
+          darkMeanA1: wsA1?.vmr?.darkMean,
+          deltaA1: wsA1?.vmr?.darkMinusLight,
+          darkOnsetBurstA1: wsA1?.vmr?.darkOnsetBurst,
+          lightOnsetBurstA1: wsA1?.vmr?.lightOnsetBurst,
+          hasVmr: a.capabilities?.hasVmr,
+          hasVmrBurst: a.capabilities?.hasVmrBurst,
+          vmrOptText,
+          compHasBurstBar: compSvgTxt.includes("Dark-Onset Burst"),
+          compHasNaN: compSvgTxt.includes("NaN"),
+          prismMetrics,
+          v2Header: wellCsvV2.replace(/^\uFEFF/, "").split("\n")[0],
+          v1Header: wellCsvV1.split("\n")[0],
+          pyTemplate
+        };
+      });
+
+      const pyRampTemplateOk =
+        mtRes.pyTemplate.includes("_RAMP(?:_|$)") &&
+        mtRes.pyTemplate.includes("'_RAMP_' in ph_up or ph_up.endswith('_RAMP')") &&
+        mtRes.pyTemplate.includes("#fdba74");
+
+      const pyExecRes = runPythonVmrTemplateCheck(
+        "7q (Multi-Track _RAMP)",
+        "multitrack_ramped_vmr_6w.csv",
+        mtCsvText,
+        mtRes.pyTemplate,
+        { light: 10, dark: 40, delta: 30 }
+      );
+
+      const mtAnalyzerOk =
+        Math.abs(mtRes.lightMeanA1 - 10) < 1e-9 &&
+        Math.abs(mtRes.darkMeanA1 - 40) < 1e-9 &&
+        Math.abs(mtRes.deltaA1 - 30) < 1e-9 &&
+        mtRes.darkOnsetBurstA1 === null &&
+        mtRes.lightOnsetBurstA1 === null &&
+        mtRes.hasVmr === true &&
+        mtRes.hasVmrBurst === false &&
+        tsBandHtml.includes("rgba(254, 215, 170, 0.28)") &&
+        mtRes.vmrOptText === "VMR (Light vs Dark)" &&
+        !mtRes.compHasBurstBar &&
+        !mtRes.compHasNaN &&
+        mtRes.prismMetrics.includes("vmr_delta") &&
+        !mtRes.prismMetrics.includes("vmr_burst") &&
+        !mtRes.prismMetrics.includes("norm_vmr_burst_pct_ctrl") &&
+        !mtRes.v2Header.includes("vmr_dark_onset_burst") &&
+        !mtRes.v1Header.includes("vmr_dark_onset_burst") &&
+        pyRampTemplateOk &&
+        pyExecRes.ok;
+
+      const ok =
+        errors.length === 0 &&
+        compileRes.rampSlicesOk &&
+        compileRes.noRampSteadyMergeOk &&
+        compileRes.comboOk &&
+        compileRes.classifyRampOk &&
+        compileRes.contextScheduleOk &&
+        mtAnalyzerOk;
+      report(ok, "Multi-Track _RAMP transition tagging, 24-char combo guard, Analyzer ramp VMR exclusion & Python parity pass",
+        ok ? "" : JSON.stringify({ errors, compileRes: { ...compileRes, slices: compileRes.slices.length }, mtRes: { ...mtRes, pyTemplate: undefined }, pyRampTemplateOk, pyExecRes }));
       await page.close();
     }
   }
