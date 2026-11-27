@@ -1403,6 +1403,72 @@ try {
           simResults[12].audio === "mono" &&                               // 158.2s AUDIO mono onset
           simResults[13].topChannels.WHITE === 50 && simResults[13].bottomChannels.WHITE === 50; // 164.2s finale
 
+        // Differential LED emission verification: RUN_S1 full-state, RUN_S2..SK & STROBE_S* diff-only, & 2-cycle state-machine wraparound!
+        const getActionBody = (src, name) => {
+          const p = src.split(`ACTION ${name}\n`);
+          return p.length > 1 ? p[1].split("\nCOMPLETE")[0] : "";
+        };
+        const countLedCmds = (txt) =>
+          (txt.match(/SET\(X_LED_DRIVE,\d+,\d+\)|LIGHTS\(LIGHT1[3456],(?:ON|OFF)\)/g) || []).length;
+
+        const runS1Body = getActionBody(code, "RUN_S1");
+        const runS1Full10Ch = visChs.every((ch) => new RegExp(`SET\\(X_LED_DRIVE,${ch},\\d+\\)`).test(runS1Body));
+        const runRestBodies = code.split(/^ACTION RUN_S/gm).slice(2).map((b) => b.split("\nCOMPLETE")[0]);
+        const strobeBodies = code.split(/^ACTION STROBE_S/gm).slice(1).map((b) => b.split("\nCOMPLETE")[0]);
+        const runRestLedCmds = runRestBodies.reduce((s, b) => s + countLedCmds(b), 0);
+        const strobeLedCmds = strobeBodies.reduce((s, b) => s + countLedCmds(b), 0);
+        // Mixed 2+10Hz strobe slice (BLUE Ch 1 + RED Ch 5 over steady U_WHITE Ch 12): STROBE_S* must NEVER rewrite untouched Ch 0,3,4,8,9,11,12,13
+        const mixedStrobeIdx = code.match(/DEFINE S(\d+)_STROBE_CYCLES\s+\d+\s+#\s*2\+10 Hz/)?.[1];
+        const mixedStrobeBody = mixedStrobeIdx ? getActionBody(code, `STROBE_S${mixedStrobeIdx}`) : "";
+        const mixedStrobeDiffClean = Boolean(mixedStrobeBody) &&
+          mixedStrobeBody.includes("SET(X_LED_DRIVE,1,") &&
+          mixedStrobeBody.includes("SET(X_LED_DRIVE,5,") &&
+          !/SET\(X_LED_DRIVE,(?:0|3|4|8|9|11|12|13),/.test(mixedStrobeBody);
+
+        // Execute 2 full TIMELINE_CYCLEs via state-machine to verify Cycle 1 -> Cycle 2 wraparound equivalence
+        state.stimParams.mpCycles = 2;
+        refreshAll();
+        const code2Cyc = refreshAll._latestBundle[4].code;
+        state.stimParams.mpCycles = 1;
+        refreshAll();
+        const seqBody = getActionBody(code2Cyc, "TIMELINE_CYCLE");
+        const runOrder = [...seqBody.matchAll(/INVOKE\(RUN_S(\d+),1\)/g)].map((m) => parseInt(m[1], 10));
+        const hwState = { ch: Object.fromEntries(visChs.map((c) => [c, -1])), gate: { LIGHT13: "", LIGHT14: "", LIGHT15: "", LIGHT16: "" } };
+        const applyBlock = (body) => {
+          for (const raw of body.split("\n")) {
+            const line = raw.trim();
+            const dm = line.match(/^SET\(X_LED_DRIVE,(\d+),(\d+)\)$/);
+            if (dm) hwState.ch[parseInt(dm[1], 10)] = parseInt(dm[2], 10);
+            const gm = line.match(/^LIGHTS\((LIGHT1[3456]),(ON|OFF)\)$/);
+            if (gm) hwState.gate[gm[1]] = gm[2];
+          }
+        };
+        const snapHw = () => JSON.stringify(hwState);
+        const cycSnaps = [[], []];
+        for (let cyc = 0; cyc < 2; cyc++) {
+          for (const idx of runOrder) {
+            applyBlock(getActionBody(code2Cyc, `RUN_S${idx}`));
+            const stBody = getActionBody(code2Cyc, `STROBE_S${idx}`);
+            if (stBody) applyBlock(stBody);
+            cycSnaps[cyc].push(snapHw());
+          }
+        }
+        const wraparoundStateParity =
+          runOrder.length >= 40 &&
+          cycSnaps[0].length === cycSnaps[1].length &&
+          cycSnaps[0].every((s, i) => s === cycSnaps[1][i]) &&
+          JSON.parse(cycSnaps[1][0]).ch[4] === 0 &&
+          JSON.parse(cycSnaps[1][0]).ch[12] === 0 &&
+          JSON.parse(cycSnaps[1][runOrder.length - 1]).ch[4] === 2048 &&
+          JSON.parse(cycSnaps[1][runOrder.length - 1]).ch[12] === 2048;
+
+        const diffLedOk =
+          runS1Full10Ch &&
+          runRestLedCmds > 0 && runRestLedCmds < 80 &&
+          strobeLedCmds > 0 && strobeLedCmds < 70 &&
+          mixedStrobeDiffClean &&
+          wraparoundStateParity;
+
         // Round-trip save & reopen preserves all 28 clips
         const saved = buildExperimentPayload();
         applyExperimentData(saved);
@@ -1422,6 +1488,7 @@ try {
           hasTempStepAndRestore,
           noRunTriggers,
           allTriggersAfterBegin,
+          diffLedOk,
           simOk,
           roundTripOk
         };
@@ -3591,6 +3658,37 @@ try {
         return phantomKeys.length === 0 && Boolean(st.analysis.pooledMeta?.hasMixedLayouts) && !ovTxt.includes("2 × 96-Well");
       });
 
+      // 7b. Plate Means guardrail warning when unexcluded QC-flagged wells are included (and clears once excluded)
+      await page.selectOption("#demoPresetSelect", "ld_multi_2p");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      await page.click("#unitPlatesBtn");
+      const flaggedPlatesWarnBefore = await page.evaluate(() => {
+        const panelTxt = document.getElementById("compStatsPanel")?.textContent || "";
+        const log = window.ZANTIKS_ANALYZER_CORE.exportCleaningLogTxt(window.ZANTIKS_ANALYZER_UI.buildExportPayload());
+        return {
+          uiHasWarn: panelTxt.includes("QC Flagged Wells in Plate Means") && panelTxt.includes("4 unexcluded QC-flagged wells"),
+          logHasWarn: log.includes("Plate Means QC Warn") && log.includes("4 unexcluded QC-flagged wells")
+        };
+      });
+      await page.click('#analyzerStepper [data-goto="qc"]');
+      await page.click("#excludeFlaggedAllRunsBtn");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      const flaggedPlatesWarnAfter = await page.evaluate(() => {
+        const panelTxt = document.getElementById("compStatsPanel")?.textContent || "";
+        const log = window.ZANTIKS_ANALYZER_CORE.exportCleaningLogTxt(window.ZANTIKS_ANALYZER_UI.buildExportPayload());
+        return {
+          uiCleared: !panelTxt.includes("QC Flagged Wells in Plate Means"),
+          logCleared: !log.includes("Plate Means QC Warn")
+        };
+      });
+      const flaggedInPlateMeansOk =
+        flaggedPlatesWarnBefore.uiHasWarn &&
+        flaggedPlatesWarnBefore.logHasWarn &&
+        flaggedPlatesWarnAfter.uiCleared &&
+        flaggedPlatesWarnAfter.logCleared;
+
       // 8. Bug #8: Exact topbar height & width parity vs Script Builder at 1600x900 + zero input[placeholder]
       const analyzerTopbar = await page.evaluate(() => {
         const tb = document.querySelector(".topbar-inner").getBoundingClientRect();
@@ -3634,9 +3732,10 @@ try {
         bug5QcOk &&
         bug5AucOk &&
         bug6MixedOk &&
+        flaggedInPlateMeansOk &&
         bug8TopbarParityOk;
       report(ok, "Methodological guardrails (Test Family, Plate Means vs Wells, Post-Stats Audit + Section 4 log) & all #58 bug fixes (#1-#8) pass cleanly",
-        ok ? "" : JSON.stringify({ errors, beforeStatsViewed, wellsParamCheck, nonParamWellsCheck, platesModeCheck, postStatsUi, logSec4Ok, bug3CtrlRenameOk, bug1AfterOne, bug1AfterZero, bug7DemoSwitchOk, bug2ReplaceOk, bug4ZeroVarOk, bug5QcOk, bug5AucOk, bug6MixedOk, analyzerTopbar, builderTopbar }));
+        ok ? "" : JSON.stringify({ errors, beforeStatsViewed, wellsParamCheck, nonParamWellsCheck, platesModeCheck, postStatsUi, logSec4Ok, bug3CtrlRenameOk, bug1AfterOne, bug1AfterZero, bug7DemoSwitchOk, bug2ReplaceOk, bug4ZeroVarOk, bug5QcOk, bug5AucOk, bug6MixedOk, flaggedPlatesWarnBefore, flaggedPlatesWarnAfter, analyzerTopbar, builderTopbar }));
       await page.close();
     }
   }

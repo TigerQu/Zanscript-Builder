@@ -190,7 +190,7 @@ function buildLightActions(cfg) {
   return z2Lines.join("\n");
 }
 
-function buildSliceLightLines(cfg, topLights, bottomLights, forceManageBottom) {
+function buildLightState(cfg, topLights, bottomLights, forceManageBottom) {
   const topById = {};
   for (const l of (topLights || [])) topById[l.id] = l;
   const botById = {};
@@ -204,6 +204,7 @@ function buildSliceLightLines(cfg, topLights, bottomLights, forceManageBottom) {
     const hasTopUvNow = Boolean(topById.UV);
     const hasBotRgbNow = Boolean(botById.BLUE || botById.GREEN || botById.RED);
     const hasBotUvNow = Boolean(botById.UV);
+    const manageBottom = Boolean(forceManageBottom || (bottomLights && bottomLights.length > 0) || cfg.ledMount !== "OVERHEAD");
 
     const everTopRgb = hasTopRgbNow ||
       allClips.some(c => c.track === "BLUE" || c.track === "GREEN" || c.track === "RED") ||
@@ -218,25 +219,33 @@ function buildSliceLightLines(cfg, topLights, bottomLights, forceManageBottom) {
       allClips.some(c => c.track === "U_UV") ||
       (cfg.useUnderLight && acclimId === "UV");
 
-    const lines = [];
+    const topPwm = {};
+    const botPwm = {};
     for (const id of order) {
-      const col = LED_COLORS[id];
-      const pwm = topById[id] ? topById[id].pwm : 0;
-      lines.push(`    SET(X_LED_DRIVE,${col.z3Over},${pwm})`);
+      topPwm[id] = topById[id] ? topById[id].pwm : 0;
+      botPwm[id] = botById[id] ? botById[id].pwm : 0;
     }
-    if (everTopRgb) lines.push(`    LIGHTS(LIGHT16,${hasTopRgbNow ? "ON" : "OFF"})`);
-    if (everTopUv) lines.push(`    LIGHTS(LIGHT14,${hasTopUvNow ? "ON" : "OFF"})`);
-
-    if (forceManageBottom || (bottomLights && bottomLights.length > 0) || cfg.ledMount !== "OVERHEAD") {
-      for (const id of order) {
-        const col = LED_COLORS[id];
-        const pwm = botById[id] ? botById[id].pwm : 0;
-        lines.push(`    SET(X_LED_DRIVE,${col.z3Under},${pwm})`);
-      }
-      if (everBotRgb) lines.push(`    LIGHTS(LIGHT15,${hasBotRgbNow ? "ON" : "OFF"})`);
-      if (everBotUv) lines.push(`    LIGHTS(LIGHT13,${hasBotUvNow ? "ON" : "OFF"})`);
+    const gates = {
+      LIGHT16: hasTopRgbNow,
+      LIGHT14: hasTopUvNow,
+      LIGHT15: hasBotRgbNow,
+      LIGHT13: hasBotUvNow
+    };
+    const ever = { topRgb: everTopRgb, topUv: everTopUv, botRgb: everBotRgb, botUv: everBotUv };
+    const keyParts = [
+      "Z3",
+      order.map(id => topPwm[id]).join(","),
+      everTopRgb ? (gates.LIGHT16 ? "1" : "0") : "-",
+      everTopUv ? (gates.LIGHT14 ? "1" : "0") : "-"
+    ];
+    if (manageBottom) {
+      keyParts.push(
+        order.map(id => botPwm[id]).join(","),
+        everBotRgb ? (gates.LIGHT15 ? "1" : "0") : "-",
+        everBotUv ? (gates.LIGHT13 ? "1" : "0") : "-"
+      );
     }
-    return lines;
+    return { hw: "Z3", manageBottom, order, topPwm, botPwm, gates, ever, key: keyParts.join("|") };
   }
 
   const activeGpo = new Set();
@@ -246,18 +255,99 @@ function buildSliceLightLines(cfg, topLights, bottomLights, forceManageBottom) {
     if (l.id === "UV") hasUv = true;
     for (const g of l.colObj.z2Gpo) activeGpo.add(g);
   }
+  const gpo = {
+    6: activeGpo.has(6) ? 1 : 0,
+    7: activeGpo.has(7) ? 1 : 0,
+    8: activeGpo.has(8) ? 1 : 0
+  };
+  const allOff = activeGpo.size === 0;
+  const hasBottom = Boolean(bottomLights && bottomLights.length > 0);
+  return {
+    hw: "Z2",
+    gpo,
+    allOff,
+    hasBottom,
+    hasUv,
+    key: `Z2|${gpo[6]}${gpo[7]}${gpo[8]}`
+  };
+}
+
+function buildDiffLightLines(cfg, prevState, nextState, forceManageBottom) {
+  if (!nextState) return [];
+
+  if (nextState.hw === "Z3") {
+    const full = !prevState || prevState.hw !== "Z3";
+    const lines = [];
+    for (const id of nextState.order) {
+      const col = LED_COLORS[id];
+      const pwm = nextState.topPwm[id];
+      if (full || pwm !== prevState.topPwm[id]) {
+        lines.push(`    SET(X_LED_DRIVE,${col.z3Over},${pwm})`);
+      }
+    }
+    if (nextState.ever.topRgb && (full || !prevState.ever.topRgb || nextState.gates.LIGHT16 !== prevState.gates.LIGHT16)) {
+      lines.push(`    LIGHTS(LIGHT16,${nextState.gates.LIGHT16 ? "ON" : "OFF"})`);
+    }
+    if (nextState.ever.topUv && (full || !prevState.ever.topUv || nextState.gates.LIGHT14 !== prevState.gates.LIGHT14)) {
+      lines.push(`    LIGHTS(LIGHT14,${nextState.gates.LIGHT14 ? "ON" : "OFF"})`);
+    }
+
+    const manageBottom = Boolean(forceManageBottom || nextState.manageBottom);
+    if (manageBottom) {
+      const fullBot = full || !prevState.manageBottom;
+      for (const id of nextState.order) {
+        const col = LED_COLORS[id];
+        const pwm = nextState.botPwm[id];
+        if (fullBot || pwm !== prevState.botPwm[id]) {
+          lines.push(`    SET(X_LED_DRIVE,${col.z3Under},${pwm})`);
+        }
+      }
+      if (nextState.ever.botRgb && (fullBot || !prevState.ever.botRgb || nextState.gates.LIGHT15 !== prevState.gates.LIGHT15)) {
+        lines.push(`    LIGHTS(LIGHT15,${nextState.gates.LIGHT15 ? "ON" : "OFF"})`);
+      }
+      if (nextState.ever.botUv && (fullBot || !prevState.ever.botUv || nextState.gates.LIGHT13 !== prevState.gates.LIGHT13)) {
+        lines.push(`    LIGHTS(LIGHT13,${nextState.gates.LIGHT13 ? "ON" : "OFF"})`);
+      }
+    }
+    return lines;
+  }
+
+  const full = !prevState || prevState.hw !== "Z2";
   const z2 = [];
-  if (bottomLights && bottomLights.length > 0) {
+  if (full) {
+    if (nextState.hasBottom) {
+      z2.push("    # Legacy Z2 drives shared GPO6-8 channels (no independent underneath bank)");
+    }
+    if (nextState.hasUv) z2.push("    # UV fallback to GPO8 (Blue) on legacy Z2");
+    if (nextState.allOff) z2.push("    LIGHTS(ALL,OFF)");
+    z2.push(
+      `    SET(GPO6,${nextState.gpo[6]})`,
+      `    SET(GPO7,${nextState.gpo[7]})`,
+      `    SET(GPO8,${nextState.gpo[8]})`
+    );
+    return z2;
+  }
+
+  const changedGpos = [6, 7, 8].filter(g => nextState.gpo[g] !== prevState.gpo[g]);
+  if (changedGpos.length === 0) return z2;
+  if (nextState.hasBottom && !prevState.hasBottom) {
     z2.push("    # Legacy Z2 drives shared GPO6-8 channels (no independent underneath bank)");
   }
-  if (hasUv) z2.push("    # UV fallback to GPO8 (Blue) on legacy Z2");
-  if (activeGpo.size === 0) z2.push("    LIGHTS(ALL,OFF)");
-  z2.push(
-    `    SET(GPO6,${activeGpo.has(6) ? 1 : 0})`,
-    `    SET(GPO7,${activeGpo.has(7) ? 1 : 0})`,
-    `    SET(GPO8,${activeGpo.has(8) ? 1 : 0})`
-  );
+  if (nextState.hasUv && !prevState.hasUv) {
+    z2.push("    # UV fallback to GPO8 (Blue) on legacy Z2");
+  }
+  if (nextState.allOff && !prevState.allOff) {
+    z2.push("    LIGHTS(ALL,OFF)");
+  }
+  for (const g of changedGpos) {
+    z2.push(`    SET(GPO${g},${nextState.gpo[g]})`);
+  }
   return z2;
+}
+
+function buildSliceLightLines(cfg, topLights, bottomLights, forceManageBottom) {
+  const st = buildLightState(cfg, topLights, bottomLights, forceManageBottom);
+  return buildDiffLightLines(cfg, null, st, forceManageBottom);
 }
 
 // STEP 1: Calibration
@@ -1746,7 +1836,7 @@ function generateStep4(cfg) {
         remSec: remSec >= 0.001 ? remSec : 0
       };
     };
-    const buildStrobeIntervalLines = (sl, hzList, spanSec, manageBot, endSteadyTop, endSteadyBot, ensureSteadyEnd) => {
+    const buildStrobeIntervalLines = (sl, hzList, spanSec, manageBot, steadyState, ensureSteadyEnd) => {
       const spanMs = Math.round(spanSec * 1000);
       if (spanMs <= 0) return [];
       const edgeSet = new Set([0, spanMs]);
@@ -1763,25 +1853,23 @@ function generateStep4(cfg) {
         const isLit = (l) => (!l.strobeHz || (Math.floor((midMs + 1e-9) / Math.round(500 / l.strobeHz)) % 2 === 0));
         const top = sl.topLights.filter(isLit);
         const bot = sl.bottomLights.filter(isLit);
-        const lightLines = buildSliceLightLines(cfg, top, bot, manageBot);
-        const key = lightLines.join("\n");
+        const state = buildLightState(cfg, top, bot, manageBot);
         const prev = segs[segs.length - 1];
-        if (prev && prev.key === key) {
+        if (prev && prev.state.key === state.key) {
           prev.durMs += durMs;
         } else {
-          segs.push({ key, lightLines, durMs });
+          segs.push({ state, durMs });
         }
       }
       const out = [];
+      let curState = steadyState;
       for (const seg of segs) {
         const dtSec = Number((seg.durMs / 1000).toFixed(3));
-        out.push(...seg.lightLines, `    WAIT(${dtSec})`);
+        out.push(...buildDiffLightLines(cfg, curState, seg.state, manageBot), `    WAIT(${dtSec})`);
+        curState = seg.state;
       }
-      if (ensureSteadyEnd && segs.length > 0) {
-        const steadyLines = buildSliceLightLines(cfg, endSteadyTop, endSteadyBot, manageBot);
-        if (segs[segs.length - 1].key !== steadyLines.join("\n")) {
-          out.push(...steadyLines);
-        }
+      if (ensureSteadyEnd && curState.key !== steadyState.key) {
+        out.push(...buildDiffLightLines(cfg, curState, steadyState, manageBot));
       }
       return out;
     };
@@ -1847,11 +1935,16 @@ function generateStep4(cfg) {
     seqLines.push("", "COMPLETE");
     extraActions.push(seqLines.join("\n"));
 
+    let prevSliceEndState = null;
     for (const sl of comp.slices) {
       const sched = sliceStrobeSchedules.get(sl.idx) || null;
       const isStrobeSlice = Boolean(sched);
       const steadyTop = isStrobeSlice ? sl.topLights.filter(l => !l.strobeHz) : sl.topLights;
       const steadyBot = isStrobeSlice ? sl.bottomLights.filter(l => !l.strobeHz) : sl.bottomLights;
+      const steadyState = buildLightState(cfg, steadyTop, steadyBot, manageBottom);
+      // RUN_S1 always emits full state (prevState=null) for deterministic startup & cycle wraparound;
+      // RUN_S2..SK emit only channels/gates that changed since the previous slice's ending state.
+      const runLightLines = buildDiffLightLines(cfg, sl.idx === 1 ? null : prevSliceEndState, steadyState, manageBottom);
       const triggerLines = [];
       if (sl.vibTrigger) {
         triggerLines.push(`    ZCOMMAND("${sl.vibCode} D1000 M1 M-1 M1 M-1 M1 M-1 M1 M-1 M1 M-1")`);
@@ -1862,7 +1955,7 @@ function generateStep4(cfg) {
       const runLines = [
         `ACTION RUN_S${sl.idx}`,
         "",
-        ...buildSliceLightLines(cfg, steadyTop, steadyBot, manageBottom)
+        ...runLightLines
       ];
       if (sl.effectiveTemp !== null) {
         runLines.push(`    SET(THERMOSTAT,${sl.effectiveTemp})`);
@@ -1876,7 +1969,7 @@ function generateStep4(cfg) {
 
       if (isStrobeSlice) {
         const remLines = sched.remSec >= 0.001
-          ? buildStrobeIntervalLines(sl, sched.hzList, sched.remSec, manageBottom, steadyTop, steadyBot, true)
+          ? buildStrobeIntervalLines(sl, sched.hzList, sched.remSec, manageBottom, steadyState, true)
           : [];
         const sampleStrobeAction = [
           `ACTION SAMPLE_S${sl.idx}`,
@@ -1900,14 +1993,18 @@ function generateStep4(cfg) {
         ].join("\n");
         const actionsToPush = [runLines.join("\n"), sampleStrobeAction];
         if (sched.fullCycles > 0) {
-          const strobeBody = !sched.isMultiFreq
-            ? [
-                ...buildSliceLightLines(cfg, sl.topLights, sl.bottomLights, manageBottom),
-                `    WAIT(S${sl.idx}_STROBE_HALF)`,
-                ...buildSliceLightLines(cfg, steadyTop, steadyBot, manageBottom),
-                `    WAIT(S${sl.idx}_STROBE_HALF)`
-              ]
-            : buildStrobeIntervalLines(sl, sched.hzList, sched.periodSec, manageBottom, steadyTop, steadyBot, false);
+          let strobeBody;
+          if (!sched.isMultiFreq) {
+            const onState = buildLightState(cfg, sl.topLights, sl.bottomLights, manageBottom);
+            strobeBody = [
+              ...buildDiffLightLines(cfg, steadyState, onState, manageBottom),
+              `    WAIT(S${sl.idx}_STROBE_HALF)`,
+              ...buildDiffLightLines(cfg, onState, steadyState, manageBottom),
+              `    WAIT(S${sl.idx}_STROBE_HALF)`
+            ];
+          } else {
+            strobeBody = buildStrobeIntervalLines(sl, sched.hzList, sched.periodSec, manageBottom, steadyState, true);
+          }
           const strobeHelperAction = [
             `ACTION STROBE_S${sl.idx}`,
             "",
@@ -1945,6 +2042,7 @@ function generateStep4(cfg) {
           buildSampleAction(`SAMPLE_S${sl.idx}`, `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${sl.csvTag}|COUNTER2|COUNTER1`, dataExprs, useStream2)
         );
       }
+      prevSliceEndState = steadyState;
     }
 
     totalRuntimeSec = acclim + cfg.autorefTimeout + cycles * comp.totalBins * bin;

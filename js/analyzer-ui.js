@@ -1249,7 +1249,8 @@
       primaryTestFamily: ui.primaryTestFamily,
       nUnit: a.nUnit || "wells",
       runCount: a.runCount || 1,
-      factorNames: a.factorNames || []
+      factorNames: a.factorNames || [],
+      flaggedInPlateMeans: (a.pooledMeta && a.pooledMeta.flaggedInPlateMeans) || null
     });
     const vEntry = (a.comparisonViews || []).find(v => v.id === viewId);
     const metricLabel = vEntry ? `${vEntry.label}${ds.categories.length > 1 ? ` — ${cat.label}` : ""}` : cat.label;
@@ -3454,7 +3455,8 @@
       primaryTestFamily: ui.primaryTestFamily || "parametric",
       nUnit: a.nUnit || "wells",
       runCount: a.runCount || 1,
-      factorNames: a.factorNames || []
+      factorNames: a.factorNames || [],
+      flaggedInPlateMeans: (a.pooledMeta && a.pooledMeta.flaggedInPlateMeans) || null
     };
     if (ui.compShowStats && core && core.stats && ds && ds.categories.length && ds.groups.length >= 2) {
       for (const cat of ds.categories) {
@@ -3737,6 +3739,9 @@
     const renderNoticeBanners = (res) => {
       if (!res) return "";
       const items = [];
+      if (res.flaggedInPlateMeansNotice) {
+        items.push(`<div class="az-stats-notice is-warn"><strong>QC Flagged Wells in Plate Means:</strong> ${esc(res.flaggedInPlateMeansNotice)}</div>`);
+      }
       if (res.pseudoreplicationNotice) {
         items.push(`<div class="az-stats-notice"><strong>Unit of Analysis:</strong> ${esc(res.pseudoreplicationNotice)}</div>`);
       }

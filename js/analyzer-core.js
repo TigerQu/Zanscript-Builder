@@ -4308,6 +4308,18 @@
     };
   }
 
+  function buildFlaggedInPlateMeansNotice(flaggedObj) {
+    if (!flaggedObj || !flaggedObj.count || flaggedObj.count <= 0) return null;
+    const n = flaggedObj.count;
+    const wellsArr = Array.isArray(flaggedObj.wells) ? flaggedObj.wells : [];
+    const maxShow = 6;
+    const preview = wellsArr.length > maxShow
+      ? `${wellsArr.slice(0, maxShow).join(", ")} +${wellsArr.length - maxShow} more`
+      : wellsArr.join(", ");
+    const previewPart = preview ? ` (${preview})` : "";
+    return `Plate means include ${n} unexcluded QC-flagged well${n === 1 ? "" : "s"}${previewPart}. Even one empty well or reflection spike can strongly bias a plate average — review Step 2 QC before interpreting plate means.`;
+  }
+
   function screenComparisonGroups(groupsData, opts) {
     const hasExplicitOpts = Boolean(opts && typeof opts === "object");
     const cfg = hasExplicitOpts ? opts : {};
@@ -4323,6 +4335,9 @@
       : null;
     const pseudoreplicationNotice = (runCount > 1 && nUnit === "wells")
       ? `Pooled well-level view (n = wells across ${runCount} plates). For plate-level biological replicates, switch Unit of Analysis to Plate Means (n = plates) or use a mixed-effects model.`
+      : null;
+    const flaggedInPlateMeansNotice = (nUnit === "plates")
+      ? buildFlaggedInPlateMeansNotice(cfg.flaggedInPlateMeans)
       : null;
 
     const groups = normalizeGroupsListInput(groupsData);
@@ -4349,6 +4364,7 @@
         multiFactorNotice,
         pseudoreplicationNotice,
         lowReplicateNotice: null,
+        flaggedInPlateMeansNotice,
         disclaimer: STATS_DISCLAIMER
       };
     }
@@ -4440,6 +4456,7 @@
         multiFactorNotice,
         pseudoreplicationNotice,
         lowReplicateNotice,
+        flaggedInPlateMeansNotice,
         disclaimer: STATS_DISCLAIMER
       };
     }
@@ -4494,6 +4511,7 @@
       multiFactorNotice,
       pseudoreplicationNotice,
       lowReplicateNotice,
+      flaggedInPlateMeansNotice,
       disclaimer: STATS_DISCLAIMER
     };
   }
@@ -5791,6 +5809,7 @@
           hasMixedLayouts: false,
           layoutSummary: "No runs",
           postStatsExclusions: 0,
+          flaggedInPlateMeans: { count: 0, wells: [] },
           batchDiagnostics: null
         }
       };
@@ -5936,11 +5955,17 @@
     // Build per-plate group mean rows (one biological-replicate observation per run × group)
     const plateSummaryRows = [];
     const plateRowsByGroup = {};
+    const flaggedInPlateMeansWells = [];
     for (const item of runAnalyses) {
       const rAn = item.analysis;
       for (const g of rAn.groups) {
         const inc = rAn.wells.filter(ws => ws.group === g.group && !ws.excluded);
         if (inc.length === 0) continue;
+        for (const ws of inc) {
+          if (ws.qc && (ws.qc.isEmpty || ws.qc.empty || ws.qc.isSpikeGlitch || ws.qc.spikeGlitch)) {
+            flaggedInPlateMeansWells.push(`${item.runId}:${ws.well}`);
+          }
+        }
         const phaseDist = {};
         const phaseMsd = {};
         for (const ph of Object.keys(g.byPhase || {})) {
@@ -6053,6 +6078,10 @@
     }
 
     const totalPostStatsExclAll = runAnalyses.reduce((acc, x) => acc + (x.analysis.postStatsExclusions || 0), 0);
+    const flaggedInPlateMeans = {
+      count: flaggedInPlateMeansWells.length,
+      wells: flaggedInPlateMeansWells
+    };
 
     const pooledMeta = {
       scope,
@@ -6069,6 +6098,7 @@
       hasMixedLayouts,
       layoutSummary,
       postStatsExclusions: scope === "pooled" ? totalPostStatsExclAll : (activeAn.postStatsExclusions || 0),
+      flaggedInPlateMeans,
       batchDiagnostics
     };
 
@@ -7338,6 +7368,19 @@
     }
     if (scope === "pooled" && targetRuns.length > 1 && effectiveUnit === "wells") {
       lines.push(`  Replicate Notice    : Pooled well-level view (n = wells across ${targetRuns.length} plates). Switch to Plate Means (n = plates) or use a mixed-effects model for plate-level inference.`);
+    }
+    if (effectiveUnit === "plates") {
+      let flaggedInfo = (pooledMeta && pooledMeta.flaggedInPlateMeans) ? pooledMeta.flaggedInPlateMeans : null;
+      if (!flaggedInfo) {
+        const fw = allWells
+          .filter(ws => !ws.excluded && ws.qc && (ws.qc.isEmpty || ws.qc.empty || ws.qc.isSpikeGlitch || ws.qc.spikeGlitch))
+          .map(ws => `${ws.runId || (analysis && analysis.runId) || "Run_1"}:${ws.well}`);
+        flaggedInfo = { count: fw.length, wells: fw };
+      }
+      const plateFlaggedNotice = buildFlaggedInPlateMeansNotice(flaggedInfo);
+      if (plateFlaggedNotice) {
+        lines.push(`  Plate Means QC Warn : ${plateFlaggedNotice}`);
+      }
     }
 
     const rawSnap = p && p.statsSnapshot;
