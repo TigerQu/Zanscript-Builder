@@ -158,7 +158,7 @@ function computePreflightChecks(cfgIn, bundleIn) {
   } else if (cfg.stimId === "temp_ramp") {
     usesUv = sp.rampLight === "LIGHT" && cfg.ledColor === "UV";
   } else if (cfg.stimId === "circadian") {
-    usesUv = (parseFloat(sp.lightHours) || 0) > 0 && cfg.ledColor === "UV";
+    usesUv = Math.max(0, parseIntOr(sp.lightHours, 16)) > 0 && cfg.ledColor === "UV";
   } else {
     // ld_transitions, light_off_startle, light_on_pulse
     usesUv = cfg.ledColor === "UV";
@@ -241,10 +241,18 @@ function computePreflightChecks(cfgIn, bundleIn) {
       "ZCOMMAND(\"U...\") drives the stepper vibration stand on MWP Z2S / Z3; early non-stepper MWP Z2 units will ignore it.", "study");
   }
 
-  // Circadian Dawn/Dusk ramp on legacy Z2
-  if (cfg.stimId === "circadian" && (parseInt(sp.circRampMin, 10) || 0) > 0 && cfg.hw !== "Z3") {
-    add("warn", "Smooth Dawn/Dusk PWM ramp needs an MWP Z3",
-      "MWP Z2 / Z2S GPO6-8 switches lights on/off without PWM dimming; ramp duration is skipped on Z2.", "study");
+  // Circadian 0L:0D & Dawn/Dusk ramp on legacy Z2
+  if (cfg.stimId === "circadian") {
+    const circLightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
+    const circDarkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
+    if (circLightHrs === 0 && circDarkHrs === 0) {
+      add("warn", "Both Light Hours and Dark Hours are 0",
+        "Set at least one phase (Light Hours or Dark Hours) to ≥ 1 hour so the circadian schedule records data.", "stimulus");
+    }
+    if (parseIntOr(sp.circRampMin, 0) > 0 && circLightHrs > 0 && circDarkHrs > 0 && cfg.hw !== "Z3") {
+      add("warn", "Smooth Dawn/Dusk PWM ramp needs an MWP Z3",
+        "MWP Z2 / Z2S GPO6-8 switches lights on/off without PWM dimming; ramp duration is skipped on Z2.", "study");
+    }
   }
 
   // Zone-changes-only stream 2 summary notice

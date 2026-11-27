@@ -14,6 +14,16 @@
   const UTF8_BOM = "\uFEFF";
   const ANALYZER_VERSION = "2.0.0";
 
+  function parseIntOr(val, fallback) {
+    const n = parseInt(val, 10);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function parseFloatOr(val, fallback) {
+    const n = parseFloat(val);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
   const ORGANISM_QC_PRESETS = {
     default:    { id: "default",    label: "Default (General)",  emptyDistMm: 0.1,  spikeMaxSpeedMmS: 150, spikeMinMm: 50, spikeMadMult: 10 },
     zebrafish:  { id: "zebrafish",  label: "Zebrafish Larvae",   emptyDistMm: 0.1,  spikeMaxSpeedMmS: 120, spikeMinMm: 50, spikeMadMult: 10 },
@@ -1451,7 +1461,7 @@
       if (thermEnabled) tempSchedule.push({ startSec: 0, endSec: t, tempC: defaultTemp, label: `${defaultTemp}°C` });
     } else if (stimId === "light_off_startle" || stimId === "light_on_pulse" || stimId === "vibration_startle" || stimId === "acoustic_startle") {
       const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-      const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+      const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
       const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
       const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
       const pulseDur = (stimId === "light_off_startle" || stimId === "light_on_pulse")
@@ -1476,7 +1486,7 @@
       if (thermEnabled) tempSchedule.push({ startSec: 0, endSec: t, tempC: defaultTemp, label: `${defaultTemp}°C` });
     } else if (stimId === "ppi") {
       const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-      const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+      const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
       const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
       const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
       const isAlt = (sp.ppiPattern || "alternating") === "alternating";
@@ -1533,8 +1543,8 @@
         t += comp.totalSec;
       }
     } else if (stimId === "circadian") {
-      const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
-      const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
+      const lightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
+      const darkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
       const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
       for (let d = 1; d <= days; d++) {
         if (lightHrs > 0) {
@@ -1546,7 +1556,7 @@
           t += darkHrs * 3600;
         }
       }
-      if (thermEnabled) tempSchedule.push({ startSec: 0, endSec: t, tempC: defaultTemp, label: `${defaultTemp}°C` });
+      if (thermEnabled && t > 0) tempSchedule.push({ startSec: 0, endSec: t, tempC: defaultTemp, label: `${defaultTemp}°C` });
     }
 
     const targetTempC = tempSchedule.length > 0

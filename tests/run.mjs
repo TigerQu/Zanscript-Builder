@@ -1432,6 +1432,207 @@ try {
       await page.close();
     }
 
+    // 6q. Zero-falsy regression suite: preBaselineSec=0 (all 5 protocols), Circadian DD/LL/0L:0D, & autorefTimeout=0
+    {
+      const { page, errors } = await openFreshPage("#stimulus");
+      const zeroRaw = await page.evaluate(() => {
+        const setField = (sel, val) => {
+          const el = document.querySelector(sel);
+          if (!el) throw new Error(`Missing field: ${sel}`);
+          el.value = String(val);
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+        const isBalanced = (code) => {
+          const a = (code.match(/^ACTION /gm) || []).length;
+          const c = (code.match(/^COMPLETE$/gm) || []).length;
+          return a > 0 && a === c;
+        };
+        const hasZeroInvoke = (code) => /INVOKE\([^,]+,\s*0\s*\)/.test(code);
+
+        // 1) preBaselineSec = 0 via UI input across all 5 affected protocols
+        const preResults = {};
+        const prePayloads = {};
+        for (const sid of ["light_off_startle", "light_on_pulse", "vibration_startle", "acoustic_startle", "ppi"]) {
+          document.querySelector(`[data-stim="${sid}"]`).click();
+          setField('#stimParamsBox [data-sp="preBaselineSec"]', 0);
+          const cfg = readConfig();
+          const s4 = refreshAll._latestBundle[4];
+          const smp = sampleAssayStateAtTime(cfg, 0);
+          const segTxts = [...document.querySelectorAll("#timelineBar .tl-seg")].map((el) => el.textContent.trim());
+          const saved = buildExperimentPayload();
+          applyExperimentData(saved);
+          const reopenedPre = state.stimParams.preBaselineSec;
+
+          prePayloads[sid] = saved;
+          preResults[sid] = {
+            cfgZero: Number(cfg.sp.preBaselineSec) === 0,
+            noBaselineDefine: !s4.code.includes("DEFINE BASELINE_BINS"),
+            noBaselineInvoke: !s4.code.includes("INVOKE(SAMPLE_BASELINE") && !s4.code.includes("INVOKE(BASELINE_BIN"),
+            noBaselineAction: !s4.code.includes("ACTION SAMPLE_BASELINE") && !s4.code.includes("ACTION BASELINE_BIN"),
+            noZeroInvoke: !hasZeroInvoke(s4.code),
+            balanced: isBalanced(s4.code),
+            runtimeParity: s4.totalRuntimeSec === smp.totalRuntimeSec,
+            noTimelineBaseSeg: !segTxts.some((t) => /^Base/i.test(t)),
+            roundTripZero: Number(reopenedPre) === 0
+          };
+        }
+
+        // 2) Circadian DD (0L:24D) with circRampMin = 15
+        document.querySelector('[data-stim="circadian"]').click();
+        setField('#stimParamsBox [data-sp="lightHours"]', 0);
+        setField('#stimParamsBox [data-sp="darkHours"]', 24);
+        setField('#stimParamsBox [data-sp="numDays"]', 2);
+        setField('#stimParamsBox [data-sp="circRampMin"]', 15);
+        const cfgDD = readConfig();
+        const s3DD = refreshAll._latestBundle[3].code;
+        const s4DD = refreshAll._latestBundle[4];
+        const smpDDAutoref = sampleAssayStateAtTime(cfgDD, 10);
+        const smpDDRec = sampleAssayStateAtTime(cfgDD, 300 + 3600);
+        const tlDDCls = [...document.querySelectorAll("#timelineBar .tl-seg")].map((el) => el.className);
+        const tlDDDesc = document.getElementById("timelineDesc").textContent;
+        const savedDD = buildExperimentPayload();
+        // Check preflight suppresses Z3 UV notice (usesUv=false) & Z2 Dawn/Dusk ramp warn on DD
+        setField("#hwVersion", "Z3");
+        setField("#ledColor", "UV");
+        const ddUvChecks = computePreflightChecks();
+        setField("#hwVersion", "Z2");
+        setField("#ledColor", "WHITE");
+        const ddZ2Checks = computePreflightChecks();
+        setField("#hwVersion", "Z3");
+        setField("#ledColor", "WHITE");
+        applyExperimentData(savedDD);
+        const ddReopenOk = Number(state.stimParams.lightHours) === 0 && Number(state.stimParams.darkHours) === 24;
+
+        const ddResult = {
+          slugOk: s4DD.code.includes("circadian_0l24d_2d") && !s4DD.code.includes("_ramp15m"),
+          startsDark: s3DD.includes("INVOKE(LIGHTS_OFF,1)") && !s3DD.includes("INVOKE(LIGHTS_ON,1)") &&
+            s4DD.code.split("ACTION MAIN")[1].split("COMPLETE")[0].includes("INVOKE(LIGHTS_OFF,1)"),
+          omitsLightAndRamp: !s4DD.code.includes("DEFINE LIGHT_HOURS") && !s4DD.code.includes("INVOKE(RUN_HOUR,LIGHT_HOURS)") &&
+            !s4DD.code.includes("DAWN") && !s4DD.code.includes("DUSK"),
+          noZeroInvoke: !hasZeroInvoke(s4DD.code),
+          balanced: isBalanced(s4DD.code),
+          samplerParity: s4DD.totalRuntimeSec === smpDDAutoref.totalRuntimeSec &&
+            Object.values(smpDDAutoref.topChannels).every((v) => v === 0) &&
+            Object.values(smpDDRec.topChannels).every((v) => v === 0),
+          timelineDD: tlDDCls.length > 0 && tlDDCls.every((c) => c.includes("tl-dark")) &&
+            tlDDDesc.includes("0h") && tlDDDesc.includes("24h Dark") && !tlDDDesc.includes("dawn/dusk"),
+          preflightSuppress: !ddUvChecks.some((c) => /UV/i.test(c.title)) && !ddZ2Checks.some((c) => /Dawn\/Dusk/i.test(c.title)),
+          roundTripOk: ddReopenOk
+        };
+
+        // 3) Circadian LL (24L:0D) with circRampMin = 15
+        setField('#stimParamsBox [data-sp="lightHours"]', 24);
+        setField('#stimParamsBox [data-sp="darkHours"]', 0);
+        setField('#stimParamsBox [data-sp="numDays"]', 2);
+        setField('#stimParamsBox [data-sp="circRampMin"]', 15);
+        const cfgLL = readConfig();
+        const s4LL = refreshAll._latestBundle[4];
+        const smpLLRec = sampleAssayStateAtTime(cfgLL, 300 + 3600);
+        const tlLLCls = [...document.querySelectorAll("#timelineBar .tl-seg")].map((el) => el.className);
+        const tlLLDesc = document.getElementById("timelineDesc").textContent;
+        const savedLL = buildExperimentPayload();
+        applyExperimentData(savedLL);
+        const llReopenOk = Number(state.stimParams.lightHours) === 24 && Number(state.stimParams.darkHours) === 0;
+
+        const llResult = {
+          slugOk: s4LL.code.includes("circadian_24l0d_2d") && !s4LL.code.includes("_ramp15m"),
+          omitsDarkAndRamp: !s4LL.code.includes("DEFINE DARK_HOURS") && !s4LL.code.includes("INVOKE(RUN_HOUR,DARK_HOURS)") &&
+            !s4LL.code.includes("DAWN") && !s4LL.code.includes("DUSK"),
+          noZeroInvoke: !hasZeroInvoke(s4LL.code),
+          balanced: isBalanced(s4LL.code),
+          samplerParity: s4LL.totalRuntimeSec === smpLLRec.totalRuntimeSec && smpLLRec.topChannels.WHITE === 100,
+          timelineLL: tlLLCls.length > 0 && tlLLCls.every((c) => !c.includes("tl-dark") && !c.includes("tl-dawn")) &&
+            tlLLDesc.includes("24h") && tlLLDesc.includes("0h Dark") && !tlLLDesc.includes("dawn/dusk"),
+          roundTripOk: llReopenOk
+        };
+
+        // 4) Circadian 0L:0D graceful degradation + preflight warning
+        setField('#stimParamsBox [data-sp="lightHours"]', 0);
+        setField('#stimParamsBox [data-sp="darkHours"]', 0);
+        const cfg00 = readConfig();
+        const s400 = refreshAll._latestBundle[4];
+        const smp00 = sampleAssayStateAtTime(cfg00, 100);
+        const checks00 = computePreflightChecks();
+        const saved00 = buildExperimentPayload();
+        const tl00Segs = [...document.querySelectorAll("#timelineBar .tl-seg")].map((el) => ({
+          cls: el.className,
+          txt: el.textContent.trim(),
+          flex: el.style.flex
+        }));
+
+        const zeroCircResult = {
+          preflightWarn: checks00.some((c) => c.level === "warn" && c.title.includes("Both Light Hours and Dark Hours are 0")),
+          noNaN: !s400.code.includes("NaN") && Number.isFinite(smp00.totalRuntimeSec) && Number.isFinite(smp00.tempC),
+          noZeroInvoke: !hasZeroInvoke(s400.code),
+          balanced: isBalanced(s400.code),
+          runtimeAndRows: s400.totalRuntimeSec === 300 && s400.totalRows === 0 && smp00.totalRuntimeSec === 300,
+          startsDark: s400.code.split("ACTION MAIN")[1].split("COMPLETE")[0].includes("INVOKE(LIGHTS_OFF,1)"),
+          timelineSafe: tl00Segs.length === 1 && tl00Segs[0].txt === "Autoref" && tl00Segs[0].cls.includes("tl-dark") && !String(tl00Segs[0].flex).includes("NaN")
+        };
+
+        // 5) Bonus zero-falsy fix: #autorefTimeout = 0 (js/read-config.js)
+        document.querySelector('[data-stim="baseline"]').click();
+        setField("#autorefTimeout", 0);
+        const cfgAr = readConfig();
+        const s3Ar = refreshAll._latestBundle[3].code;
+        const s4Ar = refreshAll._latestBundle[4];
+        const smpAr = sampleAssayStateAtTime(cfgAr, 0);
+        const savedAr = buildExperimentPayload();
+        applyExperimentData(savedAr);
+        const arReopenVal = document.getElementById("autorefTimeout").value;
+        const autorefResult = {
+          cfgZero: cfgAr.autorefTimeout === 0,
+          step3Zero: s3Ar.includes("DEFINE AUTOREF_TIME 0"),
+          step4Zero: s4Ar.code.includes("SET(AUTOREF_TIMEOUT,0)"),
+          runtimeParity: s4Ar.totalRuntimeSec === smpAr.totalRuntimeSec &&
+            s4Ar.totalRuntimeSec === (parseIntOr(cfgAr.sp.acclimSec, 0) + parseIntOr(cfgAr.sp.durationSec, 600)),
+          roundTripZero: String(arReopenVal) === "0" && readConfig().autorefTimeout === 0
+        };
+
+        return { preResults, prePayloads, ddResult, savedDD, llResult, savedLL, zeroCircResult, saved00, autorefResult };
+      });
+
+      // Verify analyzer-core.js schedule parity across all 5 preBaselineSec=0 payloads + DD / LL / 0L:0D in the real Analyzer page!
+      const azPage = await browser.newPage();
+      await azPage.goto(pathToFileURL(path.join(root, "zantiks_csv_analyzer.html")).href);
+      await azPage.waitForFunction(() => window.ZANTIKS_ANALYZER_CORE);
+      const { analyzerPreOk, analyzerCircOk } = await azPage.evaluate((zr) => {
+        const core = window.ZANTIKS_ANALYZER_CORE;
+        const preOk = {};
+        for (const sid of ["light_off_startle", "light_on_pulse", "vibration_startle", "acoustic_startle", "ppi"]) {
+          const ctx = core.parseExperimentContext(zr.prePayloads[sid], "test");
+          const noBaselinePhase = !ctx.phaseSchedule.some((p) => p.kind === "baseline" || /baseline/i.test(p.label));
+          const firstStimAt0 = ctx.stimulusEvents.length > 0 && ctx.stimulusEvents[0].timeSec === 0;
+          preOk[sid] = noBaselinePhase && firstStimAt0;
+        }
+        const ctxDD = core.parseExperimentContext(zr.savedDD, "test");
+        const ctxLL = core.parseExperimentContext(zr.savedLL, "test");
+        const ctx00 = core.parseExperimentContext(zr.saved00, "test");
+        const circOk = {
+          ddPureDark: ctxDD.phaseSchedule.length === 2 && ctxDD.phaseSchedule.every((p) => p.kind === "dark") && ctxDD.phaseSchedule[1].endSec === 172800,
+          llPureLight: ctxLL.phaseSchedule.length === 2 && ctxLL.phaseSchedule.every((p) => p.kind === "light") && ctxLL.phaseSchedule[1].endSec === 172800,
+          zeroEmptyClean: ctx00.phaseSchedule.length === 0 && ctx00.tempSchedule.length === 0
+        };
+        return { analyzerPreOk: preOk, analyzerCircOk: circOk };
+      }, zeroRaw);
+      await azPage.close();
+
+      const allPreOk = Object.values(zeroRaw.preResults).every((r) => Object.values(r).every(Boolean)) &&
+        Object.values(analyzerPreOk).every(Boolean);
+      const ok =
+        errors.length === 0 &&
+        allPreOk &&
+        Object.values(zeroRaw.ddResult).every(Boolean) &&
+        Object.values(zeroRaw.llResult).every(Boolean) &&
+        Object.values(zeroRaw.zeroCircResult).every(Boolean) &&
+        Object.values(zeroRaw.autorefResult).every(Boolean) &&
+        Object.values(analyzerCircOk).every(Boolean);
+      report(ok, "Zero-falsy inputs (preBaselineSec=0 across 5 protocols, Circadian DD/LL/0L:0D & autorefTimeout=0) match across Builder, Simulator, Timeline & Analyzer",
+        ok ? "" : JSON.stringify({ errors, preResults: zeroRaw.preResults, analyzerPreOk, ddResult: zeroRaw.ddResult, llResult: zeroRaw.llResult, zeroCircResult: zeroRaw.zeroCircResult, autorefResult: zeroRaw.autorefResult, analyzerCircOk }));
+      await page.close();
+    }
+
     // ---------------------------------------------------------------- 7. CSV Analyzer companion page
     const analyzerUrl = pathToFileURL(path.join(root, "zantiks_csv_analyzer.html")).href;
 

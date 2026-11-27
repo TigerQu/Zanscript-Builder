@@ -5,6 +5,16 @@
 // ---------------------------------------------------------------------------
 // 3. Name, Slug & Plate Config Helpers
 // ---------------------------------------------------------------------------
+function parseIntOr(val, fallback) {
+  const n = parseInt(val, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseFloatOr(val, fallback) {
+  const n = parseFloat(val);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function sanitizeSlug(raw, maxLen) {
   const cleaned = String(raw || "")
     .trim()

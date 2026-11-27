@@ -98,9 +98,9 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
 
   if (cfg.stimId === "light_off_startle" || cfg.stimId === "light_on_pulse") {
     const isOffStartle = cfg.stimId === "light_off_startle";
-    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
     const preBins = Math.round(preSec / bin);
     const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
@@ -157,9 +157,9 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
   }
 
   if (cfg.stimId === "vibration_startle") {
-    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
     const preBins = Math.round(preSec / bin);
     const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
@@ -197,9 +197,9 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
   }
 
   if (cfg.stimId === "acoustic_startle") {
-    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
     const preBins = Math.round(preSec / bin);
     const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
@@ -236,9 +236,9 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
   }
 
   if (cfg.stimId === "ppi") {
-    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
     const preBins = Math.round(preSec / bin);
     const preDur = preBins * bin;
     const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
@@ -284,10 +284,10 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
 
   if (cfg.stimId === "circadian") {
     const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
-    const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
-    const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
+    const lightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
+    const darkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
     const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    const rampMin = hw === "Z3" ? Math.min(30, Math.max(0, parseInt(sp.circRampMin, 10) || 0)) : 0;
+    const rampMin = hw === "Z3" ? Math.min(30, Math.max(0, parseIntOr(sp.circRampMin, 0))) : 0;
     const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0;
     const rampStepBins = hasDawnDusk ? Math.max(1, Math.round((rampMin * 60) / (6 * bin))) : 0;
     const rampStepDur = rampStepBins * bin;
@@ -308,7 +308,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     };
 
     if (t < autoref || hrsPerDay === 0) {
-      setSingleChannelOn(colId);
+      if (lightHrs > 0) setSingleChannelOn(colId);
       phaseName = "AUTOREFERENCING";
     } else {
       const rel = Math.min(Math.max(0, days * dayDur - 0.0001), t - autoref);

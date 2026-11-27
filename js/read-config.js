@@ -33,7 +33,7 @@ function readConfig() {
   const targetSize = Math.max(0.5, parseFloat(document.getElementById("targetSize").value) || 2);
   const detThreshold = Math.max(1, parseInt(document.getElementById("detThreshold").value, 10) || 6);
   const msdThreshold = Math.max(1, parseInt(document.getElementById("msdThreshold").value, 10) || 6);
-  const autorefTimeout = Math.max(0, parseInt(document.getElementById("autorefTimeout").value, 10) || 60);
+  const autorefTimeout = Math.max(0, parseIntOr(document.getElementById("autorefTimeout").value, 60));
   const thermostatTemp = parseFloat(document.getElementById("thermostatTemp").value) || 22;
   const useThermostat = document.getElementById("chk_thermostat").checked;
   const z3RgbMapEl = document.getElementById("z3RgbMap");

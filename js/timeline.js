@@ -162,9 +162,9 @@ function renderTimeline(cfg, s4) {
     desc.textContent = `${sp.ldCycles} x (${sp.ldPhaseSec}s ${activeShort} / ${sp.ldPhaseSec}s Dark)`;
   } else if (cfg.stimId === "light_off_startle" || cfg.stimId === "light_on_pulse") {
     const isOff = cfg.stimId === "light_off_startle";
-    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
     const preDur = Math.round(preSec / bin) * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const pulseDur = Math.max(isOff ? 0.1 : 0.05, parseFloat(sp.pulseDurSec) || 1);
@@ -198,9 +198,9 @@ function renderTimeline(cfg, s4) {
     }
     desc.textContent = `${sp.numPulses} ${isOff ? "dark" : activeShort.toLowerCase()} ${strobeHz > 0 ? `${strobeHz}Hz strobe bursts` : "pulses"} (${sp.pulseDurSec}s, ${sp.itiSec}s ITI)`;
   } else if (cfg.stimId === "vibration_startle") {
-    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
     const preDur = Math.round(preSec / bin) * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
@@ -230,9 +230,9 @@ function renderTimeline(cfg, s4) {
     }
     desc.textContent = `${sp.numPulses} taps (${sp.vibIntensity}, ${sp.itiSec}s ITI)`;
   } else if (cfg.stimId === "acoustic_startle") {
-    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
     const preDur = Math.round(preSec / bin) * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
@@ -264,9 +264,9 @@ function renderTimeline(cfg, s4) {
     }
     desc.textContent = `${pulses} audio cues ("${audioAsset}", ${sp.itiSec}s ITI)`;
   } else if (cfg.stimId === "ppi") {
-    const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
+    const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
-    const preSec = Math.max(0, parseInt(sp.preBaselineSec, 10) || 60);
+    const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
     const preDur = Math.round(preSec / bin) * bin;
     const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
@@ -302,10 +302,10 @@ function renderTimeline(cfg, s4) {
     desc.textContent = `${totalTrials} trials (${isAlt ? "Alt Pulse/PPI" : "PPI only"} · ${prepulse}+${isiMs}ms+${pulse})`;
   } else if (cfg.stimId === "circadian") {
     const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
-    const lightHrs = Math.max(0, parseInt(sp.lightHours, 10) || 16);
-    const darkHrs = Math.max(0, parseInt(sp.darkHours, 10) || 8);
+    const lightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
+    const darkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
     const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    const rampMin = cfg.hw === "Z3" ? Math.min(30, Math.max(0, parseInt(sp.circRampMin, 10) || 0)) : 0;
+    const rampMin = cfg.hw === "Z3" ? Math.min(30, Math.max(0, parseIntOr(sp.circRampMin, 0))) : 0;
     const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0;
     const rampStepBins = hasDawnDusk ? Math.max(1, Math.round((rampMin * 60) / (6 * bin))) : 0;
     const rampDur = hasDawnDusk ? 6 * rampStepBins * bin : 0;
@@ -343,13 +343,13 @@ function renderTimeline(cfg, s4) {
         cursor = segT1;
       }
     }
-    if (days > n) {
+    if (days > n && (lightHrs + darkHrs) > 0) {
       segs.push({ cls: "tl-acclim", w: Math.max(1, lightHrs + darkHrs), txt: `+${days - n}d`, t0: cursor, t1: s4.totalRuntimeSec });
     }
     if (segs.length === 0) {
-      segs.push({ cls: activeCls, w: 1, txt: "Autoref", t0: 0, t1: Math.max(1, s4.totalRuntimeSec) });
+      segs.push({ cls: lightHrs > 0 ? activeCls : "tl-dark", w: 1, txt: "Autoref", t0: 0, t1: Math.max(1, s4.totalRuntimeSec) });
     }
-    desc.textContent = `${sp.numDays} cycle(s) of ${sp.lightHours}h ${activeShort} : ${sp.darkHours}h Dark${hasDawnDusk ? ` (±${rampMin}m dawn/dusk)` : ""}`;
+    desc.textContent = `${days} cycle(s) of ${lightHrs}h ${activeShort} : ${darkHrs}h Dark${hasDawnDusk ? ` (±${rampMin}m dawn/dusk)` : ""}`;
   } else if (cfg.stimId === "multi_phase") {
     const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
     const cycles = Math.max(1, parseInt(sp.mpCycles, 10) || 1);
