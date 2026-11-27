@@ -283,22 +283,8 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
   }
 
   if (cfg.stimId === "circadian") {
-    const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
-    const lightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
-    const darkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
-    const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    const rampMin = hw === "Z3" ? Math.min(30, Math.max(0, parseIntOr(sp.circRampMin, 0))) : 0;
-    const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0;
-    const rampStepBins = hasDawnDusk ? Math.max(1, Math.round((rampMin * 60) / (6 * bin))) : 0;
-    const rampStepDur = rampStepBins * bin;
-    const rampDur = hasDawnDusk ? 6 * rampStepDur : 0;
-    const autoref = 300;
-    const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
-    const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
-    const hourDur = 2 * halfBins * bin + autoref;
-    const hrsPerDay = lightHrs + darkHrs;
-    const dayDur = hrsPerDay * hourDur + (hasDawnDusk ? 2 * rampDur : 0);
-    totalRuntimeSec = autoref + days * dayDur;
+    const c = computeCircadianSchedule(cfg);
+    totalRuntimeSec = c.totalRuntimeSec;
     const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
 
     const setChannelPct = (pct) => {
@@ -307,42 +293,40 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
       if (useBot) bottomChannels[colId] = pct;
     };
 
-    if (t < autoref || hrsPerDay === 0) {
-      if (lightHrs > 0) setSingleChannelOn(colId);
+    if (t < c.autoref || !c.hasAnyHours) {
+      if (!c.hasDawnDusk && c.lightHrs > 0) setSingleChannelOn(colId);
       phaseName = "AUTOREFERENCING";
     } else {
-      const rel = Math.min(Math.max(0, days * dayDur - 0.0001), t - autoref);
-      const dayIdx = Math.min(days - 1, Math.floor(rel / dayDur));
-      const inDay = rel - dayIdx * dayDur;
-      if (hasDawnDusk) {
-        const isGammaCirc = sp.circRampCurve !== "linear";
-        const dawnFracs = isGammaCirc ? [0.02, 0.08, 0.22, 0.44, 0.72, 1.0] : [0.15, 0.30, 0.50, 0.65, 0.85, 1.0];
-        const duskFracs = isGammaCirc ? [0.72, 0.44, 0.22, 0.08, 0.02, 0.0] : [0.85, 0.65, 0.50, 0.30, 0.15, 0.0];
-        const lightDur = lightHrs * hourDur;
-        if (inDay < rampDur) {
-          const st = Math.min(5, Math.floor(inDay / rampStepDur));
-          const pct = Math.max(1, Math.round(globalPct * dawnFracs[st]));
+      const rel = Math.min(Math.max(0, c.days * c.dayDurSec - 0.0001), t - c.autoref);
+      const dayIdx = Math.min(c.days - 1, Math.floor(rel / c.dayDurSec));
+      const inDay = rel - dayIdx * c.dayDurSec;
+      const lightDur = c.lightHrs * c.hourDurSec;
+      if (inDay < lightDur) {
+        const inLight = inDay;
+        const hr = Math.min(c.lightHrs, Math.floor(inLight / c.hourDurSec) + 1);
+        if (c.hasDawnDusk && inLight < c.rampDurSec) {
+          const st = Math.min(c.rampSteps - 1, Math.floor(inLight / c.rampStepDurSec));
+          const pct = Math.max(1, Math.round(globalPct * c.dawnFracs[st]));
           setChannelPct(pct);
           phaseName = `DAY ${dayIdx + 1} DAWN (${pct}%)`;
-        } else if (inDay < rampDur + lightDur) {
-          const hr = Math.min(lightHrs - 1, Math.floor((inDay - rampDur) / hourDur));
+        } else if (c.hasDawnDusk && inLight < c.rampDurSec + c.autoref) {
           setSingleChannelOn(colId);
-          phaseName = `DAY ${dayIdx + 1} ${activeLightTag} HR ${hr + 1}`;
-        } else if (inDay < 2 * rampDur + lightDur) {
-          const st = Math.min(5, Math.floor((inDay - rampDur - lightDur) / rampStepDur));
-          const pct = Math.round(globalPct * duskFracs[st]);
+          phaseName = `DAY ${dayIdx + 1} AUTOREF (${activeLightTag} HR 1)`;
+        } else {
+          setSingleChannelOn(colId);
+          phaseName = `DAY ${dayIdx + 1} ${activeLightTag} HR ${hr}`;
+        }
+      } else {
+        const inDark = inDay - lightDur;
+        const hr = Math.min(c.darkHrs, Math.floor(inDark / c.hourDurSec) + 1);
+        if (c.hasDawnDusk && inDark < c.rampDurSec) {
+          const st = Math.min(c.rampSteps - 1, Math.floor(inDark / c.rampStepDurSec));
+          const pct = Math.round(globalPct * c.duskFracs[st]);
           setChannelPct(pct);
           phaseName = `DAY ${dayIdx + 1} DUSK (${pct}%)`;
         } else {
-          const hr = Math.min(darkHrs - 1, Math.floor((inDay - 2 * rampDur - lightDur) / hourDur));
-          phaseName = `DAY ${dayIdx + 1} DARK HR ${hr + 1}`;
+          phaseName = `DAY ${dayIdx + 1} DARK HR ${hr}`;
         }
-      } else {
-        const hrIdx = Math.min(hrsPerDay - 1, Math.floor(inDay / hourDur));
-        const isLight = hrIdx < lightHrs;
-        const phaseHr = isLight ? (hrIdx + 1) : (hrIdx - lightHrs + 1);
-        if (isLight) setSingleChannelOn(colId);
-        phaseName = `DAY ${dayIdx + 1} ${isLight ? activeLightTag : "DARK"} HR ${phaseHr}`;
       }
     }
     return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };

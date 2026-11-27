@@ -301,55 +301,49 @@ function renderTimeline(cfg, s4) {
     }
     desc.textContent = `${totalTrials} trials (${isAlt ? "Alt Pulse/PPI" : "PPI only"} · ${prepulse}+${isiMs}ms+${pulse})`;
   } else if (cfg.stimId === "circadian") {
-    const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
-    const lightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
-    const darkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
-    const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    const rampMin = cfg.hw === "Z3" ? Math.min(30, Math.max(0, parseIntOr(sp.circRampMin, 0))) : 0;
-    const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0;
-    const rampStepBins = hasDawnDusk ? Math.max(1, Math.round((rampMin * 60) / (6 * bin))) : 0;
-    const rampDur = hasDawnDusk ? 6 * rampStepBins * bin : 0;
-    const autoref = 300;
-    const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
-    const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
-    const hourDur = 2 * halfBins * bin + autoref;
-    const n = Math.min(5, days);
-    preSetupSec = autoref;
-    let cursor = autoref;
-    const rampVisW = hasDawnDusk ? Math.max(1.2, rampMin / 25) : 0;
+    const c = computeCircadianSchedule(cfg);
+    const n = Math.min(5, c.days);
+    preSetupSec = c.autoref;
+    let cursor = c.autoref;
+    const lightDur = c.lightHrs * c.hourDurSec;
+    const darkDur = c.darkHrs * c.hourDurSec;
     for (let i = 0; i < n; i++) {
-      if (hasDawnDusk) {
-        const segT0 = segs.length === 0 ? 0 : cursor;
-        const segT1 = cursor + rampDur;
-        segs.push({ cls: "tl-dawn", w: rampVisW, txt: "", t0: segT0, t1: segT1 });
-        cursor = segT1;
+      if (c.lightHrs > 0) {
+        const dayStart = cursor;
+        const lightEnd = dayStart + lightDur;
+        if (c.hasDawnDusk) {
+          const dawnEnd = dayStart + c.rampDurSec;
+          const dawnVisW = Math.min(c.lightHrs * 0.45, Math.max(0.8, c.rampMin / 25));
+          const steadyLightW = Math.max(0.4, c.lightHrs - dawnVisW);
+          segs.push({ cls: "tl-dawn", w: dawnVisW, txt: "", t0: segs.length === 0 ? 0 : dayStart, t1: dawnEnd });
+          segs.push({ cls: activeCls, w: steadyLightW, txt: `${c.lightHrs}h L`, t0: dawnEnd, t1: lightEnd });
+        } else {
+          segs.push({ cls: activeCls, w: c.lightHrs, txt: `${c.lightHrs}h L`, t0: segs.length === 0 ? 0 : dayStart, t1: lightEnd });
+        }
+        cursor = lightEnd;
       }
-      if (lightHrs > 0) {
-        const segT0 = segs.length === 0 ? 0 : cursor;
-        const segT1 = cursor + lightHrs * hourDur;
-        segs.push({ cls: activeCls, w: lightHrs, txt: `${lightHrs}h L`, t0: segT0, t1: segT1 });
-        cursor = segT1;
-      }
-      if (hasDawnDusk) {
-        const segT0 = segs.length === 0 ? 0 : cursor;
-        const segT1 = cursor + rampDur;
-        segs.push({ cls: "tl-dusk", w: rampVisW, txt: "", t0: segT0, t1: segT1 });
-        cursor = segT1;
-      }
-      if (darkHrs > 0) {
-        const segT0 = segs.length === 0 ? 0 : cursor;
-        const segT1 = cursor + darkHrs * hourDur;
-        segs.push({ cls: "tl-dark", w: darkHrs, txt: `${darkHrs}h D`, t0: segT0, t1: segT1 });
-        cursor = segT1;
+      if (c.darkHrs > 0) {
+        const darkStart = cursor;
+        const darkEnd = darkStart + darkDur;
+        if (c.hasDawnDusk) {
+          const duskEnd = darkStart + c.rampDurSec;
+          const duskVisW = Math.min(c.darkHrs * 0.45, Math.max(0.8, c.rampMin / 25));
+          const steadyDarkW = Math.max(0.4, c.darkHrs - duskVisW);
+          segs.push({ cls: "tl-dusk", w: duskVisW, txt: "", t0: darkStart, t1: duskEnd });
+          segs.push({ cls: "tl-dark", w: steadyDarkW, txt: `${c.darkHrs}h D`, t0: duskEnd, t1: darkEnd });
+        } else {
+          segs.push({ cls: "tl-dark", w: c.darkHrs, txt: `${c.darkHrs}h D`, t0: segs.length === 0 ? 0 : darkStart, t1: darkEnd });
+        }
+        cursor = darkEnd;
       }
     }
-    if (days > n && (lightHrs + darkHrs) > 0) {
-      segs.push({ cls: "tl-acclim", w: Math.max(1, lightHrs + darkHrs), txt: `+${days - n}d`, t0: cursor, t1: s4.totalRuntimeSec });
+    if (c.days > n && c.hasAnyHours) {
+      segs.push({ cls: "tl-acclim", w: Math.max(1, c.hrsPerDay), txt: `+${c.days - n}d`, t0: cursor, t1: s4.totalRuntimeSec });
     }
     if (segs.length === 0) {
-      segs.push({ cls: lightHrs > 0 ? activeCls : "tl-dark", w: 1, txt: "Autoref", t0: 0, t1: Math.max(1, s4.totalRuntimeSec) });
+      segs.push({ cls: c.lightHrs > 0 ? activeCls : "tl-dark", w: 1, txt: "Autoref", t0: 0, t1: Math.max(1, s4.totalRuntimeSec) });
     }
-    desc.textContent = `${days} cycle(s) of ${lightHrs}h ${activeShort} : ${darkHrs}h Dark${hasDawnDusk ? ` (±${rampMin}m dawn/dusk)` : ""}`;
+    desc.textContent = `${c.days} cycle(s) of ${c.lightHrs}h ${activeShort} : ${c.darkHrs}h Dark${c.hasDawnDusk ? ` (incl. ${c.rampMin}m dawn/dusk)` : ""}`;
   } else if (cfg.stimId === "multi_phase") {
     const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);
     const cycles = Math.max(1, parseInt(sp.mpCycles, 10) || 1);

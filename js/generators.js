@@ -59,12 +59,9 @@ function buildAssayDataSlug(cfg) {
     const isi = Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300);
     detail = `ppi_${isi}ms_${pairs}x`;
   } else if (cfg.stimId === "circadian") {
-    const lHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
-    const dHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
-    const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    const rampMin = cfg.hw === "Z3" ? Math.min(30, Math.max(0, parseIntOr(sp.circRampMin, 0))) : 0;
-    const rampOpt = (rampMin > 0 && lHrs > 0 && dHrs > 0) ? `_ramp${rampMin}m` : "";
-    detail = `circadian_${lHrs}l${dHrs}d_${days}d${rampOpt}${colOpt}`;
+    const c = computeCircadianSchedule(cfg);
+    const rampOpt = c.hasDawnDusk ? `_ramp${c.rampMin}m` : "";
+    detail = `circadian_${c.lightHrs}l${c.darkHrs}d_${c.days}d${rampOpt}${colOpt}`;
   } else if (cfg.stimId === "multi_phase") {
     const cycles = Math.max(1, parseInt(sp.mpCycles, 10) || 1);
     const comp = compileMultiTrackSlices(cfg.timelineClips, sp.mpTimelineSec, sp.timeBinSec, cfg.thermostatTemp);
@@ -1638,27 +1635,44 @@ function generateStep4(cfg) {
     totalRows = preBins + totalTrials * (1 + itiBins);
 
   } else if (cfg.stimId === "circadian") {
-    const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
-    const lightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
-    const darkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
-    const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
-    const rampMin = cfg.hw === "Z3" ? Math.min(30, Math.max(0, parseIntOr(sp.circRampMin, 0))) : 0;
-    const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0;
-    const hasAnyHours = (lightHrs + darkHrs) > 0;
-    const rampStepBins = hasDawnDusk ? Math.max(1, Math.round((rampMin * 60) / (6 * bin))) : 0;
-    const autoref = 300;
-    const activeSecPerHour = Math.max(bin * 2, 3600 - autoref);
-    const halfBins = Math.max(1, Math.floor(activeSecPerHour / (2 * bin)));
+    const c = computeCircadianSchedule(cfg);
+    const {
+      bin, lightHrs, darkHrs, days, autoref,
+      firstHalfBins, secondHalfBins, hourPadSec,
+      hasDawnDusk, hasAnyHours, hasRegularHours,
+      dawnFracs, duskFracs, rampSteps, rampStepBins,
+      rampDurSec, rampPostBins, lightRemHours, darkRemHours
+    } = c;
+    const isSymmetricHalves = firstHalfBins === secondHalfBins;
 
-    topDefines.push(
-      `DEFINE TIME_BIN ${bin}`,
-      `DEFINE HALF_HOUR_BINS ${halfBins}  # 2 x ${halfBins} x ${bin}s + ${autoref}s autoref = ~1 hour`,
-      ...(lightHrs > 0 ? [`DEFINE LIGHT_HOURS ${lightHrs}`] : []),
-      ...(darkHrs > 0 ? [`DEFINE DARK_HOURS ${darkHrs}`] : []),
-      ...(hasAnyHours ? [`DEFINE NUM_DAYS ${days}`] : [])
-    );
+    topDefines.push(`DEFINE TIME_BIN ${bin}`);
+    if (hasRegularHours && firstHalfBins > 0) {
+      if (isSymmetricHalves) {
+        if (hourPadSec === 0 && !hasDawnDusk) {
+          topDefines.push(`DEFINE HALF_HOUR_BINS ${firstHalfBins}  # 2 x ${firstHalfBins} x ${bin}s + ${autoref}s autoref = ~1 hour`);
+        } else {
+          topDefines.push(`DEFINE HALF_HOUR_BINS ${firstHalfBins}  # 2 x ${firstHalfBins} x ${bin}s + ${autoref}s autoref${hourPadSec > 0 ? ` + ${hourPadSec}s pad` : ""} = 3600s`);
+        }
+      } else {
+        topDefines.push(
+          `DEFINE FIRST_HALF_BINS ${firstHalfBins}  # (${firstHalfBins} + ${secondHalfBins}) x ${bin}s + ${autoref}s autoref${hourPadSec > 0 ? ` + ${hourPadSec}s pad` : ""} = 3600s`
+        );
+        if (secondHalfBins > 0) {
+          topDefines.push(`DEFINE SECOND_HALF_BINS ${secondHalfBins}`);
+        }
+      }
+    }
+    if (hasAnyHours && hourPadSec > 0) {
+      topDefines.push(`DEFINE HOUR_PAD_SEC ${hourPadSec}  # Remainder wait so each hour is exactly 3600s`);
+    }
+    if (lightHrs > 0) topDefines.push(`DEFINE LIGHT_HOURS ${lightHrs}`);
+    if (darkHrs > 0) topDefines.push(`DEFINE DARK_HOURS ${darkHrs}`);
+    if (hasAnyHours) topDefines.push(`DEFINE NUM_DAYS ${days}`);
     if (hasDawnDusk) {
-      topDefines.push(`DEFINE RAMP_STEP_BINS ${rampStepBins}  # 6 PWM steps x ${rampStepBins} x ${bin}s = ~${rampMin} min Dawn/Dusk`);
+      topDefines.push(`DEFINE RAMP_STEP_BINS ${rampStepBins}  # ${rampSteps} PWM steps x ${rampStepBins} x ${bin}s = ${rampDurSec}s Dawn/Dusk (absorbed in Hour 1)`);
+      if (rampPostBins > 0) topDefines.push(`DEFINE RAMP_POST_BINS ${rampPostBins}`);
+      if (lightRemHours > 0) topDefines.push(`DEFINE LIGHT_REM_HOURS ${lightRemHours}`);
+      if (darkRemHours > 0) topDefines.push(`DEFINE DARK_REM_HOURS ${darkRemHours}`);
     }
     if (hasAnyHours) {
       topDefines.push(
@@ -1668,7 +1682,7 @@ function generateStep4(cfg) {
       );
     }
 
-    const initLightAction = lightHrs > 0 ? "LIGHTS_ON" : "LIGHTS_OFF";
+    const initLightAction = (!hasDawnDusk && lightHrs > 0) ? "LIGHTS_ON" : "LIGHTS_OFF";
     if (hasAnyHours) {
       mainSchedule.push(
         "    @DAY_VAR = 0",
@@ -1697,36 +1711,66 @@ function generateStep4(cfg) {
       if (lightHrs > 0) {
         if (hasDawnDusk) {
           dayLines.push(
-            "    @HOUR_VAR = 0",
-            "    INVOKE(DAWN_RAMP,1)"
+            "    @HOUR_VAR = 1",
+            "    @PHASE_VAR = 1",
+            "    INVOKE(DAWN_RAMP,1)",
+            "    INVOKE(LIGHTS_ON,1)",
+            `    LOAD(OVERLAY_TEXT,"1,1:DAY @100 ${activeLightTag.padEnd(5, " ")} HR @101  ")`,
+            "    AUTOREFERENCE()"
+          );
+          if (rampPostBins > 0) {
+            dayLines.push("    INVOKE(SAMPLE_CIRC,RAMP_POST_BINS)");
+          }
+          if (hourPadSec > 0) {
+            dayLines.push("    WAIT(HOUR_PAD_SEC)");
+          }
+          dayLines.push("    @HOUR_VAR = @HOUR_VAR + 1");
+          if (lightRemHours > 0) {
+            dayLines.push("    INVOKE(RUN_HOUR,LIGHT_REM_HOURS)");
+          }
+        } else {
+          dayLines.push(
+            "    @HOUR_VAR = 1",
+            "    @PHASE_VAR = 1",
+            "    INVOKE(LIGHTS_ON,1)",
+            "    INVOKE(RUN_HOUR,LIGHT_HOURS)"
           );
         }
-        dayLines.push(
-          "    @HOUR_VAR = 1",
-          "    @PHASE_VAR = 1",
-          "    INVOKE(LIGHTS_ON,1)",
-          "    INVOKE(RUN_HOUR,LIGHT_HOURS)"
-        );
       }
       if (darkHrs > 0) {
         if (hasDawnDusk) {
           dayLines.push(
-            "    @HOUR_VAR = 0",
-            "    INVOKE(DUSK_RAMP,1)"
+            "    @HOUR_VAR = 1",
+            "    @PHASE_VAR = 0",
+            "    INVOKE(DUSK_RAMP,1)",
+            "    INVOKE(LIGHTS_OFF,1)",
+            '    LOAD(OVERLAY_TEXT,"1,1:DAY @100 DARK  HR @101  ")',
+            "    AUTOREFERENCE()"
+          );
+          if (rampPostBins > 0) {
+            dayLines.push("    INVOKE(SAMPLE_CIRC,RAMP_POST_BINS)");
+          }
+          if (hourPadSec > 0) {
+            dayLines.push("    WAIT(HOUR_PAD_SEC)");
+          }
+          dayLines.push("    @HOUR_VAR = @HOUR_VAR + 1");
+          if (darkRemHours > 0) {
+            dayLines.push("    INVOKE(RUN_HOUR,DARK_REM_HOURS)");
+          }
+        } else {
+          dayLines.push(
+            "    @HOUR_VAR = 1",
+            "    @PHASE_VAR = 0",
+            "    INVOKE(LIGHTS_OFF,1)",
+            "    INVOKE(RUN_HOUR,DARK_HOURS)"
           );
         }
-        dayLines.push(
-          "    @HOUR_VAR = 1",
-          "    @PHASE_VAR = 0",
-          "    INVOKE(LIGHTS_OFF,1)",
-          "    INVOKE(RUN_HOUR,DARK_HOURS)"
-        );
       }
       dayLines.push("", "COMPLETE");
+      extraActions.push(dayLines.join("\n"));
 
-      extraActions.push(
-        dayLines.join("\n"),
-        [
+      if (hasRegularHours) {
+        const runHourLines = [
           "ACTION RUN_HOUR",
           "",
           "    IF @PHASE_VAR = 1",
@@ -1734,15 +1778,26 @@ function generateStep4(cfg) {
           "    ELSE",
           '        LOAD(OVERLAY_TEXT,"1,1:DAY @100 DARK  HR @101  ")',
           "    ENDIF",
-          "",
-          "    INVOKE(SAMPLE_CIRC,HALF_HOUR_BINS)",
-          "    AUTOREFERENCE()",
-          "    INVOKE(SAMPLE_CIRC,HALF_HOUR_BINS)",
-          "    @HOUR_VAR = @HOUR_VAR + 1",
-          "",
-          "COMPLETE"
-        ].join("\n"),
-        [
+          ""
+        ];
+        if (isSymmetricHalves) {
+          if (firstHalfBins > 0) runHourLines.push("    INVOKE(SAMPLE_CIRC,HALF_HOUR_BINS)");
+          runHourLines.push("    AUTOREFERENCE()");
+          if (secondHalfBins > 0) runHourLines.push("    INVOKE(SAMPLE_CIRC,HALF_HOUR_BINS)");
+        } else {
+          if (firstHalfBins > 0) runHourLines.push("    INVOKE(SAMPLE_CIRC,FIRST_HALF_BINS)");
+          runHourLines.push("    AUTOREFERENCE()");
+          if (secondHalfBins > 0) runHourLines.push("    INVOKE(SAMPLE_CIRC,SECOND_HALF_BINS)");
+        }
+        if (hourPadSec > 0) {
+          runHourLines.push("    WAIT(HOUR_PAD_SEC)");
+        }
+        runHourLines.push("    @HOUR_VAR = @HOUR_VAR + 1", "", "COMPLETE");
+        extraActions.push(runHourLines.join("\n"));
+      }
+
+      if ((hasRegularHours && firstHalfBins > 0) || (hasDawnDusk && rampPostBins > 0)) {
+        extraActions.push([
           "ACTION SAMPLE_CIRC",
           "",
           "    SET(COUNTER1,COUNTER_INC)",
@@ -1763,8 +1818,8 @@ function generateStep4(cfg) {
           ]),
           "",
           "COMPLETE"
-        ].join("\n")
-      );
+        ].join("\n"));
+      }
     }
 
     if (hasDawnDusk) {
@@ -1792,9 +1847,6 @@ function generateStep4(cfg) {
         lns.push("", "COMPLETE");
         return lns.join("\n");
       };
-      const isGammaCirc = sp.circRampCurve !== "linear";
-      const dawnFracs = isGammaCirc ? [0.02, 0.08, 0.22, 0.44, 0.72, 1.0] : [0.15, 0.30, 0.50, 0.65, 0.85, 1.0];
-      const duskFracs = isGammaCirc ? [0.72, 0.44, 0.22, 0.08, 0.02, 0.0] : [0.85, 0.65, 0.50, 0.30, 0.15, 0.0];
       extraActions.push(
         buildRampAction("DAWN_RAMP", "DAWN RAMP     ", "SAMPLE_DAWN", dawnFracs),
         buildRampAction("DUSK_RAMP", "DUSK RAMP     ", "SAMPLE_DUSK", duskFracs),
@@ -1803,10 +1855,8 @@ function generateStep4(cfg) {
       );
     }
 
-    const hrsTotal = days * (lightHrs + darkHrs);
-    const rampExtraBins = hasDawnDusk ? days * 12 * rampStepBins : 0;
-    totalRuntimeSec = autoref + hrsTotal * (2 * halfBins * bin + autoref) + rampExtraBins * bin;
-    totalRows = hrsTotal * 2 * halfBins + rampExtraBins;
+    totalRuntimeSec = c.totalRuntimeSec;
+    totalRows = c.totalRows;
 
   } else if (cfg.stimId === "multi_phase") {
     const acclim = Math.max(0, parseInt(sp.acclimSec, 10) || 0);

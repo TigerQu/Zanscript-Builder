@@ -1543,17 +1543,43 @@
         t += comp.totalSec;
       }
     } else if (stimId === "circadian") {
+      const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
       const lightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
       const darkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
       const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
+      const hw = inputs && inputs.hwVersion ? String(inputs.hwVersion) : "Z3";
+      const totalBinsPerHour = Math.floor(3300 / bin);
+      const rampMin = hw === "Z3" ? Math.min(30, Math.max(0, parseIntOr(sp.circRampMin, 0))) : 0;
+      const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0 && totalBinsPerHour >= 1;
+      const rampSteps = hasDawnDusk ? Math.min(6, totalBinsPerHour) : 0;
+      const maxStepBins = hasDawnDusk ? Math.max(1, Math.floor(totalBinsPerHour / rampSteps)) : 0;
+      const rampStepBins = hasDawnDusk ? Math.min(maxStepBins, Math.max(1, Math.round((rampMin * 60) / (rampSteps * bin)))) : 0;
+      const rampDurSec = hasDawnDusk ? (rampSteps * rampStepBins * bin) : 0;
+
       for (let d = 1; d <= days; d++) {
         if (lightHrs > 0) {
-          phaseSchedule.push({ startSec: t, endSec: t + lightHrs * 3600, phase: activeLightTag, label: `Day ${d} ${activeLightTag}`, kind: "light", tempC: thermEnabled ? defaultTemp : null });
-          t += lightHrs * 3600;
+          const lightTotalSec = lightHrs * 3600;
+          if (hasDawnDusk && rampDurSec > 0) {
+            phaseSchedule.push({ startSec: t, endSec: t + rampDurSec, phase: "DAWN", label: `Day ${d} DAWN`, kind: "light", tempC: thermEnabled ? defaultTemp : null });
+            if (lightTotalSec > rampDurSec) {
+              phaseSchedule.push({ startSec: t + rampDurSec, endSec: t + lightTotalSec, phase: activeLightTag, label: `Day ${d} ${activeLightTag}`, kind: "light", tempC: thermEnabled ? defaultTemp : null });
+            }
+          } else {
+            phaseSchedule.push({ startSec: t, endSec: t + lightTotalSec, phase: activeLightTag, label: `Day ${d} ${activeLightTag}`, kind: "light", tempC: thermEnabled ? defaultTemp : null });
+          }
+          t += lightTotalSec;
         }
         if (darkHrs > 0) {
-          phaseSchedule.push({ startSec: t, endSec: t + darkHrs * 3600, phase: "DARK", label: `Day ${d} DARK`, kind: "dark", tempC: thermEnabled ? defaultTemp : null });
-          t += darkHrs * 3600;
+          const darkTotalSec = darkHrs * 3600;
+          if (hasDawnDusk && rampDurSec > 0) {
+            phaseSchedule.push({ startSec: t, endSec: t + rampDurSec, phase: "DUSK", label: `Day ${d} DUSK`, kind: "dark", tempC: thermEnabled ? defaultTemp : null });
+            if (darkTotalSec > rampDurSec) {
+              phaseSchedule.push({ startSec: t + rampDurSec, endSec: t + darkTotalSec, phase: "DARK", label: `Day ${d} DARK`, kind: "dark", tempC: thermEnabled ? defaultTemp : null });
+            }
+          } else {
+            phaseSchedule.push({ startSec: t, endSec: t + darkTotalSec, phase: "DARK", label: `Day ${d} DARK`, kind: "dark", tempC: thermEnabled ? defaultTemp : null });
+          }
+          t += darkTotalSec;
         }
       }
       if (thermEnabled && t > 0) tempSchedule.push({ startSec: 0, endSec: t, tempC: defaultTemp, label: `${defaultTemp}°C` });

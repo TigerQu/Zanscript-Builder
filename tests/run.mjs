@@ -1700,6 +1700,256 @@ try {
       await page.close();
     }
 
+    // 6r. Circadian exact-timing execution simulator: 24.000h T-cycles (Dawn/Dusk absorbed), asymmetric 3300s split + HOUR_PAD_SEC, 1L:1D edge case & preflight notices
+    {
+      const { page, errors } = await openFreshPage("#stimulus");
+      const circRaw = await page.evaluate(() => {
+        const setField = (sel, val) => {
+          const el = document.querySelector(sel);
+          if (!el) throw new Error(`Missing field: ${sel}`);
+          el.value = String(val);
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+
+        // Parse and simulate Circadian .zs execution from ACTION MAIN assuming AUTOREFERENCE() = 300s
+        const simCircadianZs = (code) => {
+          const defs = {};
+          for (const m of code.matchAll(/^DEFINE\s+(\S+)\s+([0-9.]+)/gm)) {
+            defs[m[1]] = parseFloat(m[2]);
+          }
+          const resolveNum = (tok) => (defs[tok] !== undefined ? defs[tok] : parseFloat(tok));
+          const actions = {};
+          for (const m of code.matchAll(/^ACTION\s+(\S+)\n([\s\S]*?)^COMPLETE$/gm)) {
+            actions[m[1]] = m[2].split("\n").map((l) => l.trim()).filter(Boolean);
+          }
+          const actionCount = (code.match(/^ACTION /gm) || []).length;
+          const completeCount = (code.match(/^COMPLETE$/gm) || []).length;
+          const hasZeroInvoke = /INVOKE\([^,]+,\s*0\s*\)/.test(code);
+
+          let totalSec = 0;
+          let initLightState = null;
+          let firstAutorefLightState = null;
+          let curPhase = null; // 1 = light, 0 = dark
+          let curDay = null;
+          const daysLog = [];
+          const execAction = (name) => {
+            const lines = actions[name] || [];
+            for (const line of lines) {
+              if (line === "INVOKE(LIGHTS_ON,1)") {
+                if (firstAutorefLightState === null) initLightState = "ON";
+                continue;
+              }
+              if (line === "INVOKE(LIGHTS_OFF,1)") {
+                if (firstAutorefLightState === null) initLightState = "OFF";
+                continue;
+              }
+              if (line === "@PHASE_VAR = 1") { curPhase = 1; continue; }
+              if (line === "@PHASE_VAR = 0") { curPhase = 0; continue; }
+              if (line === "AUTOREFERENCE()") {
+                if (firstAutorefLightState === null) firstAutorefLightState = initLightState;
+                totalSec += 300;
+                if (curDay) {
+                  if (curPhase === 1) curDay.lightSec += 300;
+                  else if (curPhase === 0) curDay.darkSec += 300;
+                }
+                continue;
+              }
+              const wm = line.match(/^WAIT\(([^)]+)\)$/);
+              if (wm) {
+                const dt = resolveNum(wm[1]);
+                totalSec += dt;
+                if (curDay) {
+                  if (curPhase === 1) curDay.lightSec += dt;
+                  else if (curPhase === 0) curDay.darkSec += dt;
+                }
+                continue;
+              }
+              const im = line.match(/^INVOKE\(([^,]+),([^)]+)\)$/);
+              if (im) {
+                const target = im[1].trim();
+                const count = Math.round(resolveNum(im[2].trim()));
+                if (target === "RUN_DAY") {
+                  for (let d = 0; d < count; d++) {
+                    curDay = { lightSec: 0, darkSec: 0 };
+                    curPhase = null;
+                    execAction("RUN_DAY");
+                    daysLog.push(curDay);
+                    curDay = null;
+                  }
+                } else if (actions[target]) {
+                  for (let k = 0; k < count; k++) execAction(target);
+                }
+              }
+            }
+          };
+          execAction("MAIN");
+          const dawnStepCount = ((actions.DAWN_RAMP || []).filter((l) => l.startsWith("INVOKE(SAMPLE_DAWN,"))).length;
+          return {
+            totalSec,
+            daysLog,
+            firstAutorefLightState,
+            dawnStepCount,
+            hasRunHourAction: Boolean(actions.RUN_HOUR),
+            hasZeroInvoke,
+            balanced: actionCount > 0 && actionCount === completeCount
+          };
+        };
+
+        document.querySelector('[data-stim="circadian"]').click();
+
+        // 1) 12L:12D, 7 days, bin=10s, rampMin = 0, 15, 30
+        const sevenDayResults = {};
+        const sevenDayPayloads = {};
+        for (const rampMin of [0, 15, 30]) {
+          setField('#stimParamsBox [data-sp="lightHours"]', 12);
+          setField('#stimParamsBox [data-sp="darkHours"]', 12);
+          setField('#stimParamsBox [data-sp="numDays"]', 7);
+          setField('#stimParamsBox [data-sp="circBinSec"]', 10);
+          setField('#stimParamsBox [data-sp="circRampMin"]', rampMin);
+          const cfg = readConfig();
+          const s4 = refreshAll._latestBundle[4];
+          const sim = simCircadianZs(s4.code);
+          const smpInit = sampleAssayStateAtTime(cfg, 100);
+          const tlDesc = document.getElementById("timelineDesc").textContent;
+          const tlLastEnd = Number(document.querySelector("#timelineBar .tl-seg:last-child")?.dataset?.t1 || s4.totalRuntimeSec);
+          sevenDayPayloads[rampMin] = buildExperimentPayload();
+          sevenDayResults[rampMin] = {
+            balancedAndNoZero: sim.balanced && !sim.hasZeroInvoke,
+            exactTotal: sim.totalSec === 605100 && s4.totalRuntimeSec === 605100 && smpInit.totalRuntimeSec === 605100 && tlLastEnd === 605100,
+            all7DaysExact: sim.daysLog.length === 7 && sim.daysLog.every((d) => d.lightSec === 43200 && d.darkSec === 43200),
+            initAutorefLightOk: rampMin > 0
+              ? (sim.firstAutorefLightState === "OFF" && Object.values(smpInit.topChannels).every((v) => v === 0))
+              : (sim.firstAutorefLightState === "ON" && smpInit.topChannels.WHITE === 100),
+            descCopyOk: rampMin > 0 ? tlDesc.includes(`(incl. ${rampMin}m dawn/dusk)`) : !tlDesc.includes("dawn/dusk")
+          };
+        }
+
+        // 2) Bins [10, 7, 20, 45, 60, 300, 600] x rampMin [0, 30] -> EVERY SINGLE ONE exact 3600s/h & 86400s/day
+        const binMatrixResults = {};
+        const binSpecificChecks = {};
+        setField('#stimParamsBox [data-sp="lightHours"]', 12);
+        setField('#stimParamsBox [data-sp="darkHours"]', 12);
+        setField('#stimParamsBox [data-sp="numDays"]', 1);
+        for (const bin of [10, 7, 20, 45, 60, 300, 600]) {
+          for (const rampMin of [0, 30]) {
+            setField('#stimParamsBox [data-sp="circBinSec"]', bin);
+            setField('#stimParamsBox [data-sp="circRampMin"]', rampMin);
+            const s4 = refreshAll._latestBundle[4];
+            const sim = simCircadianZs(s4.code);
+            const checks = computePreflightChecks();
+            const key = `b${bin}_r${rampMin}`;
+            binMatrixResults[key] =
+              sim.balanced &&
+              !sim.hasZeroInvoke &&
+              sim.totalSec === 86700 &&
+              s4.totalRuntimeSec === 86700 &&
+              sim.daysLog.length === 1 &&
+              sim.daysLog[0].lightSec === 43200 &&
+              sim.daysLog[0].darkSec === 43200;
+
+            if (bin === 20 && rampMin === 0) {
+              binSpecificChecks.b20 = s4.code.includes("DEFINE FIRST_HALF_BINS 83") &&
+                s4.code.includes("DEFINE SECOND_HALF_BINS 82") &&
+                !s4.code.includes("HOUR_PAD_SEC") &&
+                !checks.some((c) => c.title.includes("unbinned wait per hour"));
+            }
+            if (bin === 60 && rampMin === 0) {
+              binSpecificChecks.b60 = s4.code.includes("DEFINE FIRST_HALF_BINS 28") &&
+                s4.code.includes("DEFINE SECOND_HALF_BINS 27") &&
+                !s4.code.includes("HOUR_PAD_SEC") &&
+                !checks.some((c) => c.title.includes("unbinned wait per hour"));
+            }
+            if (bin === 7 && rampMin === 0) {
+              binSpecificChecks.b7 = s4.code.includes("DEFINE FIRST_HALF_BINS 236") &&
+                s4.code.includes("DEFINE SECOND_HALF_BINS 235") &&
+                s4.code.includes("DEFINE HOUR_PAD_SEC 3") &&
+                checks.some((c) => c.level === "info" && c.title === "Time bin (7 s) adds 3 s unbinned wait per hour");
+            }
+            if (bin === 45 && rampMin === 0) {
+              binSpecificChecks.b45 = s4.code.includes("DEFINE FIRST_HALF_BINS 37") &&
+                s4.code.includes("DEFINE SECOND_HALF_BINS 36") &&
+                s4.code.includes("DEFINE HOUR_PAD_SEC 15") &&
+                checks.some((c) => c.level === "info" && c.title === "Time bin (45 s) adds 15 s unbinned wait per hour");
+            }
+            if (bin === 600 && rampMin === 30) {
+              binSpecificChecks.b600r30 = sim.dawnStepCount === 5 && !sim.hasZeroInvoke && s4.code.includes("DEFINE HOUR_PAD_SEC 300");
+            }
+          }
+        }
+
+        // 3) Edge case 1L:1D with rampMin = 15: exact 7,200s/day, NO INVOKE(RUN_HOUR,0), NO unused ACTION RUN_HOUR
+        setField('#stimParamsBox [data-sp="lightHours"]', 1);
+        setField('#stimParamsBox [data-sp="darkHours"]', 1);
+        setField('#stimParamsBox [data-sp="numDays"]', 1);
+        setField('#stimParamsBox [data-sp="circBinSec"]', 10);
+        setField('#stimParamsBox [data-sp="circRampMin"]', 15);
+        const s4_1L1D = refreshAll._latestBundle[4];
+        const sim1L1D = simCircadianZs(s4_1L1D.code);
+        const checks1L1D = computePreflightChecks();
+        const edge1L1DOk =
+          sim1L1D.balanced &&
+          !sim1L1D.hasZeroInvoke &&
+          !s4_1L1D.code.includes("INVOKE(RUN_HOUR,0)") &&
+          !sim1L1D.hasRunHourAction &&
+          sim1L1D.totalSec === 7500 &&
+          s4_1L1D.totalRuntimeSec === 7500 &&
+          sim1L1D.daysLog.length === 1 &&
+          sim1L1D.daysLog[0].lightSec === 3600 &&
+          sim1L1D.daysLog[0].darkSec === 3600;
+
+        // 4) Preflight AUTOREF_MODE,2 pacing note: present on active circadian, omitted on 0L:0D
+        const hasAutorefNoteActive = checks1L1D.some((c) => c.level === "info" && c.title === "Hourly pacing assumes AUTOREF_MODE,2 runs full 300 s");
+        setField('#stimParamsBox [data-sp="lightHours"]', 0);
+        setField('#stimParamsBox [data-sp="darkHours"]', 0);
+        const checks0L0D = computePreflightChecks();
+        const omitsAutorefNote0L0D = !checks0L0D.some((c) => c.title === "Hourly pacing assumes AUTOREF_MODE,2 runs full 300 s");
+
+        return {
+          sevenDayResults,
+          sevenDayPayloads,
+          binMatrixResults,
+          binSpecificChecks,
+          edge1L1DOk,
+          preflightAutorefOk: hasAutorefNoteActive && omitsAutorefNote0L0D
+        };
+      });
+
+      // Verify analyzer-core.js schedule matches exact 86,400s/day & 604,800s (7 days) with Dawn/Dusk absorbed!
+      const azPage = await browser.newPage();
+      await azPage.goto(pathToFileURL(path.join(root, "zantiks_csv_analyzer.html")).href);
+      await azPage.waitForFunction(() => window.ZANTIKS_ANALYZER_CORE);
+      const analyzerCircParity = await azPage.evaluate((payloads) => {
+        const core = window.ZANTIKS_ANALYZER_CORE;
+        const out = {};
+        for (const rampMin of [0, 15, 30]) {
+          const ctx = core.parseExperimentContext(payloads[rampMin], "test");
+          const totalDur = ctx.phaseSchedule.length ? ctx.phaseSchedule[ctx.phaseSchedule.length - 1].endSec : 0;
+          const hasDawnDuskPhases = rampMin > 0
+            ? (ctx.phaseSchedule.filter((p) => p.phase === "DAWN").length === 7 && ctx.phaseSchedule.filter((p) => p.phase === "DUSK").length === 7)
+            : (ctx.phaseSchedule.length === 14);
+          // Every day's Light block (DAWN + LIGHT) = 43200s and Dark block (DUSK + DARK) = 43200s
+          const lightTotal = ctx.phaseSchedule.filter((p) => p.phase === "DAWN" || p.kind === "light").reduce((s, p) => s + (p.endSec - p.startSec), 0);
+          const darkTotal = ctx.phaseSchedule.filter((p) => p.phase === "DUSK" || p.kind === "dark").reduce((s, p) => s + (p.endSec - p.startSec), 0);
+          out[rampMin] = totalDur === 7 * 86400 && hasDawnDuskPhases && lightTotal === 7 * 43200 && darkTotal === 7 * 43200;
+        }
+        return out;
+      }, circRaw.sevenDayPayloads);
+      await azPage.close();
+
+      const ok =
+        errors.length === 0 &&
+        Object.values(circRaw.sevenDayResults).every((r) => Object.values(r).every(Boolean)) &&
+        Object.values(circRaw.binMatrixResults).every(Boolean) &&
+        Object.values(circRaw.binSpecificChecks).every(Boolean) &&
+        circRaw.edge1L1DOk &&
+        circRaw.preflightAutorefOk &&
+        Object.values(analyzerCircParity).every(Boolean);
+      report(ok, "Circadian exact timing (absorbed Dawn/Dusk 24.000h T-cycles, asymmetric 3300s split + HOUR_PAD_SEC across bins 7..600s, 1L:1D & preflight) passes",
+        ok ? "" : JSON.stringify({ errors, sevenDayResults: circRaw.sevenDayResults, binMatrixResults: circRaw.binMatrixResults, binSpecificChecks: circRaw.binSpecificChecks, edge1L1DOk: circRaw.edge1L1DOk, preflightAutorefOk: circRaw.preflightAutorefOk, analyzerCircParity }));
+      await page.close();
+    }
+
     // ---------------------------------------------------------------- 7. CSV Analyzer companion page
     const analyzerUrl = pathToFileURL(path.join(root, "zantiks_csv_analyzer.html")).href;
 

@@ -15,6 +15,100 @@ function parseFloatOr(val, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+// Single source of truth for Circadian (Long-Term Cycle) timing & Dawn/Dusk PWM ramp math.
+// Guarantees exact 3,600 s/hour and (lightHrs + darkHrs) * 3,600 s/day across all bin sizes
+// and Dawn/Dusk ramp durations (absorbed inside Light Hour 1 & Dark Hour 1).
+function computeCircadianSchedule(cfg) {
+  const sp = (cfg && cfg.sp && typeof cfg.sp === "object") ? cfg.sp : {};
+  const hw = (cfg && cfg.hw) ? cfg.hw : "Z3";
+  const bin = Math.max(1, parseInt(sp.circBinSec, 10) || 10);
+  const lightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
+  const darkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
+  const hrsPerDay = lightHrs + darkHrs;
+  const days = Math.max(1, parseInt(sp.numDays, 10) || 2);
+  const autoref = 300;
+  const activeSecPerHour = 3300;
+  const totalBinsPerHour = Math.floor(activeSecPerHour / bin);
+  const firstHalfBins = Math.ceil(totalBinsPerHour / 2);
+  const secondHalfBins = Math.floor(totalBinsPerHour / 2);
+  const hourPadSec = activeSecPerHour - totalBinsPerHour * bin;
+
+  const rampMin = hw === "Z3" ? Math.min(30, Math.max(0, parseIntOr(sp.circRampMin, 0))) : 0;
+  const hasDawnDusk = rampMin > 0 && lightHrs > 0 && darkHrs > 0 && totalBinsPerHour >= 1;
+  const hasAnyHours = hrsPerDay > 0;
+  const isGammaRamp = sp.circRampCurve !== "linear";
+
+  let dawnFracs = [];
+  let duskFracs = [];
+  if (hasDawnDusk) {
+    const nSteps = Math.min(6, totalBinsPerHour);
+    if (nSteps === 6) {
+      dawnFracs = isGammaRamp ? [0.02, 0.08, 0.22, 0.44, 0.72, 1.0] : [0.15, 0.30, 0.50, 0.65, 0.85, 1.0];
+      duskFracs = isGammaRamp ? [0.72, 0.44, 0.22, 0.08, 0.02, 0.0] : [0.85, 0.65, 0.50, 0.30, 0.15, 0.0];
+    } else if (nSteps === 5) {
+      dawnFracs = isGammaRamp ? [0.04, 0.16, 0.38, 0.68, 1.0] : [0.20, 0.40, 0.60, 0.80, 1.0];
+      duskFracs = isGammaRamp ? [0.68, 0.38, 0.16, 0.04, 0.0] : [0.80, 0.60, 0.40, 0.20, 0.0];
+    } else {
+      for (let k = 1; k <= nSteps; k++) {
+        const tUp = k / nSteps;
+        const tDn = (nSteps - k) / nSteps;
+        dawnFracs.push(k === nSteps ? 1.0 : Number((isGammaRamp ? Math.pow(tUp, 2.2) : tUp).toFixed(2)));
+        duskFracs.push(k === nSteps ? 0.0 : Number((isGammaRamp ? Math.pow(tDn, 2.2) : tDn).toFixed(2)));
+      }
+    }
+  }
+
+  const rampSteps = hasDawnDusk ? dawnFracs.length : 0;
+  const maxStepBins = hasDawnDusk ? Math.max(1, Math.floor(totalBinsPerHour / rampSteps)) : 0;
+  const rampStepBins = hasDawnDusk ? Math.min(maxStepBins, Math.max(1, Math.round((rampMin * 60) / (rampSteps * bin)))) : 0;
+  const rampStepDurSec = rampStepBins * bin;
+  const rampDurSec = rampSteps * rampStepDurSec;
+  const rampPostBins = hasDawnDusk ? (totalBinsPerHour - rampSteps * rampStepBins) : 0;
+  const rampPostDurSec = rampPostBins * bin;
+
+  const lightRemHours = hasDawnDusk ? Math.max(0, lightHrs - 1) : lightHrs;
+  const darkRemHours = hasDawnDusk ? Math.max(0, darkHrs - 1) : darkHrs;
+  const hasRegularHours = hasAnyHours && (!hasDawnDusk || lightRemHours > 0 || darkRemHours > 0);
+  const hourDurSec = 3600;
+  const dayDurSec = hrsPerDay * hourDurSec;
+  const totalRuntimeSec = autoref + days * dayDurSec;
+  const totalRows = days * hrsPerDay * totalBinsPerHour;
+
+  return {
+    bin,
+    lightHrs,
+    darkHrs,
+    hrsPerDay,
+    days,
+    autoref,
+    activeSecPerHour,
+    totalBinsPerHour,
+    firstHalfBins,
+    secondHalfBins,
+    hourPadSec,
+    rampMin,
+    hasDawnDusk,
+    hasAnyHours,
+    isGammaRamp,
+    dawnFracs,
+    duskFracs,
+    rampSteps,
+    maxStepBins,
+    rampStepBins,
+    rampStepDurSec,
+    rampDurSec,
+    rampPostBins,
+    rampPostDurSec,
+    lightRemHours,
+    darkRemHours,
+    hasRegularHours,
+    hourDurSec,
+    dayDurSec,
+    totalRuntimeSec,
+    totalRows
+  };
+}
+
 function sanitizeSlug(raw, maxLen) {
   const cleaned = String(raw || "")
     .trim()

@@ -241,17 +241,24 @@ function computePreflightChecks(cfgIn, bundleIn) {
       "ZCOMMAND(\"U...\") drives the stepper vibration stand on MWP Z2S / Z3; early non-stepper MWP Z2 units will ignore it.", "study");
   }
 
-  // Circadian 0L:0D & Dawn/Dusk ramp on legacy Z2
+  // Circadian 0L:0D, Dawn/Dusk ramp on legacy Z2, non-divisor bin padding & AUTOREF_MODE,2 pacing
   if (cfg.stimId === "circadian") {
-    const circLightHrs = Math.max(0, parseIntOr(sp.lightHours, 16));
-    const circDarkHrs = Math.max(0, parseIntOr(sp.darkHours, 8));
-    if (circLightHrs === 0 && circDarkHrs === 0) {
+    const c = computeCircadianSchedule(cfg);
+    if (!c.hasAnyHours) {
       add("warn", "Both Light Hours and Dark Hours are 0",
         "Set at least one phase (Light Hours or Dark Hours) to ≥ 1 hour so the circadian schedule records data.", "stimulus");
     }
-    if (parseIntOr(sp.circRampMin, 0) > 0 && circLightHrs > 0 && circDarkHrs > 0 && cfg.hw !== "Z3") {
+    if (parseIntOr(sp.circRampMin, 0) > 0 && c.lightHrs > 0 && c.darkHrs > 0 && cfg.hw !== "Z3") {
       add("warn", "Smooth Dawn/Dusk PWM ramp needs an MWP Z3",
         "MWP Z2 / Z2S GPO6-8 switches lights on/off without PWM dimming; ramp duration is skipped on Z2.", "study");
+    }
+    if (c.hasAnyHours && c.hourPadSec > 0) {
+      add("info", `Time bin (${c.bin} s) adds ${c.hourPadSec} s unbinned wait per hour`,
+        `3,300 s active tracking + 300 s autoref per hour is not evenly divisible by ${c.bin} s, so WAIT(${c.hourPadSec}) is appended per hour to preserve exact 60-min hours. Use an exact divisor (1, 5, 10, 15, 20, 30, 60, or 300 s) for zero padding.`, "stimulus");
+    }
+    if (c.hasAnyHours) {
+      add("info", "Hourly pacing assumes AUTOREF_MODE,2 runs full 300 s",
+        "Following Zantiks' official circadian template, each hour pairs 55 min active tracking with 5 min AUTOREFERENCE() (SET(AUTOREF_MODE,2), AUTOREF_TIMEOUT 300). Run a 1-hour dry-run and check the CSV RUNTIME gap (or confirm with Zantiks that AUTOREF_MODE,2 does not exit early).", "stimulus");
     }
   }
 
