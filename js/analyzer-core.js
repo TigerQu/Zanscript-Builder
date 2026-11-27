@@ -1560,7 +1560,7 @@
         if (lightHrs > 0) {
           const lightTotalSec = lightHrs * 3600;
           if (hasDawnDusk && rampDurSec > 0) {
-            phaseSchedule.push({ startSec: t, endSec: t + rampDurSec, phase: "DAWN", label: `Day ${d} DAWN`, kind: "light", tempC: thermEnabled ? defaultTemp : null });
+            phaseSchedule.push({ startSec: t, endSec: t + rampDurSec, phase: "DAWN", label: `Day ${d} DAWN`, kind: "transition", colorHint: "dawn", tempC: thermEnabled ? defaultTemp : null });
             if (lightTotalSec > rampDurSec) {
               phaseSchedule.push({ startSec: t + rampDurSec, endSec: t + lightTotalSec, phase: activeLightTag, label: `Day ${d} ${activeLightTag}`, kind: "light", tempC: thermEnabled ? defaultTemp : null });
             }
@@ -1572,7 +1572,7 @@
         if (darkHrs > 0) {
           const darkTotalSec = darkHrs * 3600;
           if (hasDawnDusk && rampDurSec > 0) {
-            phaseSchedule.push({ startSec: t, endSec: t + rampDurSec, phase: "DUSK", label: `Day ${d} DUSK`, kind: "dark", tempC: thermEnabled ? defaultTemp : null });
+            phaseSchedule.push({ startSec: t, endSec: t + rampDurSec, phase: "DUSK", label: `Day ${d} DUSK`, kind: "transition", colorHint: "dusk", tempC: thermEnabled ? defaultTemp : null });
             if (darkTotalSec > rampDurSec) {
               phaseSchedule.push({ startSec: t + rampDurSec, endSec: t + darkTotalSec, phase: "DARK", label: `Day ${d} DARK`, kind: "dark", tempC: thermEnabled ? defaultTemp : null });
             }
@@ -3027,39 +3027,45 @@
   // ---------------------------------------------------------------------------
   function classifyPhase(phaseRaw) {
     const p = String(phaseRaw || "").trim().toUpperCase();
-    if (!p) return { kind: "other", colorHint: "neutral", isLight: false, isDark: false, isStim: false, stimType: null };
+    if (!p) return { kind: "other", colorHint: "neutral", isLight: false, isDark: false, isTransition: false, isStim: false, stimType: null };
 
     if (/^PULSE_ALONE\b/.test(p)) {
-      return { kind: "stim", colorHint: "stim", isLight: false, isDark: false, isStim: true, stimType: "pulse_alone" };
+      return { kind: "stim", colorHint: "stim", isLight: false, isDark: false, isTransition: false, isStim: true, stimType: "pulse_alone" };
     }
     if (/^PPI_TRIAL\b/.test(p)) {
-      return { kind: "stim", colorHint: "ppi", isLight: false, isDark: false, isStim: true, stimType: "ppi" };
+      return { kind: "stim", colorHint: "ppi", isLight: false, isDark: false, isTransition: false, isStim: true, stimType: "ppi" };
     }
     if (/^(STARTLE|VIBRATION|AUDIO_PULSE)\b/.test(p) || /(_FLASH|_HZ|_VU[0-3]|_AUD)$/.test(p)) {
       const stimType = /VIB|_VU[0-3]/.test(p) ? "vib" : (/AUD/.test(p) ? "audio" : "light_pulse");
-      return { kind: "stim", colorHint: "stim", isLight: false, isDark: false, isStim: true, stimType };
+      return { kind: "stim", colorHint: "stim", isLight: false, isDark: false, isTransition: false, isStim: true, stimType };
     }
-    if (/^DARK\b/.test(p) || /^S\d+_DARK(_|$)/.test(p) || /^DUSK\b/.test(p)) {
-      return { kind: "dark", colorHint: "dark", isLight: false, isDark: true, isStim: false, stimType: null };
+    if (/^DAWN\b/.test(p)) {
+      return { kind: "transition", colorHint: "dawn", isLight: false, isDark: false, isTransition: true, isStim: false, stimType: null };
+    }
+    if (/^DUSK\b/.test(p)) {
+      return { kind: "transition", colorHint: "dusk", isLight: false, isDark: false, isTransition: true, isStim: false, stimType: null };
+    }
+    if (/^DARK\b/.test(p) || /^S\d+_DARK(_|$)/.test(p)) {
+      return { kind: "dark", colorHint: "dark", isLight: false, isDark: true, isTransition: false, isStim: false, stimType: null };
     }
     if (/^TEMP_[\d.]+C$/.test(p)) {
-      return { kind: "temp", colorHint: "temp", isLight: false, isDark: false, isStim: false, stimType: null };
+      return { kind: "temp", colorHint: "temp", isLight: false, isDark: false, isTransition: false, isStim: false, stimType: null };
     }
     if (/^BASELINE\b/.test(p)) {
-      return { kind: "baseline", colorHint: "baseline", isLight: false, isDark: false, isStim: false, stimType: null };
+      return { kind: "baseline", colorHint: "baseline", isLight: false, isDark: false, isTransition: false, isStim: false, stimType: null };
     }
     if (/^ITI\b/.test(p)) {
-      return { kind: "iti", colorHint: "iti", isLight: false, isDark: false, isStim: false, stimType: null };
+      return { kind: "iti", colorHint: "iti", isLight: false, isDark: false, isTransition: false, isStim: false, stimType: null };
     }
-    if (/^(LIGHT|WHITE|BLUE|GREEN|RED|UV|DAWN)\b/.test(p) || /^S\d+_/.test(p)) {
+    if (/^(LIGHT|WHITE|BLUE|GREEN|RED|UV)\b/.test(p) || /^S\d+_/.test(p)) {
       let colorHint = "light";
       if (/BLUE/.test(p)) colorHint = "blue";
       else if (/GREEN/.test(p)) colorHint = "green";
       else if (/RED/.test(p)) colorHint = "red";
       else if (/UV/.test(p)) colorHint = "uv";
-      return { kind: "light", colorHint, isLight: true, isDark: false, isStim: false, stimType: null };
+      return { kind: "light", colorHint, isLight: true, isDark: false, isTransition: false, isStim: false, stimType: null };
     }
-    return { kind: "other", colorHint: "neutral", isLight: false, isDark: false, isStim: false, stimType: null };
+    return { kind: "other", colorHint: "neutral", isLight: false, isDark: false, isTransition: false, isStim: false, stimType: null };
   }
 
   function extractRowMetricValue(row, well, metricId, parsed) {
@@ -4741,7 +4747,7 @@
         capabilities: {
           hasDist: false, hasMsd: false, hasZones: false, hasZchange: Boolean(zcSummary),
           hasXy: Boolean(xyOnly), hasPeriStimulus: false, hasHabituation: false, hasWindowAuc: false,
-          hasTemp: false, hasPhases: false, hasVmr: false, hasPpi: false, hasStartle: false,
+          hasTemp: false, hasPhases: false, hasVmr: false, hasVmrBurst: false, hasPpi: false, hasStartle: false,
           hasSab: hasSabOnly, maxZone: zcSummary ? zcSummary.maxZone : 0
         },
         kpis: {
@@ -4879,6 +4885,7 @@
           colorHint: cls.colorHint,
           isLight: cls.isLight,
           isDark: cls.isDark,
+          isTransition: cls.isTransition,
           isStim: cls.isStim,
           stimType: cls.stimType,
           startRelTime: row.relTime,
@@ -4950,6 +4957,7 @@
         for (let r = curSpan.startRow; r < curSpan.startRow + take; r++) lightOnsetRowSet.add(r);
       }
     }
+    const hasVmrBurst = hasVmr && (darkOnsetRowSet.size > 0 || lightOnsetRowSet.size > 0);
 
     // 4. Optional _ZCHANGE & _XY metrics (respecting non-destructive trimWindow)
     let zchangeInput = zchange;
@@ -5612,7 +5620,7 @@
 
     // 11. Comparison view catalog for Plots / Comparison tab
     const comparisonViews = [{ id: "phase_totals", label: uniquePhases.length > 1 ? "Phase Mean Distance" : "Total Distance" }];
-    if (hasVmr) comparisonViews.push({ id: "vmr", label: "VMR (Light vs Dark & Burst)" });
+    if (hasVmr) comparisonViews.push({ id: "vmr", label: hasVmrBurst ? "VMR (Light vs Dark & Burst)" : "VMR (Light vs Dark)" });
     if (parsed.hasZones) comparisonViews.push({ id: "zone_pref", label: parsed.maxZone === 2 ? "Zone Preference / Thigmotaxis" : `Zone Occupancy (Z1–Z${parsed.maxZone})` });
     if (hasPpi) comparisonViews.push({ id: "ppi", label: "Prepulse Inhibition (% PPI)" });
     else if (hasStartle) comparisonViews.push({ id: "startle", label: "Startle Response (Baseline vs Stim)" });
@@ -5669,6 +5677,7 @@
         hasTemp: hasTempActive,
         hasPhases: uniquePhases.length > 0,
         hasVmr,
+        hasVmrBurst,
         hasPpi,
         hasStartle,
         hasSab,
@@ -6213,6 +6222,7 @@
     const hasZones = runAnalyses.some(x => x.analysis.capabilities.hasZones);
     const maxZone = runAnalyses.reduce((mx, x) => Math.max(mx, x.analysis.capabilities.maxZone || 0), 0);
     const hasVmr = runAnalyses.some(x => x.analysis.capabilities.hasVmr);
+    const hasVmrBurst = runAnalyses.some(x => Boolean(x.analysis.capabilities.hasVmrBurst));
     const hasPpi = runAnalyses.some(x => x.analysis.capabilities.hasPpi);
     const hasStartle = runAnalyses.some(x => x.analysis.capabilities.hasStartle);
     const hasHabituation = runAnalyses.some(x => x.analysis.capabilities.hasHabituation);
@@ -6577,7 +6587,7 @@
     const tempMeans = runAnalyses.map(x => x.analysis.kpis.tempMean).filter(Number.isFinite);
 
     const pooledComparisonViews = [{ id: "phase_totals", label: pooledPhases.length > 1 ? "Phase Mean Distance" : "Total Distance" }];
-    if (hasVmr) pooledComparisonViews.push({ id: "vmr", label: "VMR (Light vs Dark & Burst)" });
+    if (hasVmr) pooledComparisonViews.push({ id: "vmr", label: hasVmrBurst ? "VMR (Light vs Dark & Burst)" : "VMR (Light vs Dark)" });
     if (hasZones) pooledComparisonViews.push({ id: "zone_pref", label: maxZone === 2 ? "Zone Preference / Thigmotaxis" : `Zone Occupancy (Z1–Z${maxZone})` });
     if (hasPpi) pooledComparisonViews.push({ id: "ppi", label: "Prepulse Inhibition (% PPI)" });
     else if (hasStartle) pooledComparisonViews.push({ id: "startle", label: "Startle Response (Baseline vs Stim)" });
@@ -6621,6 +6631,7 @@
         hasTemp: tempMeans.length > 0,
         hasPhases: pooledPhases.length > 0,
         hasVmr,
+        hasVmrBurst,
         hasPpi,
         hasStartle,
         hasSab,
@@ -6736,7 +6747,10 @@
       "total_dist_mm", "mean_dist_mm_bin", "mean_speed_mm_s"
     ];
     if (caps.hasMsd) header.push("mean_msd");
-    if (caps.hasVmr) header.push("vmr_light_mean", "vmr_dark_mean", "vmr_dark_minus_light", "vmr_dark_onset_burst");
+    if (caps.hasVmr) {
+      header.push("vmr_light_mean", "vmr_dark_mean", "vmr_dark_minus_light");
+      if (caps.hasVmrBurst) header.push("vmr_dark_onset_burst");
+    }
     if (caps.hasZones) {
       for (let z = 1; z <= caps.maxZone; z++) header.push(`z${z}_pct`);
       if (caps.maxZone >= 2) header.push("zone_preference_index");
@@ -6767,9 +6781,11 @@
         row.push(
           ws.vmr && ws.vmr.lightMean !== null ? ws.vmr.lightMean : "",
           ws.vmr && ws.vmr.darkMean !== null ? ws.vmr.darkMean : "",
-          ws.vmr && ws.vmr.darkMinusLight !== null ? ws.vmr.darkMinusLight : "",
-          ws.vmr && ws.vmr.darkOnsetBurst !== null ? ws.vmr.darkOnsetBurst : ""
+          ws.vmr && ws.vmr.darkMinusLight !== null ? ws.vmr.darkMinusLight : ""
         );
+        if (caps.hasVmrBurst) {
+          row.push(ws.vmr && ws.vmr.darkOnsetBurst !== null ? ws.vmr.darkOnsetBurst : "");
+        }
       }
       if (caps.hasZones) {
         for (let z = 1; z <= caps.maxZone; z++) {
@@ -6821,7 +6837,9 @@
     }
     if (caps.hasVmr) {
       out.push({ id: "vmr_delta", label: "VMR Dark - Light (mm/bin)", unit: "mm/bin" });
-      out.push({ id: "vmr_burst", label: "VMR Dark-Onset Burst (mm/bin)", unit: "mm/bin" });
+      if (caps.hasVmrBurst) {
+        out.push({ id: "vmr_burst", label: "VMR Dark-Onset Burst (mm/bin)", unit: "mm/bin" });
+      }
     }
     if (caps.hasZones) {
       out.push({ id: "z1_pct", label: "Zone 1 Occupancy (%)", unit: "%" });
@@ -6855,7 +6873,7 @@
     if (analysis.wells && analysis.wells.some(ws => ws.normalized && ws.normalized.totalDistPctCtrl !== null)) {
       const ctrlLbl = (analysis.pooledMeta && analysis.pooledMeta.controlGroupName) || "Control";
       out.push({ id: "norm_total_dist_pct_ctrl", label: `Total Distance (% of ${ctrlLbl})`, unit: "% Ctrl" });
-      if (caps.hasVmr) {
+      if (caps.hasVmrBurst) {
         out.push({ id: "norm_vmr_burst_pct_ctrl", label: `VMR Burst (% of ${ctrlLbl})`, unit: "% Ctrl" });
       }
     }
@@ -7090,7 +7108,10 @@
       "active_bins", "spike_count", "total_dist_mm", "mean_dist_mm_bin", "mean_speed_mm_s"
     ];
     if (caps.hasMsd) header.push("mean_msd");
-    if (caps.hasVmr) header.push("vmr_light_mean", "vmr_dark_mean", "vmr_dark_minus_light", "vmr_dark_onset_burst");
+    if (caps.hasVmr) {
+      header.push("vmr_light_mean", "vmr_dark_mean", "vmr_dark_minus_light");
+      if (caps.hasVmrBurst) header.push("vmr_dark_onset_burst");
+    }
     if (caps.hasZones) {
       for (let z = 1; z <= caps.maxZone; z++) header.push(`z${z}_pct`);
       if (caps.maxZone >= 2) header.push("zone_preference_index");
@@ -7103,7 +7124,7 @@
     if (caps.hasZchange) header.push("zchange_entries", "arm_entries", "sab_pct");
     if (hasNorm) {
       header.push("norm_total_dist_pct_ctrl", "norm_mean_dist_pct_ctrl");
-      if (caps.hasVmr) header.push("norm_vmr_burst_pct_ctrl");
+      if (caps.hasVmrBurst) header.push("norm_vmr_burst_pct_ctrl");
       if (caps.hasWindowAuc) header.push("norm_window_auc_pct_ctrl");
     }
     for (const ph of phases) {
@@ -7134,9 +7155,11 @@
         row.push(
           ws.vmr && ws.vmr.lightMean !== null ? ws.vmr.lightMean : "",
           ws.vmr && ws.vmr.darkMean !== null ? ws.vmr.darkMean : "",
-          ws.vmr && ws.vmr.darkMinusLight !== null ? ws.vmr.darkMinusLight : "",
-          ws.vmr && ws.vmr.darkOnsetBurst !== null ? ws.vmr.darkOnsetBurst : ""
+          ws.vmr && ws.vmr.darkMinusLight !== null ? ws.vmr.darkMinusLight : ""
         );
+        if (caps.hasVmrBurst) {
+          row.push(ws.vmr && ws.vmr.darkOnsetBurst !== null ? ws.vmr.darkOnsetBurst : "");
+        }
       }
       if (caps.hasZones) {
         for (let z = 1; z <= caps.maxZone; z++) {
@@ -7186,7 +7209,7 @@
           ws.normalized && ws.normalized.totalDistPctCtrl !== null ? ws.normalized.totalDistPctCtrl : "",
           ws.normalized && ws.normalized.meanDistPctCtrl !== null ? ws.normalized.meanDistPctCtrl : ""
         );
-        if (caps.hasVmr) row.push(ws.normalized && ws.normalized.vmrBurstPctCtrl !== null ? ws.normalized.vmrBurstPctCtrl : "");
+        if (caps.hasVmrBurst) row.push(ws.normalized && ws.normalized.vmrBurstPctCtrl !== null ? ws.normalized.vmrBurstPctCtrl : "");
         if (caps.hasWindowAuc) row.push(ws.normalized && ws.normalized.windowAucPctCtrl !== null ? ws.normalized.windowAucPctCtrl : "");
       }
       for (const ph of phases) {
@@ -7738,12 +7761,21 @@
     } else if (caps.hasVmr) {
       extraProtocolLines.push(
         "",
-        "    # --- Visual Motor Response (VMR: Light vs Dark) per well ---",
-        "    is_dark = long_df['PHASE'].str.upper().str.contains('DARK', na=False)",
-        "    vmr = long_df.assign(cond=np.where(is_dark, 'DARK', 'LIGHT')).groupby(['well', 'group', 'cond'])['value'].mean().unstack()",
+        "    # --- Visual Motor Response (VMR: steady Light vs steady Dark; excludes DAWN/DUSK & stimuli) ---",
+        "    phase_up = long_df['PHASE'].fillna('').astype(str).str.strip().str.upper()",
+        "    is_excl = (",
+        "        phase_up.str.match(r'^(?:DAWN|DUSK|PULSE_ALONE|PPI_TRIAL|STARTLE|VIBRATION|AUDIO_PULSE|BASELINE|ITI)\\b')",
+        "        | phase_up.str.match(r'^TEMP_[\\d.]+C$')",
+        "        | phase_up.str.contains(r'(?:_FLASH|_HZ|_VU[0-3]|_AUD)$', regex=True)",
+        "    )",
+        "    is_dark = (~is_excl) & (phase_up.str.match(r'^DARK\\b') | phase_up.str.match(r'^S\\d+_DARK(?:_|$)'))",
+        "    is_light = (~is_excl) & (~is_dark) & (phase_up.str.match(r'^(?:LIGHT|WHITE|BLUE|GREEN|RED|UV)\\b') | phase_up.str.match(r'^S\\d+_'))",
+        "    vmr_df = long_df.assign(cond=np.select([is_dark, is_light], ['DARK', 'LIGHT'], default=''))",
+        "    vmr_df = vmr_df[vmr_df['cond'] != '']",
+        "    vmr = vmr_df.groupby(['well', 'group', 'cond'])['value'].mean().unstack()",
         "    if {'LIGHT', 'DARK'}.issubset(vmr.columns):",
         "        vmr['dark_minus_light'] = vmr['DARK'] - vmr['LIGHT']",
-        "        print('\\nVMR Summary by Group:')",
+        "        print('\\nVMR Summary by Group (steady LIGHT vs steady DARK; excludes DAWN/DUSK):')",
         "        print(vmr.groupby('group')[['LIGHT', 'DARK', 'dark_minus_light']].mean())",
         "        vmr.reset_index().to_csv('well_vmr_summary.csv', index=False)"
       );
@@ -7829,9 +7861,14 @@
       "        start_i = 0",
       "        for i in range(1, len(phases) + 1):",
       "            if i == len(phases) or phases[i] != phases[start_i]:",
-      "                if 'DARK' in phases[start_i].upper():",
-      "                    t0 = times[start_i]",
-      "                    t1 = times[i] if i < len(times) else times[-1] + dt",
+      "                ph_up = phases[start_i].strip().upper()",
+      "                t0 = times[start_i]",
+      "                t1 = times[i] if i < len(times) else times[-1] + dt",
+      "                if ph_up.startswith('DAWN'):",
+      "                    ax.axvspan(t0, t1, color='#fdba74', alpha=0.30, zorder=0)",
+      "                elif ph_up.startswith('DUSK'):",
+      "                    ax.axvspan(t0, t1, color='#a5b4fc', alpha=0.28, zorder=0)",
+      "                elif ph_up.startswith('DARK') or '_DARK' in ph_up:",
       "                    ax.axvspan(t0, t1, color='#cbd5e1', alpha=0.35, zorder=0)",
       "                start_i = i",
       "",
@@ -7874,6 +7911,7 @@
     extractWellFactors,
     synthesizeGroupsFromFactors,
     formatDuration,
+    classifyPhase,
     getPlateLayout,
     getAvailablePrismMetrics,
     extractWellMetricForPrism,

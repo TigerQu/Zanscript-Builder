@@ -10,7 +10,9 @@
 // Set CHROME_PATH to use an installed Chrome instead of Playwright's bundled Chromium.
 
 import { chromium } from "playwright";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -3986,6 +3988,192 @@ try {
         bug8TopbarParityOk;
       report(ok, "Methodological guardrails (Test Family, Plate Means vs Wells, Post-Stats Audit + Section 4 log) & all #58 bug fixes (#1-#8) pass cleanly",
         ok ? "" : JSON.stringify({ errors, beforeStatsViewed, wellsParamCheck, nonParamWellsCheck, platesModeCheck, postStatsUi, logSec4Ok, bug3CtrlRenameOk, bug1AfterOne, bug1AfterZero, bug7DemoSwitchOk, bug2ReplaceOk, bug4ZeroVarOk, bug5QcOk, bug5AucOk, bug6MixedOk, flaggedPlatesWarnBefore, flaggedPlatesWarnAfter, analyzerTopbar, builderTopbar }));
+      await page.close();
+    }
+
+    // 7p. Analyzer DAWN/DUSK transition phase classification, hasVmrBurst gating (ramped circadian vs abrupt L/D) & Python VMR parity
+    {
+      const { page, errors } = await openFreshAnalyzer();
+
+      // 1. Direct classifyPhase() assertions for DAWN, DUSK, LIGHT, DARK
+      const classifyCheck = await page.evaluate(() => {
+        const cp = window.ZANTIKS_ANALYZER_CORE.classifyPhase;
+        const dawn = cp("DAWN");
+        const dusk = cp("DUSK");
+        const light = cp("LIGHT");
+        const dark = cp("DARK");
+        return {
+          dawnOk: dawn.kind === "transition" && dawn.colorHint === "dawn" && !dawn.isLight && !dawn.isDark && dawn.isTransition === true,
+          duskOk: dusk.kind === "transition" && dusk.colorHint === "dusk" && !dusk.isLight && !dusk.isDark && dusk.isTransition === true,
+          lightOk: light.kind === "light" && light.isLight === true && !light.isDark && light.isTransition === false,
+          darkOk: dark.kind === "dark" && dark.isDark === true && !dark.isLight && dark.isTransition === false
+        };
+      });
+
+      // 2. Synthetic ramped Circadian CSV: DAWN (90) -> LIGHT (10) -> DUSK (80) -> DARK (40) x 2 days across 6 wells
+      const wells6 = ["A1", "A2", "A3", "B1", "B2", "B3"];
+      const rampedRows = [["RUNTIME", "TEMP_C", "PHASE", "TIME_BIN", ...wells6.map((w) => "DIST_" + w)].join(",")];
+      const phaseSeq = [
+        ["DAWN", 90], ["DAWN", 90],
+        ["LIGHT", 10], ["LIGHT", 10], ["LIGHT", 10],
+        ["DUSK", 80], ["DUSK", 80],
+        ["DARK", 40], ["DARK", 40], ["DARK", 40]
+      ];
+      let tSec = 0;
+      let binIdx = 0;
+      for (let day = 0; day < 2; day++) {
+        for (const [ph, baseVal] of phaseSeq) {
+          tSec += 10;
+          binIdx++;
+          const vals = wells6.map((w) => (w.startsWith("A") ? baseVal : baseVal + 2).toFixed(2));
+          rampedRows.push([tSec, "22.0", ph, binIdx, ...vals].join(","));
+        }
+      }
+      await page.setInputFiles("#analyzerFileInput", {
+        name: "ramped_circadian_2d_6w.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(rampedRows.join("\n") + "\n", "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "ramped_circadian_2d_6w.csv");
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click("#addGroupBtn");
+      await page.click("#addGroupBtn");
+      await page.click("#autoAssignRowsBtn");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="timeseries"]');
+      const tsBandHtml = await page.evaluate(() => document.getElementById("tsChartSvg")?.innerHTML || "");
+
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      await page.selectOption("#compViewSel", "vmr");
+      const rampedRes = await page.evaluate(() => {
+        const core = window.ZANTIKS_ANALYZER_CORE;
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const a = st.analysis;
+        const wsA1 = a.wellsById.A1;
+        const vmrOptText = document.querySelector('#compViewSel option[value="vmr"]')?.textContent?.trim() || "";
+        const compSvgTxt = document.getElementById("compChartSvg")?.textContent || "";
+        const prismMetrics = core.getAvailablePrismMetrics(a).map((m) => m.id);
+        const exportPayload = window.ZANTIKS_ANALYZER_UI.buildExportPayload();
+        const wellCsvV2 = core.exportWellSummaryCsv(exportPayload);
+        const wellCsvV1 = core.buildWellSummaryCsv(a);
+        const pyTemplate = core.buildPythonTemplate(a, st.summaryParsed);
+        return {
+          lightMeanA1: wsA1?.vmr?.lightMean,
+          darkMeanA1: wsA1?.vmr?.darkMean,
+          deltaA1: wsA1?.vmr?.darkMinusLight,
+          phaseDistDawnA1: wsA1?.phaseDist?.DAWN,
+          phaseDistDuskA1: wsA1?.phaseDist?.DUSK,
+          darkOnsetBurstA1: wsA1?.vmr?.darkOnsetBurst,
+          lightOnsetBurstA1: wsA1?.vmr?.lightOnsetBurst,
+          hasVmr: a.capabilities?.hasVmr,
+          hasVmrBurst: a.capabilities?.hasVmrBurst,
+          vmrOptText,
+          compHasBurstBar: compSvgTxt.includes("Dark-Onset Burst"),
+          compHasNaN: compSvgTxt.includes("NaN"),
+          prismMetrics,
+          v2Header: wellCsvV2.replace(/^\uFEFF/, "").split("\n")[0],
+          v1Header: wellCsvV1.split("\n")[0],
+          pyTemplate
+        };
+      });
+
+      const pyExclRegexOk =
+        rampedRes.pyTemplate.includes("DAWN|DUSK") &&
+        rampedRes.pyTemplate.includes("is_excl") &&
+        rampedRes.pyTemplate.includes("vmr_df = vmr_df[vmr_df['cond'] != '']") &&
+        rampedRes.pyTemplate.includes("startswith('DAWN')") &&
+        rampedRes.pyTemplate.includes("startswith('DUSK')") &&
+        !rampedRes.pyTemplate.includes("np.where(is_dark, 'DARK', 'LIGHT')");
+
+      // Execute the generated Python template end-to-end against ramped_circadian_2d_6w.csv if python3 + pandas/numpy/matplotlib are available
+      let pyExecOk = true;
+      const pyCheck = spawnSync("python3", ["-c", "import pandas, numpy, matplotlib"], { encoding: "utf8" });
+      if (pyCheck.status === 0) {
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "zantiks-7p-"));
+        try {
+          fs.writeFileSync(path.join(tmpDir, "ramped_circadian_2d_6w.csv"), rampedRows.join("\n") + "\n", "utf8");
+          const scriptPath = path.join(tmpDir, "analyze_ramped.py");
+          fs.writeFileSync(scriptPath, "import matplotlib\nmatplotlib.use('Agg')\n" + rampedRes.pyTemplate, "utf8");
+          const pyRun = spawnSync("python3", [scriptPath], { cwd: tmpDir, encoding: "utf8" });
+          if (pyRun.status !== 0) {
+            pyExecOk = false;
+          } else {
+            const vmrCsv = fs.readFileSync(path.join(tmpDir, "well_vmr_summary.csv"), "utf8").trim().split("\n");
+            const cols = vmrCsv[0].split(",");
+            const rowA1 = vmrCsv.slice(1).map((l) => l.split(",")).find((r) => r[cols.indexOf("well")] === "A1");
+            const pyLight = rowA1 ? parseFloat(rowA1[cols.indexOf("LIGHT")]) : NaN;
+            const pyDark = rowA1 ? parseFloat(rowA1[cols.indexOf("DARK")]) : NaN;
+            const pyDelta = rowA1 ? parseFloat(rowA1[cols.indexOf("dark_minus_light")]) : NaN;
+            pyExecOk = Math.abs(pyLight - 10) < 1e-9 &&
+              Math.abs(pyDark - 40) < 1e-9 &&
+              Math.abs(pyDelta - 30) < 1e-9;
+          }
+        } finally {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+      }
+
+      const rampedOk =
+        Math.abs(rampedRes.lightMeanA1 - 10) < 1e-9 &&
+        Math.abs(rampedRes.darkMeanA1 - 40) < 1e-9 &&
+        Math.abs(rampedRes.deltaA1 - 30) < 1e-9 &&
+        Math.abs(rampedRes.phaseDistDawnA1?.total - 360) < 1e-9 &&
+        Math.abs(rampedRes.phaseDistDawnA1?.mean - 90) < 1e-9 &&
+        Math.abs(rampedRes.phaseDistDuskA1?.total - 320) < 1e-9 &&
+        Math.abs(rampedRes.phaseDistDuskA1?.mean - 80) < 1e-9 &&
+        rampedRes.darkOnsetBurstA1 === null &&
+        rampedRes.lightOnsetBurstA1 === null &&
+        rampedRes.hasVmr === true &&
+        rampedRes.hasVmrBurst === false &&
+        tsBandHtml.includes("rgba(253, 186, 116, 0.30)") &&
+        tsBandHtml.includes("rgba(165, 180, 252, 0.28)") &&
+        rampedRes.vmrOptText === "VMR (Light vs Dark)" &&
+        !rampedRes.compHasBurstBar &&
+        !rampedRes.compHasNaN &&
+        rampedRes.prismMetrics.includes("vmr_delta") &&
+        !rampedRes.prismMetrics.includes("vmr_burst") &&
+        !rampedRes.prismMetrics.includes("norm_vmr_burst_pct_ctrl") &&
+        !rampedRes.v2Header.includes("vmr_dark_onset_burst") &&
+        !rampedRes.v1Header.includes("vmr_dark_onset_burst") &&
+        pyExclRegexOk &&
+        pyExecOk;
+
+      // 3. Non-ramped abrupt L/D demo (ld_24w) retains hasVmrBurst=true, burst bar & vmr_dark_onset_burst column
+      await page.selectOption("#demoPresetSelect", "ld_24w");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="comparison"]');
+      await page.selectOption("#compViewSel", "vmr");
+      const abruptRes = await page.evaluate(() => {
+        const core = window.ZANTIKS_ANALYZER_CORE;
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const a = st.analysis;
+        const wsA1 = a.wellsById.A1;
+        const vmrOptText = document.querySelector('#compViewSel option[value="vmr"]')?.textContent?.trim() || "";
+        const compSvgTxt = document.getElementById("compChartSvg")?.textContent || "";
+        const prismMetrics = core.getAvailablePrismMetrics(a).map((m) => m.id);
+        const v2Header = core.exportWellSummaryCsv(window.ZANTIKS_ANALYZER_UI.buildExportPayload()).replace(/^\uFEFF/, "").split("\n")[0];
+        return {
+          hasVmr: a.capabilities?.hasVmr,
+          hasVmrBurst: a.capabilities?.hasVmrBurst,
+          burstFinite: Number.isFinite(wsA1?.vmr?.darkOnsetBurst),
+          vmrOptText,
+          compHasBurstBar: compSvgTxt.includes("Dark-Onset Burst"),
+          hasBurstMetric: prismMetrics.includes("vmr_burst"),
+          hasBurstCol: v2Header.includes("vmr_dark_onset_burst")
+        };
+      });
+      const abruptOk =
+        abruptRes.hasVmr === true &&
+        abruptRes.hasVmrBurst === true &&
+        abruptRes.burstFinite &&
+        abruptRes.vmrOptText === "VMR (Light vs Dark & Burst)" &&
+        abruptRes.compHasBurstBar &&
+        abruptRes.hasBurstMetric &&
+        abruptRes.hasBurstCol;
+
+      const ok = errors.length === 0 && Object.values(classifyCheck).every(Boolean) && rampedOk && abruptOk;
+      report(ok, "Analyzer DAWN/DUSK transition phase classification, hasVmrBurst gating (ramped circadian vs abrupt L/D) & Python VMR parity pass",
+        ok ? "" : JSON.stringify({ errors, classifyCheck, rampedRes: { ...rampedRes, pyTemplate: undefined }, pyExclRegexOk, pyExecOk, abruptRes }));
       await page.close();
     }
   }

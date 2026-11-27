@@ -415,6 +415,10 @@
 
   function phaseBandStyle(span, idx) {
     const hint = String(span.colorHint || span.kind || span.phase || "").toLowerCase();
+    const phaseText = String(span.phase || "").toLowerCase();
+    if (hint.includes("dawn") || phaseText.includes("dawn")) return { fill: "rgba(253, 186, 116, 0.30)", text: "#9a3412" };
+    if (hint.includes("dusk") || phaseText.includes("dusk")) return { fill: "rgba(165, 180, 252, 0.28)", text: "#3730a3" };
+    if (hint.includes("transition")) return { fill: "rgba(203, 213, 225, 0.34)", text: "#475569" };
     if (hint.includes("acclim") || hint.includes("baseline")) return { fill: "rgba(226, 232, 240, 0.42)", text: "#475569" };
     if (hint.includes("dark") || hint === "night") return { fill: "rgba(148, 163, 184, 0.23)", text: "#334155" };
     if (hint.includes("light") || hint.includes("white") || hint === "day") return { fill: "rgba(254, 240, 138, 0.36)", text: "#854d0e" };
@@ -3342,10 +3346,11 @@
     }
 
     if (viewId === "vmr") {
+      const includeBurst = !(a.capabilities && a.capabilities.hasVmrBurst === false);
       const cats = [
         { id: "light", label: "Light Mean", getWellVal: w => w.vmr && w.vmr.lightMean },
         { id: "dark", label: "Dark Mean", getWellVal: w => w.vmr && w.vmr.darkMean },
-        { id: "burst", label: "Dark-Onset Burst", getWellVal: w => w.vmr && w.vmr.darkOnsetBurst }
+        ...(includeBurst ? [{ id: "burst", label: "Dark-Onset Burst", getWellVal: w => w.vmr && w.vmr.darkOnsetBurst }] : [])
       ].filter(c => activeWells.some(w => Number.isFinite(c.getWellVal(w))));
       if (cats.length) return buildFromCategories(cats, "Visual Motor Response (mm / bin)", "mm");
     }
