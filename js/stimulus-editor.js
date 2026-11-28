@@ -272,7 +272,7 @@ function renderStimParams() {
           </div>
         </div>
         <div class="proto-note">
-          Uses official MWP stepper PPI command: <code>ZCOMMAND("${sp.ppiPrepulse || "U3"} D1190 M1 M-1 M1 M-1 P${Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300)} ${sp.ppiPulse || "U0"} D1190 M1 M-1 M1 M-1")</code>. Alternating mode logs <code>PULSE_ALONE</code> and <code>PPI_TRIAL</code> rows so % PPI can be computed directly.
+          Uses split two-command PPI timing: <code>ZCOMMAND("${sp.ppiPrepulse || "U3"} D1190 M1 M-1 M1 M-1")</code> &rarr; <code>WAIT(${Number((Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300)) / 1000).toFixed(3))})</code> &rarr; <code>LOGDATA(DATA_SNAPSHOT,"begin")</code> &rarr; <code>ZCOMMAND("${sp.ppiPulse || "U0"} D1190 M1 M-1 M1 M-1")</code> &rarr; <code>WAIT(TIME_BIN)</code>. Both <code>PULSE_ALONE</code> and <code>PPI_TRIAL</code> align their snapshot window to main-pulse onset so % PPI is unbiased across all ISIs (50&ndash;2000 ms).
         </div>`;
   } else if (id === "circadian") {
     const circRampMinVal = parseInt(sp.circRampMin, 10) || 0;

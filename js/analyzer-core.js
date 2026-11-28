@@ -133,7 +133,7 @@
     };
   }
 
-  function recomputeWellQc(parsed, qcThresholds, trimWindow) {
+  function recomputeWellQc(parsed, qcThresholds, trimWindow, qcOpts) {
     const thresholds = normalizeQcThresholds(qcThresholds, null);
     if (!parsed || parsed.kind !== "summary" || !Array.isArray(parsed.wells)) {
       return {
@@ -150,7 +150,12 @@
     const hasMsd = Boolean(parsed.hasMsd);
     const hasZoneDist = Boolean(parsed.hasZoneDist);
     const maxZone = parsed.maxZone || 0;
-    const binDurationSec = parsed.binDurationSec || 1;
+    const optsObj = (qcOpts && typeof qcOpts === "object") ? qcOpts : {};
+    const hasOverrideBin = Number.isFinite(optsObj.binDurationSecOverride) && optsObj.binDurationSecOverride > 0;
+    const binDurationSec = hasOverrideBin ? optsObj.binDurationSecOverride : (parsed.binDurationSec || 1);
+    const skipSpeedSpikeCheck = optsObj.skipSpeedSpikeCheck !== undefined
+      ? Boolean(optsObj.skipSpeedSpikeCheck)
+      : (parsed.binDurationInferred === false && !hasOverrideBin);
 
     const qc = {};
     const emptyWells = [];
@@ -215,7 +220,7 @@
           const v = distByRow[i];
           if (v === null) continue;
           const speed = binDurationSec > 0 ? v / binDurationSec : v;
-          if (v > spikeThreshold || speed > thresholds.spikeMaxSpeedMmS) {
+          if (v > spikeThreshold || (!skipSpeedSpikeCheck && speed > thresholds.spikeMaxSpeedMmS)) {
             spikeBins.push(i);
           }
         }
@@ -1303,7 +1308,15 @@
       const dt = rows[i].runtime - rows[i - 1].runtime;
       if (dt > 0 && Number.isFinite(dt)) dts.push(dt);
     }
-    const binDurationSec = dts.length > 0 ? Math.max(0.05, Number(computeMedian(dts).toFixed(3))) : 1;
+    const binDurationInferred = dts.length > 0;
+    const binDurationSec = binDurationInferred ? Math.max(0.05, Number(computeMedian(dts).toFixed(3))) : 1;
+    if (!binDurationInferred && rows.length > 0) {
+      warnings.push(
+        rows.length === 1
+          ? "Single-row summary CSV: bin duration could not be inferred from RUNTIME deltas (defaulted to 1 s unless experiment context provides timeBinSec); rate-based speed spike check disabled."
+          : "Non-increasing RUNTIME timestamps: bin duration could not be inferred (defaulted to 1 s unless experiment context provides timeBinSec); rate-based speed spike check disabled."
+      );
+    }
     const durationSec = rows.length > 0
       ? Number(((rows[rows.length - 1].relTime) + binDurationSec).toFixed(3))
       : 0;
@@ -1343,8 +1356,9 @@
       hasMsd,
       hasZoneDist,
       maxZone,
-      binDurationSec
-    }, ORGANISM_QC_PRESETS.default);
+      binDurationSec,
+      binDurationInferred
+    }, ORGANISM_QC_PRESETS.default, null, { skipSpeedSpikeCheck: !binDurationInferred });
     const qc = qcOut.qc;
     const qcSummary = qcOut.qcSummary;
 
@@ -1369,6 +1383,7 @@
       hasTrial: anyTrial,
       hasDay: anyDay,
       binDurationSec,
+      binDurationInferred,
       startRuntimeSec: firstRuntime || 0,
       durationSec,
       inferredLayout: inferLayoutFromWells(wellOrder, maxZone),
@@ -1462,14 +1477,24 @@
     } else if (stimId === "light_off_startle" || stimId === "light_on_pulse" || stimId === "vibration_startle" || stimId === "acoustic_startle") {
       const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
       const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
+      const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
+      const preDur = preBins * bin;
       const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
       const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
-      const pulseDur = (stimId === "light_off_startle" || stimId === "light_on_pulse")
-        ? Math.max(bin, Math.round((parseFloat(sp.pulseDurSec) || 1) / bin) * bin)
-        : bin;
-      if (preSec > 0) {
-        phaseSchedule.push({ startSec: 0, endSec: preSec, phase: "BASELINE", label: "Baseline", kind: "baseline", tempC: thermEnabled ? defaultTemp : null });
-        t += preSec;
+      const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
+      let pulseDur = bin;
+      if (stimId === "light_off_startle" || stimId === "light_on_pulse") {
+        const rawPulse = Math.max(stimId === "light_on_pulse" ? 0.05 : 0.1, parseFloat(sp.pulseDurSec) || 1);
+        const subBinPulse = rawPulse < bin;
+        const fullPulseBins = subBinPulse ? 0 : Math.floor((rawPulse + 1e-9) / bin);
+        const remPulse = subBinPulse ? 0 : Number((rawPulse - fullPulseBins * bin).toFixed(3));
+        const hasRemPulse = fullPulseBins >= 1 && remPulse >= 0.001;
+        const pulseBins = subBinPulse ? 1 : (fullPulseBins + (hasRemPulse ? 1 : 0));
+        pulseDur = pulseBins * bin;
+      }
+      if (preDur > 0) {
+        phaseSchedule.push({ startSec: 0, endSec: preDur, phase: "BASELINE", label: "Baseline", kind: "baseline", tempC: thermEnabled ? defaultTemp : null });
+        t += preDur;
       }
       const stimTag = stimId === "light_off_startle" ? "STARTLE"
         : (stimId === "light_on_pulse" ? `${activeLightTag}_FLASH`
@@ -1480,36 +1505,42 @@
         phaseSchedule.push({ startSec: t, endSec: t + pulseDur, phase: stimTag, label: `${stimTag} #${p}`, kind: "stim", stimType, tempC: thermEnabled ? defaultTemp : null });
         stimulusEvents.push({ timeSec: t, label: `${stimTag} #${p}`, type: stimType, detail: stimTag });
         t += pulseDur;
-        phaseSchedule.push({ startSec: t, endSec: t + itiSec, phase: "ITI", label: `ITI #${p}`, kind: "iti", tempC: thermEnabled ? defaultTemp : null });
-        t += itiSec;
+        phaseSchedule.push({ startSec: t, endSec: t + itiDur, phase: "ITI", label: `ITI #${p}`, kind: "iti", tempC: thermEnabled ? defaultTemp : null });
+        t += itiDur;
       }
       if (thermEnabled) tempSchedule.push({ startSec: 0, endSec: t, tempC: defaultTemp, label: `${defaultTemp}°C` });
     } else if (stimId === "ppi") {
       const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
       const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
+      const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
+      const preDur = preBins * bin;
       const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
       const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
+      const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
+      const isiMs = Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300));
+      const isiSec = Number((isiMs / 1000).toFixed(3));
       const isAlt = (sp.ppiPattern || "alternating") === "alternating";
-      if (preSec > 0) {
-        phaseSchedule.push({ startSec: 0, endSec: preSec, phase: "BASELINE", label: "Baseline", kind: "baseline", tempC: thermEnabled ? defaultTemp : null });
-        t += preSec;
+      if (preDur > 0) {
+        phaseSchedule.push({ startSec: 0, endSec: preDur, phase: "BASELINE", label: "Baseline", kind: "baseline", tempC: thermEnabled ? defaultTemp : null });
+        t += preDur;
       }
       let tr = 0;
       for (let b = 1; b <= pairs; b++) {
         if (isAlt) {
           tr++;
-          phaseSchedule.push({ startSec: t, endSec: t + bin, phase: "PULSE_ALONE", label: `Pulse Alone #${tr}`, kind: "stim", stimType: "pulse_alone", tempC: thermEnabled ? defaultTemp : null });
+          phaseSchedule.push({ startSec: t, endSec: Number((t + bin).toFixed(3)), phase: "PULSE_ALONE", label: `Pulse Alone #${tr}`, kind: "stim", stimType: "pulse_alone", tempC: thermEnabled ? defaultTemp : null });
           stimulusEvents.push({ timeSec: t, label: `Pulse #${tr}`, type: "pulse_alone", detail: "PULSE_ALONE" });
-          t += bin;
-          phaseSchedule.push({ startSec: t, endSec: t + itiSec, phase: "ITI", label: `ITI #${tr}`, kind: "iti", tempC: thermEnabled ? defaultTemp : null });
-          t += itiSec;
+          t = Number((t + bin).toFixed(3));
+          phaseSchedule.push({ startSec: t, endSec: Number((t + itiDur).toFixed(3)), phase: "ITI", label: `ITI #${tr}`, kind: "iti", tempC: thermEnabled ? defaultTemp : null });
+          t = Number((t + itiDur).toFixed(3));
         }
         tr++;
-        phaseSchedule.push({ startSec: t, endSec: t + bin, phase: "PPI_TRIAL", label: `PPI #${tr}`, kind: "stim", stimType: "ppi", tempC: thermEnabled ? defaultTemp : null });
+        t = Number((t + isiSec).toFixed(3));
+        phaseSchedule.push({ startSec: t, endSec: Number((t + bin).toFixed(3)), phase: "PPI_TRIAL", label: `PPI #${tr}`, kind: "stim", stimType: "ppi", tempC: thermEnabled ? defaultTemp : null });
         stimulusEvents.push({ timeSec: t, label: `PPI #${tr}`, type: "ppi", detail: "PPI_TRIAL" });
-        t += bin;
-        phaseSchedule.push({ startSec: t, endSec: t + itiSec, phase: "ITI", label: `ITI #${tr}`, kind: "iti", tempC: thermEnabled ? defaultTemp : null });
-        t += itiSec;
+        t = Number((t + bin).toFixed(3));
+        phaseSchedule.push({ startSec: t, endSec: Number((t + itiDur).toFixed(3)), phase: "ITI", label: `ITI #${tr}`, kind: "iti", tempC: thermEnabled ? defaultTemp : null });
+        t = Number((t + itiDur).toFixed(3));
       }
       if (thermEnabled) tempSchedule.push({ startSec: 0, endSec: t, tempC: defaultTemp, label: `${defaultTemp}°C` });
     } else if (stimId === "temp_ramp") {
@@ -4791,7 +4822,16 @@
     }
 
     const wells = parsed.wells;
-    const binSec = parsed.binDurationSec || 1;
+    let ctxBinSec = null;
+    if (parsed.binDurationInferred === false && context && context.stimParams) {
+      const spCtx = context.stimParams;
+      const candBin = context.stimId === "circadian"
+        ? parseFloat(spCtx.circBinSec)
+        : parseFloat(spCtx.timeBinSec);
+      if (Number.isFinite(candBin) && candBin > 0) ctxBinSec = candBin;
+    }
+    const binSec = ctxBinSec !== null ? ctxBinSec : (parsed.binDurationSec || 1);
+    const effectiveBinInferred = parsed.binDurationInferred !== false || ctxBinSec !== null;
     const trimRes = filterRowsByTrimWindow(parsed.rows, trimWindow);
     const rows = trimRes.rows;
     const trimInfo = {
@@ -4802,12 +4842,17 @@
       trimEndSec: trimRes.trimEndSec,
       originalRows: parsed.rows.length,
       keptRows: rows.length,
-      originalDurationSec: parsed.durationSec,
+      originalDurationSec: ctxBinSec !== null && parsed.rows.length > 0
+        ? roundNum((parsed.rows[parsed.rows.length - 1].relTime - parsed.rows[0].relTime) + binSec, 3)
+        : parsed.durationSec,
       keptDurationSec: rows.length > 0
         ? roundNum((rows[rows.length - 1].relTime - rows[0].relTime) + binSec, 3)
         : 0
     };
-    const qcOut = recomputeWellQc(parsed, qcThresholds, trimWindow);
+    const qcOut = recomputeWellQc(parsed, qcThresholds, trimWindow, {
+      binDurationSecOverride: ctxBinSec !== null ? ctxBinSec : undefined,
+      skipSpeedSpikeCheck: !effectiveBinInferred
+    });
     const activeQc = qcOut.qc;
     const activeQcSummary = qcOut.qcSummary;
     const hasDistLike = parsed.hasDist || parsed.hasZoneDist;
@@ -5648,7 +5693,7 @@
       excludedWells: excludedCount,
       postStatsExclusions,
       rowCount: rows.length,
-      durationSec: trimInfo.active ? trimInfo.keptDurationSec : parsed.durationSec,
+      durationSec: trimInfo.active ? trimInfo.keptDurationSec : trimInfo.originalDurationSec,
       binDurationSec: binSec,
       emptyCount: activeQcSummary.emptyWells.length,
       spikeCount: activeQcSummary.spikeWells.length,
@@ -7018,6 +7063,38 @@
     return { p, analysis, scope, runs, targetRuns, activeRunId, factorNames };
   }
 
+  function sanitizeExportBasename(raw) {
+    return String(raw || "")
+      .replace(/\.csv$/i, "")
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
+  function computeExportBasename(payload) {
+    const p = payload || {};
+    if (p.exportBasename) {
+      const cleanExplicit = sanitizeExportBasename(p.exportBasename);
+      if (cleanExplicit) return cleanExplicit;
+    }
+    const { analysis, scope, targetRuns } = resolveExportPayload(p);
+    const isPooled = Boolean(
+      p.isPooled ||
+      (scope === "pooled" && targetRuns.length > 1) ||
+      (analysis && analysis.scope === "pooled" && (targetRuns.length > 1 || (analysis.runCount || 0) > 1))
+    );
+    if (isPooled) {
+      const nRuns = Math.max(2, targetRuns.length || (analysis && analysis.runCount) || 2);
+      return `zantiks_pooled_${nRuns}runs`;
+    }
+    const primaryRun = targetRuns[0] || null;
+    const fname = (primaryRun && (primaryRun.filename || (primaryRun.summaryParsed && primaryRun.summaryParsed.filename))) ||
+      p.filename ||
+      (p.parsed && p.parsed.filename) ||
+      (p.summaryParsed && p.summaryParsed.filename) ||
+      "";
+    return sanitizeExportBasename(fname) || "zantiks_analysis";
+  }
+
   function exportTidyLongCsv(payload, opts) {
     const includeBom = !(opts && opts.includeBom === false);
     const { analysis, targetRuns, factorNames } = resolveExportPayload(payload);
@@ -7510,11 +7587,9 @@
       : ((analysis && (analysis.nUnit || analysis.unitOfAnalysis)) || (pooledMeta && pooledMeta.nUnit) || "wells");
     const effectiveUnit = (scope === "pooled" && targetRuns.length > 1 && unitOfAnalysis === "plates") ? "plates" : "wells";
 
-    const primaryRun = targetRuns[0] || null;
-    const fname = (primaryRun && (primaryRun.filename || (primaryRun.summaryParsed && primaryRun.summaryParsed.filename))) ||
-      (p.parsed && p.parsed.filename) || "zantiks_well_summary.csv";
-    const summaryCsvName = fname.replace(/\.csv$/i, "") + "_well_summary.csv";
-    const tidyCsvName = fname.replace(/\.csv$/i, "") + "_tidy_long.csv";
+    const baseName = computeExportBasename(payload);
+    const summaryCsvName = `${baseName}_well_summary.csv`;
+    const tidyCsvName = `${baseName}_tidy_long.csv`;
     const metricCol = (pooledMeta && pooledMeta.normalizeToControl)
       ? "norm_total_dist_pct_ctrl"
       : (caps.hasPpi ? "ppi_pct" : (caps.hasSab ? "sab_pct" : (caps.hasDist ? "total_dist_mm" : "mean_msd")));
@@ -7568,6 +7643,7 @@
       '"""',
       "",
       "from itertools import combinations",
+      "from pathlib import Path",
       "import numpy as np",
       "import pandas as pd",
       "from scipy import stats",
@@ -7585,6 +7661,18 @@
       ...groupDictLines,
       "}",
       `EXCLUDED_WELLS = {${excludedList.join(", ")}}`,
+      "",
+      "",
+      "def resolve_data_path(filename: str) -> Path:",
+      '    """Look next to this script first, then fall back to the current working directory."""',
+      "    script_dir = Path(__file__).resolve().parent if '__file__' in globals() else Path.cwd()",
+      "    for candidate in (script_dir / filename, Path.cwd() / filename):",
+      "        if candidate.exists():",
+      "            return candidate",
+      "    raise FileNotFoundError(",
+      "        f\"Could not find '{filename}' in {script_dir} or {Path.cwd()}. \"",
+      "        f\"Download '{filename}' from the Analyzer Export tab and place it alongside this script.\"",
+      "    )",
       "",
       "",
       "def has_ties(values) -> bool:",
@@ -7691,7 +7779,8 @@
       "",
       "def main() -> None:",
       "    # Load UTF-8-BOM CSV exported from Zanscript-Builder CSV Analyzer",
-      "    summary_df = pd.read_csv(SUMMARY_CSV, encoding='utf-8-sig')",
+      "    summary_path = resolve_data_path(SUMMARY_CSV)",
+      "    summary_df = pd.read_csv(summary_path, encoding='utf-8-sig')",
       "    excl_mask = summary_df['excluded'].astype(str).str.upper().eq('TRUE')",
       "",
       "    print('=== QC Audit Summary ===')",
@@ -7714,7 +7803,8 @@
       "",
       "    # Optional: load tidy long CSV for time-series plotting",
       "    try:",
-      "        tidy_df = pd.read_csv(TIDY_CSV, encoding='utf-8-sig')",
+      "        tidy_path = resolve_data_path(TIDY_CSV)",
+      "        tidy_df = pd.read_csv(tidy_path, encoding='utf-8-sig')",
       "        tidy_inc = tidy_df[~tidy_df['excluded'].astype(str).str.upper().eq('TRUE')].copy()",
       "        val_col = 'dist_mm' if 'dist_mm' in tidy_inc.columns else 'msd'",
       "        ts = tidy_inc.groupby(['group', 'rel_time_s'])[val_col].agg(['mean', 'sem']).reset_index()",
@@ -7729,10 +7819,11 @@
       "        ax.spines['top'].set_visible(False)",
       "        ax.spines['right'].set_visible(False)",
       "        fig.tight_layout()",
-      "        fig.savefig('zantiks_timeseries.png', dpi=200)",
-      "        print('\\nSaved zantiks_timeseries.png')",
+      "        out_png = summary_path.parent / 'zantiks_timeseries.png'",
+      "        fig.savefig(out_png, dpi=200)",
+      "        print(f'\\nSaved {out_png}')",
       "    except FileNotFoundError:",
-      "        print(f'\\nNote: Place {TIDY_CSV} in this folder to also render zantiks_timeseries.png.')",
+      "        print(f'\\nNote: Place {TIDY_CSV} next to this script to also render zantiks_timeseries.png.')",
       "",
       "",
       'if __name__ == "__main__":',
@@ -7945,6 +8036,7 @@
     buildPrismGroupedTsv,
     buildPythonTemplate,
     // Upgraded v2 exporters (UTF-8 BOM default, multi-run, factors, qc_reason, cleaning_log.txt, scipy Python)
+    computeExportBasename,
     exportTidyLongCsv,
     exportWellSummaryCsv,
     exportPrismGroupedCsv,

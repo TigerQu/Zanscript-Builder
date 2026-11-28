@@ -770,20 +770,36 @@ try {
         const ppiS4 = refreshAll._latestBundle[4];
         const ppiCode = ppiS4.code;
         const ppiSample1 = sampleAssayStateAtTime(refreshAll._latestCfg, 20 + 60 + 10 + 0.2); // trial 1: pulse alone
-        const ppiSample2 = sampleAssayStateAtTime(refreshAll._latestCfg, 20 + 60 + 10 + 11 + 0.2); // trial 2: PPI
+        const ppiSamplePre = sampleAssayStateAtTime(refreshAll._latestCfg, 20 + 60 + 10 + 11 + 0.05); // trial 2: PPI prepulse
+        const ppiSampleIsi = sampleAssayStateAtTime(refreshAll._latestCfg, 20 + 60 + 10 + 11 + 0.20); // trial 2: PPI ISI gap
+        const ppiSampleMain = sampleAssayStateAtTime(refreshAll._latestCfg, 20 + 60 + 10 + 11 + 0.35); // trial 2: PPI main pulse
         const ppiSaved = buildExperimentPayload();
         applyExperimentData(ppiSaved);
         const ppiRoundTrip = JSON.stringify(buildExperimentPayload().experiment) === JSON.stringify(ppiSaved.experiment);
+
+        const ppiBlockMatch = ppiCode.match(/ACTION PPI_PULSE_BIN[\s\S]*?COMPLETE/);
+        const ppiBlock = ppiBlockMatch ? ppiBlockMatch[0] : "";
+        const idxPreCmd = ppiBlock.indexOf('ZCOMMAND("U3 D1190 M1 M-1 M1 M-1")');
+        const idxWaitIsi = ppiBlock.indexOf("WAIT(ISI_SEC)");
+        const idxSnapBegin = ppiBlock.indexOf('LOGDATA(DATA_SNAPSHOT,"begin")');
+        const idxMainCmd = ppiBlock.indexOf('ZCOMMAND("U0 D1190 M1 M-1 M1 M-1")');
+        const idxWaitBin = ppiBlock.indexOf("WAIT(TIME_BIN)");
+        const idxSnapEnd = ppiBlock.indexOf('LOGDATA(DATA_SNAPSHOT,"end")');
 
         return {
           audCmd: audCode.includes('LOAD(AUDIO_FILE,"chirp.wav")') && audCode.includes("TEXT:AUDIO_PULSE"),
           audSim: audSample.audio === "chirp.wav",
           audRoundTrip,
-          ppiCmds: ppiCode.includes('ZCOMMAND("U3 D1190 M1 M-1 M1 M-1 P250 U0 D1190 M1 M-1 M1 M-1")') &&
-            ppiCode.includes('ZCOMMAND("U0 D1190 M1 M-1 M1 M-1")') &&
+          ppiCmds: ppiCode.includes("DEFINE ISI_SEC 0.25") &&
+            !ppiCode.includes("P250") &&
+            idxPreCmd >= 0 && idxPreCmd < idxWaitIsi && idxWaitIsi < idxSnapBegin &&
+            idxSnapBegin < idxMainCmd && idxMainCmd < idxWaitBin && idxWaitBin < idxSnapEnd &&
             ppiCode.includes("TEXT:PULSE_ALONE") && ppiCode.includes("TEXT:PPI_TRIAL"),
-          ppiRows: ppiS4.totalRows === 10 + 8 * 11,
-          ppiSim: ppiSample1.vibration === "U0" && ppiSample2.vibration === "U3+U0",
+          ppiRows: ppiS4.totalRows === 10 + 8 * 11 && ppiS4.totalRuntimeSec === 20 + 60 + 10 + 8 * 11 + 4 * 0.25,
+          ppiSim: ppiSample1.vibration === "U0" &&
+            ppiSamplePre.vibration === "U3" && ppiSamplePre.phaseName.includes("PPI PREPULSE U3") &&
+            ppiSampleIsi.vibration === null && ppiSampleIsi.phaseName.includes("PPI ISI 250ms") &&
+            ppiSampleMain.vibration === "U0" && ppiSampleMain.phaseName.includes("PPI PULSE U0"),
           ppiRoundTrip
         };
       });
@@ -1949,6 +1965,368 @@ try {
         Object.values(analyzerCircParity).every(Boolean);
       report(ok, "Circadian exact timing (absorbed Dawn/Dusk 24.000h T-cycles, asymmetric 3300s split + HOUR_PAD_SEC across bins 7..600s, 1L:1D & preflight) passes",
         ok ? "" : JSON.stringify({ errors, sevenDayResults: circRaw.sevenDayResults, binMatrixResults: circRaw.binMatrixResults, binSpecificChecks: circRaw.binSpecificChecks, edge1L1DOk: circRaw.edge1L1DOk, preflightAutorefOk: circRaw.preflightAutorefOk, analyzerCircParity }));
+      await page.close();
+    }
+
+    // 6s. Split PPI window alignment (50..2000ms), exact fractional multi-bin light pulses (solid + 5Hz strobe), acclimSec=0 (zero WAIT(0) across 9 protocols) & sub-half-bin preBaselineSec preservation
+    {
+      const { page, errors } = await openFreshPage("#stimulus");
+
+      const builder6s = await page.evaluate(() => {
+        // Lightweight Zanscript execution VM for pulse-duration & bin-count verification
+        function execPulseZs(code) {
+          const defs = {};
+          const actions = {};
+          let curAction = null;
+          let inMain = false;
+          const mainBody = [];
+          for (const rawLine of code.split("\n")) {
+            const line = rawLine.replace(/#.*$/, "").trim();
+            if (!line) continue;
+            const dm = line.match(/^DEFINE\s+(\w+)\s+([0-9.]+)$/);
+            if (dm) { defs[dm[1]] = parseFloat(dm[2]); continue; }
+            const am = line.match(/^ACTION\s+(\w+)$/);
+            if (am) { curAction = am[1]; actions[curAction] = []; continue; }
+            if (line === "COMPLETE") { curAction = null; inMain = false; continue; }
+            if (line === "ACTION MAIN") { inMain = true; continue; }
+            if (curAction) actions[curAction].push(line);
+            else if (inMain) mainBody.push(line);
+          }
+          const resolveNum = (tok) => (tok in defs ? defs[tok] : parseFloat(tok));
+          let t = 0;
+          let lightsOn = false;
+          let snapBeginT = null;
+          let recording = false;
+          let lastPhase = "";
+          const transitions = [];
+          const loggedRows = [];
+          const runLines = (lines) => {
+            for (const line of lines) {
+              if (line === "AUTOREFERENCE()") { t += 60; continue; }
+              if (line.startsWith("LOGDATA(DATA_SNAPSHOT,\"begin\")")) { snapBeginT = t; recording = true; continue; }
+              const lc = line.match(/^LOGCREATE\("[^"]*TEXT:([^"|]+)/);
+              if (lc) { lastPhase = lc[1]; continue; }
+              if (line === "LOGRUN()") {
+                if (snapBeginT !== null) {
+                  loggedRows.push({ phase: lastPhase, tStart: snapBeginT, tEnd: t, dur: Number((t - snapBeginT).toFixed(4)) });
+                  snapBeginT = null;
+                }
+                continue;
+              }
+              const wm = line.match(/^WAIT\(([^)]+)\)$/);
+              if (wm) {
+                t = Number((t + resolveNum(wm[1])).toFixed(6));
+                continue;
+              }
+              const im = line.match(/^INVOKE\((\w+),([^)]+)\)$/);
+              if (im) {
+                const act = im[1];
+                const cnt = Math.round(resolveNum(im[2]));
+                if (act === "LIGHTS_ON") {
+                  if (!lightsOn) {
+                    lightsOn = true;
+                    transitions.push({ t, state: "ON", recording });
+                  }
+                } else if (act === "LIGHTS_OFF") {
+                  if (lightsOn) {
+                    lightsOn = false;
+                    transitions.push({ t, state: "OFF", recording });
+                  }
+                } else if (actions[act]) {
+                  for (let k = 0; k < cnt; k++) runLines(actions[act]);
+                }
+              }
+            }
+          };
+          runLines(actions.MAIN || mainBody);
+          return { defs, tEnd: Number(t.toFixed(3)), transitions, loggedRows, lightsOn };
+        }
+
+        const ppiResults = {};
+        const ppiPayloads = {};
+
+        // 1. PPI across ISI = 50, 300, 900, 1500, 2000 ms (+ clamp check for 2500 ms)
+        for (const isiRaw of [50, 300, 900, 1500, 2000, 2500]) {
+          state.stimId = "ppi";
+          state.stimParams.ppiPrepulse = "U3";
+          state.stimParams.ppiPulse = "U0";
+          state.stimParams.ppiIsiMs = isiRaw;
+          state.stimParams.ppiPairs = 3;
+          state.stimParams.ppiPattern = "alternating";
+          state.stimParams.timeBinSec = 1;
+          state.stimParams.preBaselineSec = 10;
+          state.stimParams.itiSec = 10;
+          state.stimParams.acclimSec = 20;
+          renderStimGrid();
+          renderStimParams();
+          refreshAll();
+
+          const cfg = refreshAll._latestCfg;
+          const bundle = refreshAll._latestBundle;
+          const s4 = bundle[4];
+          const code = s4.code;
+          const isiClamped = Math.min(2000, Math.max(50, isiRaw));
+          const isiSec = Number((isiClamped / 1000).toFixed(3));
+          const expectedTotal = Number((20 + cfg.autorefTimeout + 10 + 6 * 11 + 3 * isiSec).toFixed(3));
+
+          const ppiBlock = (code.match(/ACTION PPI_PULSE_BIN[\s\S]*?COMPLETE/) || [""])[0];
+          const idxPre = ppiBlock.indexOf('ZCOMMAND("U3 D1190 M1 M-1 M1 M-1")');
+          const idxWaitIsi = ppiBlock.indexOf("WAIT(ISI_SEC)");
+          const idxBegin = ppiBlock.indexOf('LOGDATA(DATA_SNAPSHOT,"begin")');
+          const idxMain = ppiBlock.indexOf('ZCOMMAND("U0 D1190 M1 M-1 M1 M-1")');
+          const idxWaitBin = ppiBlock.indexOf("WAIT(TIME_BIN)");
+          const idxEnd = ppiBlock.indexOf('LOGDATA(DATA_SNAPSHOT,"end")');
+
+          const orderOk = idxPre >= 0 && idxPre < idxWaitIsi && idxWaitIsi < idxBegin &&
+            idxBegin < idxMain && idxMain < idxWaitBin && idxWaitBin < idxEnd;
+          const defineIsiOk = code.includes(`DEFINE ISI_SEC ${isiSec}`);
+          const slug = buildAssayDataSlug(cfg);
+          const slugOk = slug.includes(`ppi_${isiClamped}ms_3x`);
+          const sim0 = sampleAssayStateAtTime(cfg, 0);
+          const ppiTrialStart = 20 + cfg.autorefTimeout + 10 + 11; // after Trial 1 (PULSE_ALONE)
+          const simPre = sampleAssayStateAtTime(cfg, ppiTrialStart + Math.min(0.02, isiSec / 2));
+          const simGap = isiClamped > 150 ? sampleAssayStateAtTime(cfg, ppiTrialStart + 0.15 + (isiSec - 0.15) / 2) : null;
+          const simMain = sampleAssayStateAtTime(cfg, ppiTrialStart + isiSec + 0.1);
+          const simOk =
+            Math.abs(sim0.totalRuntimeSec - expectedTotal) < 1e-6 &&
+            simPre.vibration === "U3" &&
+            (simGap === null || (simGap.vibration === null && simGap.phaseName.includes(`PPI ISI ${isiClamped}ms`))) &&
+            simMain.vibration === "U0" && simMain.phaseName.includes("PPI PULSE U0");
+
+          // Verify rendered timeline model matches expectedTotal and PPI segment span = isiSec + bin
+          const tlPpiSeg = (timelineModel?.segs || []).find((s) => s.cls === "tl-ppi");
+          const tlLastT1 = timelineModel?.segs?.length ? timelineModel.segs[timelineModel.segs.length - 1].t1 : NaN;
+          const timelineOk =
+            Math.abs((timelineModel?.totalRuntimeSec ?? NaN) - expectedTotal) < 0.01 &&
+            Math.abs(tlLastT1 - expectedTotal) < 0.01 &&
+            Boolean(tlPpiSeg) &&
+            Math.abs((tlPpiSeg.t1 - tlPpiSeg.t0) - (isiSec + 1)) < 1e-6;
+
+          const pf = computePreflightChecks(cfg, bundle);
+          const hasShortIsiInfo = pf.some((c) => c.level === "info" && c.title.includes("Short PPI ISI"));
+          const preflightOk = isiClamped < 150 ? hasShortIsiInfo : !hasShortIsiInfo;
+
+          ppiResults[isiRaw] = {
+            orderOk,
+            defineIsiOk,
+            runtimeExact: Math.abs(s4.totalRuntimeSec - expectedTotal) < 1e-6,
+            slugOk,
+            simOk,
+            timelineOk,
+            preflightOk
+          };
+          if (isiRaw <= 2000) {
+            ppiPayloads[isiRaw] = { payload: buildExperimentPayload(), expectedRecDur: Number((expectedTotal - 20 - cfg.autorefTimeout).toFixed(3)) };
+          }
+        }
+
+        // 2. Fractional multi-bin pulses: light_off_startle & light_on_pulse (solid + 5Hz strobe)
+        const fracResults = {};
+        const fracPayloads = {};
+        const fracCases = [
+          { stimId: "light_off_startle", strobeHz: 0, bin: 1, pulse: 1.5, slugToken: "1p5s" },
+          { stimId: "light_off_startle", strobeHz: 0, bin: 1, pulse: 1.4, slugToken: "1p4s" },
+          { stimId: "light_off_startle", strobeHz: 0, bin: 2, pulse: 3, slugToken: "3s" },
+          { stimId: "light_on_pulse", strobeHz: 0, bin: 1, pulse: 1.5, slugToken: "1p5s" },
+          { stimId: "light_on_pulse", strobeHz: 0, bin: 1, pulse: 1.4, slugToken: "1p4s" },
+          { stimId: "light_on_pulse", strobeHz: 0, bin: 2, pulse: 3, slugToken: "3s" },
+          { stimId: "light_on_pulse", strobeHz: 5, bin: 1, pulse: 1.5, slugToken: "1p5s" },
+          { stimId: "light_on_pulse", strobeHz: 5, bin: 1, pulse: 1.4, slugToken: "1p4s" },
+          { stimId: "light_on_pulse", strobeHz: 5, bin: 2, pulse: 3, slugToken: "3s" }
+        ];
+        for (const fc of fracCases) {
+          const key = `${fc.stimId}_s${fc.strobeHz}_b${fc.bin}_p${fc.pulse}`;
+          state.stimId = fc.stimId;
+          state.stimParams.timeBinSec = fc.bin;
+          state.stimParams.pulseDurSec = fc.pulse;
+          state.stimParams.strobeHz = fc.strobeHz;
+          state.stimParams.numPulses = 2;
+          state.stimParams.preBaselineSec = 4;
+          state.stimParams.itiSec = 6;
+          state.stimParams.acclimSec = 10;
+          renderStimGrid();
+          renderStimParams();
+          refreshAll();
+
+          const cfg = refreshAll._latestCfg;
+          const bundle = refreshAll._latestBundle;
+          const s4 = bundle[4];
+          const vm = execPulseZs(s4.code);
+          const preBins = Math.max(1, Math.round(4 / fc.bin));
+          const itiBins = Math.max(1, Math.round(6 / fc.bin));
+          const fullPulseBins = Math.floor((fc.pulse + 1e-9) / fc.bin);
+          const expectedPulseBins = fullPulseBins + 1;
+          const expectedTotal = 10 + cfg.autorefTimeout + preBins * fc.bin + 2 * (expectedPulseBins + itiBins) * fc.bin;
+
+          // Measure exact pulse duration from VM execution of Trial 1
+          const trial1Start = 10 + cfg.autorefTimeout + preBins * fc.bin;
+          const trial1End = trial1Start + (expectedPulseBins + itiBins) * fc.bin;
+          const t1Trans = vm.transitions.filter((tr) => tr.t >= trial1Start - 1e-6 && tr.t < trial1End - 1e-6);
+          let pulseDurOk = false;
+          if (fc.stimId === "light_off_startle") {
+            const tOff = t1Trans.find((tr) => tr.state === "OFF")?.t;
+            const tOn = t1Trans.find((tr) => tr.state === "ON" && tr.t > tOff)?.t;
+            pulseDurOk = Number.isFinite(tOff) && Number.isFinite(tOn) && Math.abs((tOn - tOff) - fc.pulse) < 1e-6;
+          } else if (fc.strobeHz === 0) {
+            const tOn = t1Trans.find((tr) => tr.state === "ON")?.t;
+            const tOff = t1Trans.find((tr) => tr.state === "OFF" && tr.t > tOn)?.t;
+            pulseDurOk = Number.isFinite(tOn) && Number.isFinite(tOff) && Math.abs((tOff - tOn) - fc.pulse) < 1e-6;
+          } else {
+            // 5Hz strobe: sum ON intervals across Trial 1 & verify final strobe window equals fc.pulse
+            let totalOn = 0;
+            let onAt = null;
+            for (const tr of t1Trans) {
+              if (tr.state === "ON") onAt = tr.t;
+              else if (tr.state === "OFF" && onAt !== null) { totalOn += (tr.t - onAt); onAt = null; }
+            }
+            const period = 1 / fc.strobeHz;
+            const half = period / 2;
+            const fullCyc = Math.floor((fc.pulse + 1e-9) / period);
+            const rem = Number((fc.pulse - fullCyc * period).toFixed(3));
+            const expectedOn = fullCyc * half + Math.min(rem, half);
+            // Also verify lights are OFF during POST_PULSE_WAIT and exact row bins match fc.bin
+            const lastOff = [...t1Trans].reverse().find((tr) => tr.state === "OFF")?.t;
+            pulseDurOk = Math.abs(totalOn - expectedOn) < 1e-6 &&
+              Number.isFinite(lastOff) && lastOff <= trial1Start + fc.pulse + 1e-6 && onAt === null;
+          }
+
+          const allBinsExact = vm.loggedRows.every((r) => Math.abs(r.dur - fc.bin) < 1e-6);
+          const stimRowsCount = vm.loggedRows.filter((r) => r.phase !== "BASELINE" && r.phase !== "ITI").length;
+          const slugOk = buildAssayDataSlug(cfg).includes(fc.slugToken);
+
+          // Sampler parity: flips right at fc.pulse boundary
+          const simBefore = sampleAssayStateAtTime(cfg, trial1Start + fc.pulse - 0.02);
+          const simAfter = sampleAssayStateAtTime(cfg, trial1Start + fc.pulse + 0.05);
+          const simTotalOk = Math.abs(simBefore.totalRuntimeSec - expectedTotal) < 1e-6;
+          const anyTop = (s) => Object.values(s.topChannels || {}).some((v) => v > 0);
+          const samplerFlipOk = fc.stimId === "light_off_startle"
+            ? (!anyTop(simBefore) && anyTop(simAfter))
+            : (fc.strobeHz === 0 ? (anyTop(simBefore) && !anyTop(simAfter)) : (!anyTop(simAfter)));
+
+          const tlSegs = timelineModel?.segs || [];
+          const tlLastT1 = tlSegs.length ? tlSegs[tlSegs.length - 1].t1 : NaN;
+          const tlPulseSeg = tlSegs.find((s) => Math.abs(s.t0 - trial1Start) < 1e-6);
+          const timelineOk =
+            Math.abs((timelineModel?.totalRuntimeSec ?? NaN) - expectedTotal) < 0.01 &&
+            Math.abs(tlLastT1 - expectedTotal) < 0.01 &&
+            Boolean(tlPulseSeg) &&
+            Math.abs((tlPulseSeg.t1 - tlPulseSeg.t0) - fc.pulse) < 1e-6;
+
+          const pf = computePreflightChecks(cfg, bundle);
+          const preflightTailOk = pf.some((c) => c.level === "info" && c.title.includes("ends mid-bin"));
+
+          fracResults[key] = {
+            pulseDurOk,
+            allBinsExact,
+            stimRowsOk: stimRowsCount === 2 * expectedPulseBins,
+            vmRuntimeOk: Math.abs(vm.tEnd - expectedTotal) < 1e-6 && Math.abs(s4.totalRuntimeSec - expectedTotal) < 1e-6,
+            slugOk,
+            simTotalOk,
+            samplerFlipOk,
+            timelineOk,
+            preflightTailOk
+          };
+          fracPayloads[key] = { payload: buildExperimentPayload(), expectedRecDur: expectedTotal - 10 - cfg.autorefTimeout };
+        }
+
+        // 3. acclimSec = 0 across all 9 non-circadian protocols -> zero WAIT(0), zero DEFINE ACCLIMATION_SEC, keeps initial lights before AUTOREFERENCE()
+        const nonCircProtocols = [
+          "baseline", "ld_transitions", "light_off_startle", "light_on_pulse",
+          "vibration_startle", "acoustic_startle", "ppi", "multi_phase", "temp_ramp"
+        ];
+        const acclim0Results = {};
+        for (const pid of nonCircProtocols) {
+          state.stimId = pid;
+          state.stimParams.acclimSec = 0;
+          renderStimGrid();
+          renderStimParams();
+          refreshAll();
+          const code = refreshAll._latestBundle[4].code;
+          const autorefIdx = code.indexOf("AUTOREFERENCE()");
+          const beforeAutoref = autorefIdx > 0 ? code.slice(0, autorefIdx) : "";
+          const mainIdx = beforeAutoref.indexOf("ACTION MAIN");
+          const preAutorefMain = mainIdx >= 0 ? beforeAutoref.slice(mainIdx) : beforeAutoref;
+          const hasInitialLight = /INVOKE\(LIGHTS_(?:ON|OFF),1\)|LIGHTS\(/.test(preAutorefMain);
+          acclim0Results[pid] = {
+            noWait0: !code.includes("WAIT(0)"),
+            noAcclimDef: !code.includes("DEFINE ACCLIMATION_SEC"),
+            noWaitAcclim: !code.includes("WAIT(ACCLIMATION_SEC)"),
+            hasInitialLight
+          };
+        }
+
+        // 4. preBaselineSec = 10s with timeBinSec = 30s across all 5 startle/PPI protocols -> DEFINE BASELINE_BINS 1 + preflight note; preBaselineSec = 0 -> 0 bins
+        const startle5 = ["light_off_startle", "light_on_pulse", "vibration_startle", "acoustic_startle", "ppi"];
+        const preBaseResults = {};
+        const preBasePayloads = {};
+        for (const pid of startle5) {
+          state.stimId = pid;
+          state.stimParams.acclimSec = 0;
+          state.stimParams.timeBinSec = 30;
+          state.stimParams.preBaselineSec = 10;
+          state.stimParams.itiSec = 30;
+          renderStimGrid();
+          renderStimParams();
+          refreshAll();
+          const cfg10 = refreshAll._latestCfg;
+          const bundle10 = refreshAll._latestBundle;
+          const code10 = bundle10[4].code;
+          const pf10 = computePreflightChecks(cfg10, bundle10);
+          const sim10 = sampleAssayStateAtTime(cfg10, 0);
+          const hasBase1 = code10.includes("DEFINE BASELINE_BINS 1");
+          const hasPreflightAdj = pf10.some((c) => c.level === "info" && c.title.includes("Pre-stimulus baseline adjusted from 10 s to 30 s"));
+          const simMatch = Math.abs(sim10.totalRuntimeSec - bundle10[4].totalRuntimeSec) < 1e-6;
+          preBasePayloads[pid] = buildExperimentPayload();
+
+          // preBaselineSec = 0 must still yield 0 baseline bins
+          state.stimParams.preBaselineSec = 0;
+          renderStimParams();
+          refreshAll();
+          const code0 = refreshAll._latestBundle[4].code;
+          const zeroOk = !code0.includes("DEFINE BASELINE_BINS") && !code0.includes("INVOKE(SAMPLE_BASELINE");
+
+          preBaseResults[pid] = { hasBase1, hasPreflightAdj, simMatch, zeroOk };
+        }
+
+        return { ppiResults, ppiPayloads, fracResults, fracPayloads, acclim0Results, preBaseResults, preBasePayloads };
+      });
+
+      // Verify buildContextSchedule parity in Analyzer for PPI, fractional pulses, and sub-half-bin baseline
+      const azPage = await browser.newPage();
+      await azPage.goto(pathToFileURL(path.join(root, "zantiks_csv_analyzer.html")).href);
+      await azPage.waitForFunction(() => window.ZANTIKS_ANALYZER_CORE);
+      const ctxParity = await azPage.evaluate(({ ppiPayloads, fracPayloads, preBasePayloads }) => {
+        const core = window.ZANTIKS_ANALYZER_CORE;
+        const ppiCtxOk = Object.entries(ppiPayloads).every(([, item]) => {
+          const ctx = core.parseExperimentContext(item.payload, "ppi.json");
+          const endSec = ctx?.phaseSchedule?.length ? ctx.phaseSchedule[ctx.phaseSchedule.length - 1].endSec : 0;
+          return Math.abs(endSec - item.expectedRecDur) < 1e-3;
+        });
+        const fracCtxOk = Object.entries(fracPayloads).every(([, item]) => {
+          const ctx = core.parseExperimentContext(item.payload, "frac.json");
+          const endSec = ctx?.phaseSchedule?.length ? ctx.phaseSchedule[ctx.phaseSchedule.length - 1].endSec : 0;
+          return Math.abs(endSec - item.expectedRecDur) < 1e-3;
+        });
+        const preBaseCtxOk = Object.entries(preBasePayloads).every(([, payload]) => {
+          const ctx = core.parseExperimentContext(payload, "pre.json");
+          const b0 = ctx?.phaseSchedule?.[0];
+          return b0 && b0.phase === "BASELINE" && Math.abs(b0.endSec - 30) < 1e-6;
+        });
+        return { ppiCtxOk, fracCtxOk, preBaseCtxOk };
+      }, { ppiPayloads: builder6s.ppiPayloads, fracPayloads: builder6s.fracPayloads, preBasePayloads: builder6s.preBasePayloads });
+      await azPage.close();
+
+      const ok =
+        errors.length === 0 &&
+        Object.values(builder6s.ppiResults).every((r) => Object.values(r).every(Boolean)) &&
+        Object.values(builder6s.fracResults).every((r) => Object.values(r).every(Boolean)) &&
+        Object.values(builder6s.acclim0Results).every((r) => Object.values(r).every(Boolean)) &&
+        Object.values(builder6s.preBaseResults).every((r) => Object.values(r).every(Boolean)) &&
+        ctxParity.ppiCtxOk &&
+        ctxParity.fracCtxOk &&
+        ctxParity.preBaseCtxOk;
+      report(ok, "Split PPI window (50..2000ms), exact fractional multi-bin light pulses (solid + 5Hz strobe), acclimSec=0 (9 protocols) & sub-half-bin baseline preservation pass",
+        ok ? "" : JSON.stringify({ errors, ppiResults: builder6s.ppiResults, fracResults: builder6s.fracResults, acclim0Results: builder6s.acclim0Results, preBaseResults: builder6s.preBaseResults, ctxParity }));
       await page.close();
     }
 
@@ -4541,6 +4919,301 @@ try {
         highIdxOk;
       report(ok, "Multi-Track _RAMP transition tagging, token-boundary 24-char compaction (S105-S108), Analyzer VMR exclusion & Python parity pass",
         ok ? "" : JSON.stringify({ errors, compileRes: { ...compileRes, slices: compileRes.slices.length }, mtRes: { ...mtRes, pyTemplate: undefined }, pyRampTemplateOk, pyExecRes, highIdxRes }));
+      await page.close();
+    }
+
+    // Helper: execute v2 exportPythonScript (pandas + numpy + matplotlib + scipy) from an external cwd; fail loudly in CI if scipy/deps missing
+    function runPythonStatsScriptCheck(label, filesMap, pyFilename, pyCode) {
+      const pyCheck = spawnSync("python3", ["-c", "import pandas, numpy, matplotlib, scipy"], { encoding: "utf8" });
+      if (pyCheck.status !== 0) {
+        if (process.env.CI) {
+          return {
+            ok: false,
+            skipped: false,
+            error: `${label}: CI requires python3 with pandas, numpy, matplotlib, and scipy (${(pyCheck.stderr || pyCheck.error?.message || "missing python3/deps").trim()})`
+          };
+        }
+        console.log(`  SKIP  ${label} Python scipy execution (python3 pandas/numpy/matplotlib/scipy not installed locally)`);
+        return { ok: true, skipped: true };
+      }
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "zantiks-py-stats-"));
+      try {
+        for (const [name, content] of Object.entries(filesMap)) {
+          fs.writeFileSync(path.join(tmpDir, name), content, "utf8");
+        }
+        const scriptPath = path.join(tmpDir, pyFilename);
+        fs.writeFileSync(scriptPath, "import matplotlib\nmatplotlib.use('Agg')\n" + pyCode, "utf8");
+        // Run from os.tmpdir() (different cwd!) to verify Path(__file__).resolve().parent resolves sibling CSVs
+        const pyRun = spawnSync("python3", [scriptPath], { cwd: os.tmpdir(), encoding: "utf8" });
+        if (pyRun.status !== 0) {
+          return {
+            ok: false,
+            skipped: false,
+            error: `${label}: python3 exited ${pyRun.status}: ${(pyRun.stderr || pyRun.stdout || "").trim()}`
+          };
+        }
+        const stdout = pyRun.stdout || "";
+        const pngExists = fs.existsSync(path.join(tmpDir, "zantiks_timeseries.png"));
+        const ok =
+          stdout.includes("=== QC Audit Summary ===") &&
+          stdout.trim().length > 40 &&
+          !stdout.includes("FileNotFoundError") &&
+          pngExists;
+        return ok
+          ? { ok: true, skipped: false, pngExists }
+          : { ok: false, skipped: false, error: `${label}: unexpected output (pngExists=${pngExists}): ${stdout.slice(0, 300)}` };
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    }
+
+    // 7r. Exported Python basename/resolve_data_path + live scipy execution (pooled & special-char), ranked matchCompanionToRun, Peri-Stimulus/Habituation M/L SVG paths & 1-row CSV QC/bin override
+    {
+      const { page, errors } = await openFreshAnalyzer();
+
+      // 1A. Pooled ld_multi_2p export download filenames + live scipy Python execution from external cwd
+      await page.selectOption("#demoPresetSelect", "ld_multi_2p");
+      await page.click('#analyzerStepper [data-goto="export"]');
+      const [poolSumDl] = await Promise.all([page.waitForEvent("download"), page.click("#exportSummaryBtn")]);
+      const [poolTidyDl] = await Promise.all([page.waitForEvent("download"), page.click("#exportTidyBtn")]);
+      const [poolPyDl] = await Promise.all([page.waitForEvent("download"), page.click("#exportPythonBtn")]);
+      const poolSumName = poolSumDl.suggestedFilename();
+      const poolTidyName = poolTidyDl.suggestedFilename();
+      const poolPyName = poolPyDl.suggestedFilename();
+      const poolSumTxt = fs.readFileSync(await poolSumDl.path(), "utf8");
+      const poolTidyTxt = fs.readFileSync(await poolTidyDl.path(), "utf8");
+      const poolPyTxt = fs.readFileSync(await poolPyDl.path(), "utf8");
+      const poolNamesOk =
+        poolSumName === "zantiks_pooled_2runs_well_summary.csv" &&
+        poolTidyName === "zantiks_pooled_2runs_tidy_long.csv" &&
+        poolPyName === "zantiks_pooled_2runs_analysis.py" &&
+        poolPyTxt.includes(`SUMMARY_CSV = "${poolSumName}"`) &&
+        poolPyTxt.includes(`TIDY_CSV = "${poolTidyName}"`);
+      const poolPyExec = runPythonStatsScriptCheck(
+        "7r (pooled ld_multi_2p)",
+        { [poolSumName]: poolSumTxt, [poolTidyName]: poolTidyTxt },
+        poolPyName,
+        poolPyTxt
+      );
+
+      // 1B. Single-run special-character filename ("exp (1) 测试.csv") download parity + live scipy Python execution
+      const buildMinSumCsv = (wells, nRows, fn) => {
+        const hdr = ["RUNTIME", "TEMP_C", "PHASE", "TIME_BIN", ...wells.map((w) => "DIST_" + w)].join(",");
+        const out = [hdr];
+        for (let i = 0; i < nRows; i++) {
+          const ph = i < nRows / 2 ? "LIGHT" : "DARK";
+          out.push([(i + 1) * 10, "22.0", ph, i + 1, ...wells.map((w, wi) => fn(w, wi, i).toFixed(2))].join(","));
+        }
+        return out.join("\n") + "\n";
+      };
+      const wells6 = ["A1", "A2", "A3", "B1", "B2", "B3"];
+      const specialCsv = buildMinSumCsv(wells6, 6, (w, wi, ri) => (w.startsWith("A") ? 12 + wi + ri * 0.5 : 24 + wi + ri * 0.5));
+      await page.click('#analyzerStepper [data-goto="data"]');
+      await page.setInputFiles("#analyzerFileInput", {
+        name: "exp (1) 测试.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(specialCsv, "utf8")
+      });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "exp (1) 测试.csv");
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click("#addGroupBtn");
+      await page.click("#addGroupBtn");
+      await page.click("#autoAssignRowsBtn");
+      await page.click('#analyzerStepper [data-goto="export"]');
+      const [spSumDl] = await Promise.all([page.waitForEvent("download"), page.click("#exportSummaryBtn")]);
+      const [spTidyDl] = await Promise.all([page.waitForEvent("download"), page.click("#exportTidyBtn")]);
+      const [spPyDl] = await Promise.all([page.waitForEvent("download"), page.click("#exportPythonBtn")]);
+      const spSumName = spSumDl.suggestedFilename();
+      const spTidyName = spTidyDl.suggestedFilename();
+      const spPyName = spPyDl.suggestedFilename();
+      const spSumTxt = fs.readFileSync(await spSumDl.path(), "utf8");
+      const spTidyTxt = fs.readFileSync(await spTidyDl.path(), "utf8");
+      const spPyTxt = fs.readFileSync(await spPyDl.path(), "utf8");
+      const spNamesOk =
+        spSumName === "exp_1_well_summary.csv" &&
+        spTidyName === "exp_1_tidy_long.csv" &&
+        spPyName === "exp_1_analysis.py" &&
+        spPyTxt.includes(`SUMMARY_CSV = "${spSumName}"`) &&
+        spPyTxt.includes(`TIDY_CSV = "${spTidyName}"`);
+      const spPyExec = runPythonStatsScriptCheck(
+        "7r (special-char single-run)",
+        { [spSumName]: spSumTxt, [spTidyName]: spTidyTxt },
+        spPyName,
+        spPyTxt
+      );
+
+      // 2. matchCompanionToRun: delimiter-bounded ranked matching & no silent overwrite for unmatched companions
+      const minXyCsv = [
+        "RUNTIME,X_A1,Y_A1,X_A2,Y_A2",
+        "0.033,10.0,10.0,20.0,10.0",
+        "0.066,10.4,10.2,20.3,10.1",
+        "0.100,10.9,10.5,20.7,10.4"
+      ].join("\n") + "\n";
+
+      await page.click('#analyzerStepper [data-goto="data"]');
+      // 2A: run.csv + run_2.csv + run_2_XY.csv -> attaches to run_2 (NOT run)
+      await page.click("#clearAllBtn");
+      await page.setInputFiles("#analyzerFileInput", { name: "run.csv", mimeType: "text/csv", buffer: Buffer.from(specialCsv, "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.length === 1 && window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "run.csv");
+      await page.setInputFiles("#addRunFileInput", { name: "run_2.csv", mimeType: "text/csv", buffer: Buffer.from(specialCsv, "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.length === 2);
+      await page.setInputFiles("#addRunFileInput", { name: "run_2_XY.csv", mimeType: "text/csv", buffer: Buffer.from(minXyCsv, "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.some((r) => r.xyParsed?.filename === "run_2_XY.csv"));
+      const compRun2Check = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const r1 = st.runs.find((r) => r.filename === "run.csv");
+        const r2 = st.runs.find((r) => r.filename === "run_2.csv");
+        const toastTxt = document.getElementById("toast")?.textContent || "";
+        return {
+          r1Unattached: r1?.xyParsed === null,
+          r2Attached: r2?.xyParsed?.filename === "run_2_XY.csv",
+          toastShowsDest: toastTxt.includes("→") && toastTxt.includes(r2?.runId || "")
+        };
+      });
+
+      // 2B: plate1.csv + plate10.csv + plate10_XY.csv -> attaches to plate10 (NOT plate1)
+      await page.click("#clearAllBtn");
+      await page.setInputFiles("#analyzerFileInput", { name: "plate1.csv", mimeType: "text/csv", buffer: Buffer.from(specialCsv, "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "plate1.csv");
+      await page.setInputFiles("#addRunFileInput", { name: "plate10.csv", mimeType: "text/csv", buffer: Buffer.from(specialCsv, "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.length === 2);
+      await page.setInputFiles("#addRunFileInput", { name: "plate10_XY.csv", mimeType: "text/csv", buffer: Buffer.from(minXyCsv, "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.some((r) => r.xyParsed?.filename === "plate10_XY.csv"));
+      const compPlate10Check = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const p1 = st.runs.find((r) => r.filename === "plate1.csv");
+        const p10 = st.runs.find((r) => r.filename === "plate10.csv");
+        return {
+          p1Unattached: p1?.xyParsed === null,
+          p10Attached: p10?.xyParsed?.filename === "plate10_XY.csv"
+        };
+      });
+
+      // 2C: unrelated other_exp_XY.csv -> attaches to NEITHER run & shows warning toast
+      await page.setInputFiles("#addRunFileInput", { name: "other_exp_XY.csv", mimeType: "text/csv", buffer: Buffer.from(minXyCsv, "utf8") });
+      await page.waitForFunction(() => (document.getElementById("toast")?.textContent || "").includes("Unmatched companion"));
+      const compUnmatchedCheck = await page.evaluate(() => {
+        const st = window.ZANTIKS_ANALYZER_UI.getState();
+        const p1 = st.runs.find((r) => r.filename === "plate1.csv");
+        const p10 = st.runs.find((r) => r.filename === "plate10.csv");
+        const toastTxt = document.getElementById("toast")?.textContent || "";
+        const directMatch = window.ZANTIKS_ANALYZER_UI.matchCompanionToRun("other_exp_XY.csv", "xy");
+        return {
+          p1StillNull: p1?.xyParsed === null,
+          p10Unchanged: p10?.xyParsed?.filename === "plate10_XY.csv",
+          toastWarnOk: toastTxt.includes("Warning:") && toastTxt.includes("other_exp_XY.csv"),
+          directUnmatched: directMatch.run === null && directMatch.matchKind === "unmatched"
+        };
+      });
+
+      // 3. Peri-Stimulus & Habituation SVG paths never start with "L" when first point is missing
+      // 3A: 1 stim + preBaselineSec = 0 (rowIndex = 0) -> Peri-Stimulus curve & SEM paths all start with "M"
+      const oneStimCsv = [
+        "RUNTIME,TEMP_C,TRIAL,PHASE,TIME_BIN,DIST_A1,DIST_A2,DIST_A3,DIST_B1,DIST_B2,DIST_B3",
+        "1,22.0,1,STARTLE,1,24.0,26.0,25.0,18.0,19.0,17.0",
+        "2,22.0,1,ITI,2,10.0,11.0,12.0,8.0,9.0,7.0",
+        "3,22.0,1,ITI,3,9.0,10.0,9.5,7.0,8.0,7.5",
+        "4,22.0,1,ITI,4,8.0,9.0,8.5,6.0,7.0,6.5",
+        "5,22.0,1,ITI,5,8.5,9.5,9.0,6.5,7.5,7.0"
+      ].join("\n") + "\n";
+      await page.click("#clearAllBtn");
+      await page.setInputFiles("#analyzerFileInput", { name: "one_stim_no_pre.csv", mimeType: "text/csv", buffer: Buffer.from(oneStimCsv, "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.length === 1 && window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "one_stim_no_pre.csv");
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click("#addGroupBtn");
+      await page.click("#addGroupBtn");
+      await page.click("#autoAssignRowsBtn");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="timeseries"]');
+      await page.selectOption("#tsTraceViewSel", "peri");
+      const periSvgCheck = await page.evaluate(() => {
+        const paths = [...document.querySelectorAll("#tsChartSvg path[d]")].map((el) => ({
+          d: (el.getAttribute("d") || "").trim(),
+          fill: el.getAttribute("fill")
+        }));
+        const curvePaths = paths.filter((p) => p.fill === "none" && p.d.length > 0);
+        return {
+          totalPaths: paths.length,
+          curveCount: curvePaths.length,
+          allStartWithM: paths.length > 0 && paths.every((p) => /^M\b/i.test(p.d)),
+          noneStartWithL: paths.every((p) => !/^L\b/i.test(p.d))
+        };
+      });
+
+      // 3B: 3-trial startle CSV with missing Trial 1 values -> Habituation SVG curve paths start with "M" (NEVER "L")
+      const habitMissingT1Csv = [
+        "RUNTIME,TEMP_C,TRIAL,PHASE,TIME_BIN,DIST_A1,DIST_A2,DIST_A3,DIST_B1,DIST_B2,DIST_B3",
+        "1,22.0,1,STARTLE,1,,,,,,",
+        "2,22.0,1,ITI,2,9.0,10.0,11.0,8.0,8.5,9.0",
+        "3,22.0,2,STARTLE,3,24.0,25.0,26.0,18.0,19.0,20.0",
+        "4,22.0,2,ITI,4,8.0,9.0,10.0,7.0,7.5,8.0",
+        "5,22.0,3,STARTLE,5,16.0,17.0,18.0,13.0,14.0,15.0",
+        "6,22.0,3,ITI,6,7.0,8.0,9.0,6.0,6.5,7.0"
+      ].join("\n") + "\n";
+      await page.click('#analyzerStepper [data-goto="data"]');
+      await page.click("#clearAllBtn");
+      await page.setInputFiles("#analyzerFileInput", { name: "habit_missing_t1.csv", mimeType: "text/csv", buffer: Buffer.from(habitMissingT1Csv, "utf8") });
+      await page.waitForFunction(() => window.ZANTIKS_ANALYZER_UI.getState().runs.length === 1 && window.ZANTIKS_ANALYZER_UI.getState().summaryParsed?.filename === "habit_missing_t1.csv");
+      await page.click('#analyzerStepper [data-goto="groups"]');
+      await page.click("#addGroupBtn");
+      await page.click("#addGroupBtn");
+      await page.click("#autoAssignRowsBtn");
+      await page.click('#analyzerStepper [data-goto="plots"]');
+      await page.click('#chartTabsBar [data-chart-tab="timeseries"]');
+      await page.selectOption("#tsTraceViewSel", "habituation");
+      const habitSvgCheck = await page.evaluate(() => {
+        const paths = [...document.querySelectorAll("#tsChartSvg path[d]")].map((el) => ({
+          d: (el.getAttribute("d") || "").trim(),
+          fill: el.getAttribute("fill")
+        }));
+        const curvePaths = paths.filter((p) => p.fill === "none" && p.d.length > 0);
+        return {
+          totalPaths: paths.length,
+          curveCount: curvePaths.length,
+          allStartWithM: paths.length > 0 && paths.every((p) => /^M\b/i.test(p.d)),
+          noneStartWithL: paths.every((p) => !/^L\b/i.test(p.d))
+        };
+      });
+
+      // 4. Single-row CSV (rows.length === 1, DIST_A1 = 300): binDurationInferred=false, warning present, no false spike_glitch, context timeBinSec=60 -> meanSpeedMmS=5
+      const singleRowCheck = await page.evaluate(() => {
+        const core = window.ZANTIKS_ANALYZER_CORE;
+        const csv1 = "RUNTIME,TEMP_C,PHASE,TIME_BIN,DIST_A1,DIST_A2\n60,22.0,LIGHT,1,300,280\n";
+        const parsed = core.parseZantiksCsv(csv1, "single_row_summary.csv");
+        const anNoCtx = core.computeAnalysis({ parsed });
+        const anWithCtx = core.computeAnalysis({
+          parsed,
+          context: { valid: true, stimId: "baseline", stimParams: { timeBinSec: 60 } }
+        });
+        return {
+          binInferredFalse: parsed.binDurationInferred === false,
+          hasSingleRowWarn: Array.isArray(parsed.warnings) && parsed.warnings.some((w) => /single-row/i.test(w)),
+          noFalseSpikeParsed: parsed.qc?.A1?.isSpikeGlitch === false,
+          noFalseSpikeAnalysis: anNoCtx.wellsById?.A1?.qc?.isSpikeGlitch === false && anNoCtx.kpis?.spikeCount === 0,
+          ctxBinIs60: anWithCtx.kpis?.binDurationSec === 60 && anWithCtx.kpis?.durationSec === 60,
+          ctxMeanSpeedIs5: Math.abs((anWithCtx.wellsById?.A1?.meanSpeedMmS ?? NaN) - 5) < 1e-9,
+          ctxNoFalseSpike: anWithCtx.wellsById?.A1?.qc?.isSpikeGlitch === false
+        };
+      });
+
+      const ok =
+        errors.length === 0 &&
+        poolNamesOk &&
+        poolPyExec.ok &&
+        spNamesOk &&
+        spPyExec.ok &&
+        Object.values(compRun2Check).every(Boolean) &&
+        Object.values(compPlate10Check).every(Boolean) &&
+        Object.values(compUnmatchedCheck).every(Boolean) &&
+        periSvgCheck.curveCount >= 2 &&
+        periSvgCheck.allStartWithM &&
+        periSvgCheck.noneStartWithL &&
+        habitSvgCheck.curveCount >= 2 &&
+        habitSvgCheck.allStartWithM &&
+        habitSvgCheck.noneStartWithL &&
+        Object.values(singleRowCheck).every(Boolean);
+      report(ok, "Exported Python basename/scipy execution (pooled + special-char), ranked companion matching, Peri-Stimulus/Habituation M/L SVG paths & 1-row CSV QC pass",
+        ok ? "" : JSON.stringify({ errors, poolNamesOk, poolPyExec, spNamesOk, spPyExec, compRun2Check, compPlate10Check, compUnmatchedCheck, periSvgCheck, habitSvgCheck, singleRowCheck }));
       await page.close();
     }
   }

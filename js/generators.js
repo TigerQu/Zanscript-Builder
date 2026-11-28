@@ -56,7 +56,7 @@ function buildAssayDataSlug(cfg) {
     detail = `acoustic_${pulses}x_${audSlug}`;
   } else if (cfg.stimId === "ppi") {
     const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
-    const isi = Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300);
+    const isi = Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300));
     detail = `ppi_${isi}ms_${pairs}x`;
   } else if (cfg.stimId === "circadian") {
     const c = computeCircadianSchedule(cfg);
@@ -912,15 +912,14 @@ function generateStep4(cfg) {
     const lightAction = sp.baseLight === "DARK" ? "LIGHTS_OFF" : "LIGHTS_ON";
 
     topDefines.push(
-      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      ...(acclim > 0 ? [`DEFINE ACCLIMATION_SEC ${acclim}`] : []),
       `DEFINE TIME_BIN ${bin}`,
       `DEFINE NUM_BINS ${numBins}`
     );
 
     mainSchedule.push(
       `    INVOKE(${lightAction},1)`,
-      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
-      "    WAIT(ACCLIMATION_SEC)",
+      ...(acclim > 0 ? [`    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`, "    WAIT(ACCLIMATION_SEC)"] : []),
       `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
       "    AUTOREFERENCE()",
       "__START_RECORDING__",
@@ -944,7 +943,7 @@ function generateStep4(cfg) {
     const startLight = sp.ldStart !== "DARK";
 
     topDefines.push(
-      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      ...(acclim > 0 ? [`DEFINE ACCLIMATION_SEC ${acclim}`] : []),
       `DEFINE TIME_BIN ${bin}`,
       `DEFINE PHASE_BINS ${phaseBins}`,
       `DEFINE NUM_CYCLES ${cycles}`
@@ -952,8 +951,7 @@ function generateStep4(cfg) {
 
     mainSchedule.push(
       `    INVOKE(${startLight ? "LIGHTS_ON" : "LIGHTS_OFF"},1)`,
-      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
-      "    WAIT(ACCLIMATION_SEC)",
+      ...(acclim > 0 ? [`    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`, "    WAIT(ACCLIMATION_SEC)"] : []),
       `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
       "    AUTOREFERENCE()",
       "__START_RECORDING__",
@@ -1006,18 +1004,24 @@ function generateStep4(cfg) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preBins = Math.round(preSec / bin);
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const pulseDur = Math.max(0.1, parseFloat(sp.pulseDurSec) || 1);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiBins = Math.max(1, Math.round(itiSec / bin));
 
     const subBinPulse = pulseDur < bin;
-    const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
-    const postPulseWait = subBinPulse ? Number((bin - pulseDur).toFixed(3)) : 0;
+    const fullPulseBins = subBinPulse ? 0 : Math.floor((pulseDur + 1e-9) / bin);
+    const remPulseRaw = subBinPulse ? 0 : Number((pulseDur - fullPulseBins * bin).toFixed(3));
+    const remPulse = remPulseRaw >= 0.001 ? remPulseRaw : 0;
+    const hasRemPulse = fullPulseBins >= 1 && remPulse >= 0.001;
+    const pulseBins = subBinPulse ? 1 : (fullPulseBins + (hasRemPulse ? 1 : 0));
+    const postPulseWait = subBinPulse
+      ? Number((bin - pulseDur).toFixed(3))
+      : (hasRemPulse ? Number((bin - remPulse).toFixed(3)) : 0);
 
     topDefines.push(
-      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      ...(acclim > 0 ? [`DEFINE ACCLIMATION_SEC ${acclim}`] : []),
       `DEFINE TIME_BIN ${bin}`,
       ...(preBins > 0 ? [`DEFINE BASELINE_BINS ${preBins}`] : []),
       `DEFINE NUM_PULSES ${pulses}`,
@@ -1028,14 +1032,19 @@ function generateStep4(cfg) {
         `DEFINE PULSE_DURATION ${pulseDur}`,
         `DEFINE POST_PULSE_WAIT ${postPulseWait}`
       );
+    } else if (hasRemPulse) {
+      topDefines.push(
+        `DEFINE PULSE_FULL_BINS ${fullPulseBins}`,
+        `DEFINE PULSE_REM_SEC ${remPulse}`,
+        `DEFINE POST_PULSE_WAIT ${postPulseWait}`
+      );
     } else {
       topDefines.push(`DEFINE PULSE_BINS ${pulseBins}`);
     }
 
     mainSchedule.push(
       "    INVOKE(LIGHTS_ON,1)",
-      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
-      "    WAIT(ACCLIMATION_SEC)",
+      ...(acclim > 0 ? [`    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`, "    WAIT(ACCLIMATION_SEC)"] : []),
       `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
       "    AUTOREFERENCE()",
       "__START_RECORDING__"
@@ -1082,6 +1091,42 @@ function generateStep4(cfg) {
           "COMPLETE"
         ].join("\n")
       );
+    } else if (hasRemPulse) {
+      extraActions.push(
+        [
+          "ACTION STARTLE_TRIAL",
+          "",
+          "    SET(COUNTER2,COUNTER_INC)",
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("LIGHT-OFF PULSE")}")`,
+          "    INVOKE(LIGHTS_OFF,1)",
+          "    INVOKE(SAMPLE_STARTLE,PULSE_FULL_BINS)",
+          "    INVOKE(DARK_PULSE_TAIL_BIN,1)",
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ITI RECOVERY")}")`,
+          "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+          "",
+          "COMPLETE",
+          "",
+          "ACTION DARK_PULSE_TAIL_BIN",
+          "",
+          "    SET(COUNTER1,COUNTER_INC)",
+          '    LOGDATA(DATA_SNAPSHOT,"begin")',
+          "    WAIT(PULSE_REM_SEC)",
+          "    INVOKE(LIGHTS_ON,1)",
+          "    WAIT(POST_PULSE_WAIT)",
+          '    LOGDATA(DATA_SNAPSHOT,"end")',
+          '    LOGDATA(DATA_SELECT,"begin")',
+          '    LOGDATA(DATA_DELTA,"end")',
+          "",
+          ...wrapSummaryLog([
+            '    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:STARTLE|COUNTER2|COUNTER1")',
+            ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+            "    LOGRUN()"
+          ]),
+          "",
+          "COMPLETE"
+        ].join("\n"),
+        buildSampleAction("SAMPLE_STARTLE", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:STARTLE|COUNTER2|COUNTER1", dataExprs, useStream2)
+      );
     } else {
       extraActions.push(
         [
@@ -1117,7 +1162,7 @@ function generateStep4(cfg) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preBins = Math.round(preSec / bin);
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const pulseDur = Math.max(0.05, parseFloat(sp.pulseDurSec) || 1);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
@@ -1125,11 +1170,17 @@ function generateStep4(cfg) {
     const strobeHz = [2, 5, 10].includes(parseInt(sp.strobeHz, 10)) ? parseInt(sp.strobeHz, 10) : 0;
 
     const subBinPulse = pulseDur < bin;
-    const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
-    const postPulseWait = subBinPulse ? Number((bin - pulseDur).toFixed(3)) : 0;
+    const fullPulseBins = subBinPulse ? 0 : Math.floor((pulseDur + 1e-9) / bin);
+    const remPulseRaw = subBinPulse ? 0 : Number((pulseDur - fullPulseBins * bin).toFixed(3));
+    const remPulse = remPulseRaw >= 0.001 ? remPulseRaw : 0;
+    const hasRemPulse = fullPulseBins >= 1 && remPulse >= 0.001;
+    const pulseBins = subBinPulse ? 1 : (fullPulseBins + (hasRemPulse ? 1 : 0));
+    const postPulseWait = subBinPulse
+      ? Number((bin - pulseDur).toFixed(3))
+      : (hasRemPulse ? Number((bin - remPulse).toFixed(3)) : 0);
 
     topDefines.push(
-      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      ...(acclim > 0 ? [`DEFINE ACCLIMATION_SEC ${acclim}`] : []),
       `DEFINE TIME_BIN ${bin}`,
       ...(preBins > 0 ? [`DEFINE BASELINE_BINS ${preBins}`] : []),
       `DEFINE NUM_PULSES ${pulses}`,
@@ -1146,6 +1197,16 @@ function generateStep4(cfg) {
           ...(fullCycles > 0 ? [`DEFINE STROBE_CYCLES ${fullCycles}`] : []),
           `DEFINE POST_PULSE_WAIT ${remWait}`
         );
+      } else if (hasRemPulse) {
+        const fullCyclesPerBin = Math.floor((bin + 1e-9) / periodSec);
+        const tailFullCycles = Math.floor((remPulse + 1e-9) / periodSec);
+        topDefines.push(
+          `DEFINE PULSE_FULL_BINS ${fullPulseBins}`,
+          `DEFINE STROBE_HALF_SEC ${strobeHalfSec}  # ${strobeHz} Hz strobe (50% duty)`,
+          ...(fullCyclesPerBin > 0 ? [`DEFINE STROBE_CYCLES_PER_BIN ${fullCyclesPerBin}`] : []),
+          ...(tailFullCycles > 0 ? [`DEFINE STROBE_TAIL_CYCLES ${tailFullCycles}`] : []),
+          `DEFINE POST_PULSE_WAIT ${postPulseWait}`
+        );
       } else {
         const fullCyclesPerBin = Math.floor((bin + 1e-9) / periodSec);
         topDefines.push(
@@ -1159,14 +1220,19 @@ function generateStep4(cfg) {
         `DEFINE PULSE_DURATION ${pulseDur}`,
         `DEFINE POST_PULSE_WAIT ${postPulseWait}`
       );
+    } else if (hasRemPulse) {
+      topDefines.push(
+        `DEFINE PULSE_FULL_BINS ${fullPulseBins}`,
+        `DEFINE PULSE_REM_SEC ${remPulse}`,
+        `DEFINE POST_PULSE_WAIT ${postPulseWait}`
+      );
     } else {
       topDefines.push(`DEFINE PULSE_BINS ${pulseBins}`);
     }
 
     mainSchedule.push(
       "    INVOKE(LIGHTS_OFF,1)",
-      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK ACCLIMATION")}")`,
-      "    WAIT(ACCLIMATION_SEC)",
+      ...(acclim > 0 ? [`    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK ACCLIMATION")}")`, "    WAIT(ACCLIMATION_SEC)"] : []),
       `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
       "    AUTOREFERENCE()",
       "__START_RECORDING__"
@@ -1248,6 +1314,66 @@ function generateStep4(cfg) {
           ].join("\n"),
           ...(fullCycles > 0 ? [strobeCycleAction] : [])
         );
+      } else if (hasRemPulse) {
+        const fullCyclesPerBin = Math.floor((bin + 1e-9) / periodSec);
+        const remBinSec = Number((bin - fullCyclesPerBin * periodSec).toFixed(3));
+        const remBinLines = buildPartialStrobeLines(remBinSec);
+        const tailFullCycles = Math.floor((remPulse + 1e-9) / periodSec);
+        const tailRemSec = Number((remPulse - tailFullCycles * periodSec).toFixed(3));
+        const tailRemLines = buildPartialStrobeLines(tailRemSec);
+        extraActions.push(
+          [
+            "ACTION FLASH_TRIAL",
+            "",
+            "    SET(COUNTER2,COUNTER_INC)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(activeLightTag + " " + strobeHz + "HZ")}")`,
+            "    INVOKE(SAMPLE_FLASH,PULSE_FULL_BINS)",
+            "    INVOKE(LIGHT_FLASH_TAIL_BIN,1)",
+            "    INVOKE(LIGHTS_OFF,1)",
+            `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK ITI")}")`,
+            "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+            "",
+            "COMPLETE",
+            "",
+            "ACTION SAMPLE_FLASH",
+            "",
+            "    SET(COUNTER1,COUNTER_INC)",
+            '    LOGDATA(DATA_SNAPSHOT,"begin")',
+            ...(fullCyclesPerBin > 0 ? ["    INVOKE(STROBE_CYCLE,STROBE_CYCLES_PER_BIN)"] : []),
+            ...remBinLines,
+            '    LOGDATA(DATA_SNAPSHOT,"end")',
+            '    LOGDATA(DATA_SELECT,"begin")',
+            '    LOGDATA(DATA_DELTA,"end")',
+            "",
+            ...wrapSummaryLog([
+              `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_${strobeHz}HZ|COUNTER2|COUNTER1")`,
+              ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+              "    LOGRUN()"
+            ]),
+            "",
+            "COMPLETE",
+            "",
+            "ACTION LIGHT_FLASH_TAIL_BIN",
+            "",
+            "    SET(COUNTER1,COUNTER_INC)",
+            '    LOGDATA(DATA_SNAPSHOT,"begin")',
+            ...(tailFullCycles > 0 ? ["    INVOKE(STROBE_CYCLE,STROBE_TAIL_CYCLES)"] : []),
+            ...tailRemLines,
+            ...(postPulseWait > 0 ? ["    WAIT(POST_PULSE_WAIT)"] : []),
+            '    LOGDATA(DATA_SNAPSHOT,"end")',
+            '    LOGDATA(DATA_SELECT,"begin")',
+            '    LOGDATA(DATA_DELTA,"end")',
+            "",
+            ...wrapSummaryLog([
+              `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_${strobeHz}HZ|COUNTER2|COUNTER1")`,
+              ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+              "    LOGRUN()"
+            ]),
+            "",
+            "COMPLETE"
+          ].join("\n"),
+          ...((fullCyclesPerBin > 0 || tailFullCycles > 0) ? [strobeCycleAction] : [])
+        );
       } else {
         const fullCyclesPerBin = Math.floor((bin + 1e-9) / periodSec);
         const remBinSec = Number((bin - fullCyclesPerBin * periodSec).toFixed(3));
@@ -1320,6 +1446,42 @@ function generateStep4(cfg) {
           "COMPLETE"
         ].join("\n")
       );
+    } else if (hasRemPulse) {
+      extraActions.push(
+        [
+          "ACTION FLASH_TRIAL",
+          "",
+          "    SET(COUNTER2,COUNTER_INC)",
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(activeLightTag + " FLASH")}")`,
+          "    INVOKE(LIGHTS_ON,1)",
+          "    INVOKE(SAMPLE_FLASH,PULSE_FULL_BINS)",
+          "    INVOKE(LIGHT_FLASH_TAIL_BIN,1)",
+          `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("DARK ITI")}")`,
+          "    INVOKE(SAMPLE_ITI,ITI_BINS)",
+          "",
+          "COMPLETE",
+          "",
+          "ACTION LIGHT_FLASH_TAIL_BIN",
+          "",
+          "    SET(COUNTER1,COUNTER_INC)",
+          '    LOGDATA(DATA_SNAPSHOT,"begin")',
+          "    WAIT(PULSE_REM_SEC)",
+          "    INVOKE(LIGHTS_OFF,1)",
+          "    WAIT(POST_PULSE_WAIT)",
+          '    LOGDATA(DATA_SNAPSHOT,"end")',
+          '    LOGDATA(DATA_SELECT,"begin")',
+          '    LOGDATA(DATA_DELTA,"end")',
+          "",
+          ...wrapSummaryLog([
+            `    LOGCREATE("RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_FLASH|COUNTER2|COUNTER1")`,
+            ...dataExprs.map(d => `    LOGAPPEND("${d}")`),
+            "    LOGRUN()"
+          ]),
+          "",
+          "COMPLETE"
+        ].join("\n"),
+        buildSampleAction("SAMPLE_FLASH", `RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:${activeLightTag}_FLASH|COUNTER2|COUNTER1`, dataExprs, useStream2)
+      );
     } else {
       extraActions.push(
         [
@@ -1355,7 +1517,7 @@ function generateStep4(cfg) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preBins = Math.round(preSec / bin);
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiBins = Math.max(1, Math.round(itiSec / bin));
@@ -1363,7 +1525,7 @@ function generateStep4(cfg) {
     const ambientAction = sp.vibAmbient === "LIGHT" ? "LIGHTS_ON" : "LIGHTS_OFF";
 
     topDefines.push(
-      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      ...(acclim > 0 ? [`DEFINE ACCLIMATION_SEC ${acclim}`] : []),
       `DEFINE TIME_BIN ${bin}`,
       ...(preBins > 0 ? [`DEFINE BASELINE_BINS ${preBins}`] : []),
       `DEFINE NUM_PULSES ${pulses}`,
@@ -1372,8 +1534,7 @@ function generateStep4(cfg) {
 
     mainSchedule.push(
       `    INVOKE(${ambientAction},1)`,
-      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
-      "    WAIT(ACCLIMATION_SEC)",
+      ...(acclim > 0 ? [`    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`, "    WAIT(ACCLIMATION_SEC)"] : []),
       `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
       "    AUTOREFERENCE()",
       "__START_RECORDING__"
@@ -1433,7 +1594,7 @@ function generateStep4(cfg) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preBins = Math.round(preSec / bin);
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiBins = Math.max(1, Math.round(itiSec / bin));
@@ -1443,7 +1604,7 @@ function generateStep4(cfg) {
     const ambientAction = sp.audioAmbient === "LIGHT" ? "LIGHTS_ON" : "LIGHTS_OFF";
 
     topDefines.push(
-      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      ...(acclim > 0 ? [`DEFINE ACCLIMATION_SEC ${acclim}`] : []),
       `DEFINE TIME_BIN ${bin}`,
       ...(preBins > 0 ? [`DEFINE BASELINE_BINS ${preBins}`] : []),
       `DEFINE NUM_PULSES ${pulses}`,
@@ -1452,8 +1613,7 @@ function generateStep4(cfg) {
 
     mainSchedule.push(
       `    INVOKE(${ambientAction},1)`,
-      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
-      "    WAIT(ACCLIMATION_SEC)",
+      ...(acclim > 0 ? [`    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`, "    WAIT(ACCLIMATION_SEC)"] : []),
       `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
       "    AUTOREFERENCE()",
       "__START_RECORDING__"
@@ -1513,20 +1673,22 @@ function generateStep4(cfg) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preBins = Math.round(preSec / bin);
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
     const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiBins = Math.max(1, Math.round(itiSec / bin));
     const prepulse = vibLevelToCode(sp.ppiPrepulse || "U3");
     const pulse = vibLevelToCode(sp.ppiPulse || "U0");
     const isiMs = Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300));
+    const isiSec = Number((isiMs / 1000).toFixed(3));
     const isAlt = (sp.ppiPattern || "alternating") === "alternating";
     const ambientAction = sp.ppiAmbient === "LIGHT" ? "LIGHTS_ON" : "LIGHTS_OFF";
     const totalTrials = isAlt ? pairs * 2 : pairs;
 
     topDefines.push(
-      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      ...(acclim > 0 ? [`DEFINE ACCLIMATION_SEC ${acclim}`] : []),
       `DEFINE TIME_BIN ${bin}`,
+      `DEFINE ISI_SEC ${isiSec}  # ${isiMs} ms prepulse-to-pulse ISI`,
       ...(preBins > 0 ? [`DEFINE BASELINE_BINS ${preBins}`] : []),
       `DEFINE NUM_BLOCKS ${pairs}  # ${isAlt ? "Alternating Pulse-Alone + PPI pairs" : "PPI trials only"} (ISI=${isiMs}ms)`,
       `DEFINE ITI_BINS ${itiBins}`
@@ -1534,8 +1696,7 @@ function generateStep4(cfg) {
 
     mainSchedule.push(
       `    INVOKE(${ambientAction},1)`,
-      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
-      "    WAIT(ACCLIMATION_SEC)",
+      ...(acclim > 0 ? [`    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`, "    WAIT(ACCLIMATION_SEC)"] : []),
       `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
       "    AUTOREFERENCE()",
       "__START_RECORDING__"
@@ -1605,9 +1766,11 @@ function generateStep4(cfg) {
         "ACTION PPI_PULSE_BIN",
         "",
         "    SET(COUNTER1,COUNTER_INC)",
-        '    LOGDATA(DATA_SNAPSHOT,"begin")',
         `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay(`PPI ${prepulse}+${isiMs}ms+${pulse}`)}")`,
-        `    ZCOMMAND("${prepulse} D1190 M1 M-1 M1 M-1 P${isiMs} ${pulse} D1190 M1 M-1 M1 M-1")`,
+        `    ZCOMMAND("${prepulse} D1190 M1 M-1 M1 M-1")`,
+        "    WAIT(ISI_SEC)",
+        '    LOGDATA(DATA_SNAPSHOT,"begin")',
+        `    ZCOMMAND("${pulse} D1190 M1 M-1 M1 M-1")`,
         "    WAIT(TIME_BIN)",
         '    LOGDATA(DATA_SNAPSHOT,"end")',
         '    LOGDATA(DATA_SELECT,"begin")',
@@ -1631,7 +1794,7 @@ function generateStep4(cfg) {
       buildSampleAction("SAMPLE_ITI", "RUNTIME|APPARATUS_ID|TEMPERATURE1|TEXT:ITI|COUNTER2|COUNTER1", dataExprs, useStream2)
     );
 
-    totalRuntimeSec = acclim + cfg.autorefTimeout + preBins * bin + totalTrials * (1 + itiBins) * bin;
+    totalRuntimeSec = Number((acclim + cfg.autorefTimeout + preBins * bin + totalTrials * (1 + itiBins) * bin + pairs * isiSec).toFixed(3));
     totalRows = preBins + totalTrials * (1 + itiBins);
 
   } else if (cfg.stimId === "circadian") {
@@ -1925,7 +2088,7 @@ function generateStep4(cfg) {
     };
 
     topDefines.push(
-      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      ...(acclim > 0 ? [`DEFINE ACCLIMATION_SEC ${acclim}`] : []),
       `DEFINE TIME_BIN ${bin}`,
       `DEFINE NUM_CYCLES ${cycles}`
     );
@@ -1966,8 +2129,7 @@ function generateStep4(cfg) {
 
     mainSchedule.push(
       ...buildSliceLightLines(cfg, acclimTopObjs, acclimBotObjs, manageBottom),
-      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`,
-      "    WAIT(ACCLIMATION_SEC)",
+      ...(acclim > 0 ? [`    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIMATION")}")`, "    WAIT(ACCLIMATION_SEC)"] : []),
       `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
       "    AUTOREFERENCE()",
       "__START_RECORDING__",
@@ -2112,15 +2274,14 @@ function generateStep4(cfg) {
     }
 
     topDefines.push(
-      `DEFINE ACCLIMATION_SEC ${acclim}`,
+      ...(acclim > 0 ? [`DEFINE ACCLIMATION_SEC ${acclim}`] : []),
       `DEFINE TIME_BIN ${bin}`,
       `DEFINE STEP_BINS ${stepBins}  # ${stepBins * bin}s hold per temperature step (${steps.length} step(s))`
     );
 
     mainSchedule.push(
       `    INVOKE(${lightAction},1)`,
-      `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIM " + steps[0] + "C")}")`,
-      "    WAIT(ACCLIMATION_SEC)",
+      ...(acclim > 0 ? [`    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("ACCLIM " + steps[0] + "C")}")`, "    WAIT(ACCLIMATION_SEC)"] : []),
       `    LOAD(OVERLAY_TEXT,"1,1:${padOverlay("AUTOREFERENCING")}")`,
       "    AUTOREFERENCE()",
       "__START_RECORDING__",

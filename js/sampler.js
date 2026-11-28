@@ -101,7 +101,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preBins = Math.round(preSec / bin);
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
     const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const pulseDur = Math.max(isOffStartle ? 0.1 : 0.05, parseFloat(sp.pulseDurSec) || 1);
@@ -111,9 +111,12 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     const strobeHz = !isOffStartle && [2, 5, 10].includes(parseInt(sp.strobeHz, 10)) ? parseInt(sp.strobeHz, 10) : 0;
 
     const subBinPulse = pulseDur < bin;
-    const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
+    const fullPulseBins = subBinPulse ? 0 : Math.floor((pulseDur + 1e-9) / bin);
+    const remPulse = subBinPulse ? 0 : Number((pulseDur - fullPulseBins * bin).toFixed(3));
+    const hasRemPulse = !subBinPulse && fullPulseBins >= 1 && remPulse >= 0.001;
+    const pulseBins = subBinPulse ? 1 : Math.max(1, fullPulseBins + (hasRemPulse ? 1 : 0));
     const pulseBinDur = pulseBins * bin;
-    const activeStimDur = subBinPulse ? pulseDur : pulseBinDur;
+    const activeStimDur = (subBinPulse || hasRemPulse) ? pulseDur : pulseBinDur;
     const trialDur = pulseBinDur + itiDur;
 
     totalRuntimeSec = acclim + autorefBase + preDur + pulses * trialDur;
@@ -160,7 +163,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preBins = Math.round(preSec / bin);
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
     const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
@@ -200,7 +203,7 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preBins = Math.round(preSec / bin);
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
     const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
@@ -239,21 +242,24 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preBins = Math.round(preSec / bin);
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
     const preDur = preBins * bin;
     const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiBins = Math.max(1, Math.round(itiSec / bin));
     const itiDur = itiBins * bin;
-    const trialDur = bin + itiDur;
     const prepulse = vibLevelToCode(sp.ppiPrepulse || "U3");
     const pulse = vibLevelToCode(sp.ppiPulse || "U0");
     const isiMs = Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300));
+    const isiSec = Number((isiMs / 1000).toFixed(3));
+    const pulseTrialDur = bin + itiDur;
+    const ppiTrialDur = isiSec + bin + itiDur;
     const isAlt = (sp.ppiPattern || "alternating") === "alternating";
     const totalTrials = isAlt ? pairs * 2 : pairs;
+    const assayDur = isAlt ? pairs * (pulseTrialDur + ppiTrialDur) : pairs * ppiTrialDur;
     if (sp.ppiAmbient === "LIGHT") setSingleChannelOn(colId);
 
-    totalRuntimeSec = acclim + autorefBase + preDur + totalTrials * trialDur;
+    totalRuntimeSec = Number((acclim + autorefBase + preDur + assayDur).toFixed(3));
     const t = Math.max(0, Math.min(totalRuntimeSec, parseFloat(tSecRaw) || 0));
 
     if (t < acclim) {
@@ -263,20 +269,54 @@ function sampleAssayStateAtTime(cfg, tSecRaw) {
     } else if (t < acclim + autorefBase + preDur) {
       phaseName = "BASELINE";
     } else {
-      const rel = Math.min(Math.max(0, totalTrials * trialDur - 0.0001), t - acclim - autorefBase - preDur);
-      const trIdx = Math.min(totalTrials - 1, Math.floor(rel / trialDur));
-      const inTrial = rel - trIdx * trialDur;
-      const isPpiTrial = !isAlt || (trIdx % 2 === 1);
-      const tapWindow = Math.min(0.85, bin);
-      if (inTrial < tapWindow) {
-        vibration = isPpiTrial ? `${prepulse}+${pulse}` : pulse;
-        phaseName = isPpiTrial
-          ? `PPI ${prepulse}+${isiMs}ms+${pulse} (Trial ${trIdx + 1}/${totalTrials})`
-          : `PULSE ALONE ${pulse} (Trial ${trIdx + 1}/${totalTrials})`;
-      } else if (inTrial < bin) {
-        phaseName = isPpiTrial ? `PPI BIN (Trial ${trIdx + 1}/${totalTrials})` : `PULSE BIN (Trial ${trIdx + 1}/${totalTrials})`;
+      const rel = Math.min(Math.max(0, assayDur - 0.0001), t - acclim - autorefBase - preDur);
+      let trIdx = 0;
+      let isPpiTrial = true;
+      let inTrial = 0;
+      if (isAlt) {
+        const pairDur = pulseTrialDur + ppiTrialDur;
+        const pairIdx = Math.min(pairs - 1, Math.floor(rel / pairDur));
+        const inPair = rel - pairIdx * pairDur;
+        if (inPair < pulseTrialDur) {
+          isPpiTrial = false;
+          trIdx = pairIdx * 2;
+          inTrial = inPair;
+        } else {
+          isPpiTrial = true;
+          trIdx = pairIdx * 2 + 1;
+          inTrial = inPair - pulseTrialDur;
+        }
       } else {
-        phaseName = `POST-${isPpiTrial ? "PPI" : "PULSE"} ITI (Trial ${trIdx + 1}/${totalTrials})`;
+        trIdx = Math.min(pairs - 1, Math.floor(rel / ppiTrialDur));
+        isPpiTrial = true;
+        inTrial = rel - trIdx * ppiTrialDur;
+      }
+
+      const mainTapWindow = Math.min(0.85, bin);
+      if (isPpiTrial) {
+        const preTapWindow = Math.min(0.15, isiSec);
+        if (inTrial < preTapWindow) {
+          vibration = prepulse;
+          phaseName = `PPI PREPULSE ${prepulse} (Trial ${trIdx + 1}/${totalTrials})`;
+        } else if (inTrial < isiSec) {
+          phaseName = `PPI ISI ${isiMs}ms (Trial ${trIdx + 1}/${totalTrials})`;
+        } else if (inTrial < isiSec + mainTapWindow) {
+          vibration = pulse;
+          phaseName = `PPI PULSE ${pulse} (Trial ${trIdx + 1}/${totalTrials})`;
+        } else if (inTrial < isiSec + bin) {
+          phaseName = `PPI BIN (Trial ${trIdx + 1}/${totalTrials})`;
+        } else {
+          phaseName = `POST-PPI ITI (Trial ${trIdx + 1}/${totalTrials})`;
+        }
+      } else {
+        if (inTrial < mainTapWindow) {
+          vibration = pulse;
+          phaseName = `PULSE ALONE ${pulse} (Trial ${trIdx + 1}/${totalTrials})`;
+        } else if (inTrial < bin) {
+          phaseName = `PULSE BIN (Trial ${trIdx + 1}/${totalTrials})`;
+        } else {
+          phaseName = `POST-PULSE ITI (Trial ${trIdx + 1}/${totalTrials})`;
+        }
       }
     }
     return { tSec: t, totalRuntimeSec, phaseName, topChannels, bottomChannels, tempC, vibration, audio, nlePlayheadPct };

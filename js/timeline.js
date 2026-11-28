@@ -165,16 +165,20 @@ function renderTimeline(cfg, s4) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preDur = Math.round(preSec / bin) * bin;
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
+    const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const pulseDur = Math.max(isOff ? 0.1 : 0.05, parseFloat(sp.pulseDurSec) || 1);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
     const strobeHz = !isOff && [2, 5, 10].includes(parseInt(sp.strobeHz, 10)) ? parseInt(sp.strobeHz, 10) : 0;
     const subBinPulse = pulseDur < bin;
-    const pulseBins = subBinPulse ? 1 : Math.max(1, Math.round(pulseDur / bin));
+    const fullPulseBins = subBinPulse ? 0 : Math.floor((pulseDur + 1e-9) / bin);
+    const remPulse = subBinPulse ? 0 : Number((pulseDur - fullPulseBins * bin).toFixed(3));
+    const hasRemPulse = !subBinPulse && fullPulseBins >= 1 && remPulse >= 0.001;
+    const pulseBins = subBinPulse ? 1 : Math.max(1, fullPulseBins + (hasRemPulse ? 1 : 0));
     const pulseBinDur = pulseBins * bin;
-    const activeStimDur = subBinPulse ? pulseDur : pulseBinDur;
+    const activeStimDur = (subBinPulse || hasRemPulse) ? pulseDur : pulseBinDur;
     const trialDur = pulseBinDur + itiDur;
     preSetupSec = acclim + autorefBase;
     let cursor = 0;
@@ -201,7 +205,8 @@ function renderTimeline(cfg, s4) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preDur = Math.round(preSec / bin) * bin;
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
+    const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
@@ -233,7 +238,8 @@ function renderTimeline(cfg, s4) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preDur = Math.round(preSec / bin) * bin;
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
+    const preDur = preBins * bin;
     const pulses = Math.max(1, parseInt(sp.numPulses, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
@@ -267,16 +273,19 @@ function renderTimeline(cfg, s4) {
     const acclim = Math.max(0, parseIntOr(sp.acclimSec, 0));
     const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
     const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
-    const preDur = Math.round(preSec / bin) * bin;
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
+    const preDur = preBins * bin;
     const pairs = Math.max(1, parseInt(sp.ppiPairs, 10) || 5);
     const itiSec = Math.max(bin, parseInt(sp.itiSec, 10) || 30);
     const itiDur = Math.max(1, Math.round(itiSec / bin)) * bin;
-    const trialDur = bin + itiDur;
     const isAlt = (sp.ppiPattern || "alternating") === "alternating";
     const totalTrials = isAlt ? pairs * 2 : pairs;
     const prepulse = vibLevelToCode(sp.ppiPrepulse || "U3");
     const pulse = vibLevelToCode(sp.ppiPulse || "U0");
     const isiMs = Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300));
+    const isiSec = Number((isiMs / 1000).toFixed(3));
+    const pulseTrialDur = bin + itiDur;
+    const ppiTrialDur = isiSec + bin + itiDur;
     const baseCls = sp.ppiAmbient === "LIGHT" ? activeCls : "tl-dark";
     preSetupSec = acclim + autorefBase;
     let cursor = 0;
@@ -292,9 +301,11 @@ function renderTimeline(cfg, s4) {
     const cueVisW = Math.max(4, itiDur * 0.18);
     for (let i = 0; i < n; i++) {
       const isPpi = !isAlt || (i % 2 === 1);
-      segs.push({ cls: isPpi ? "tl-ppi" : "tl-vib", w: cueVisW, txt: "", t0: cursor, t1: cursor + bin });
-      segs.push({ cls: baseCls, w: itiDur, txt: "", t0: cursor + bin, t1: cursor + trialDur });
-      cursor += trialDur;
+      const stimSpan = isPpi ? (isiSec + bin) : bin;
+      const tDur = isPpi ? ppiTrialDur : pulseTrialDur;
+      segs.push({ cls: isPpi ? "tl-ppi" : "tl-vib", w: cueVisW, txt: "", t0: cursor, t1: cursor + stimSpan });
+      segs.push({ cls: baseCls, w: itiDur, txt: "", t0: cursor + stimSpan, t1: cursor + tDur });
+      cursor += tDur;
     }
     if (totalTrials > n) {
       segs.push({ cls: "tl-acclim", w: itiDur, txt: `+${totalTrials - n}`, t0: cursor, t1: s4.totalRuntimeSec });

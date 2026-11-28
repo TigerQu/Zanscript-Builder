@@ -128,11 +128,68 @@ function computePreflightChecks(cfgIn, bundleIn) {
     }
   }
 
-  // Short pulses
-  if ((cfg.stimId === "light_off_startle" || cfg.stimId === "light_on_pulse") &&
-      parseFloat(sp.pulseDurSec) < parseFloat(sp.timeBinSec)) {
-    add("info", `Pulse (${sp.pulseDurSec} s) is shorter than the time bin (${sp.timeBinSec} s)`,
-      "Each pulse is recorded inside a single time bin, so its effect is averaged over the whole bin.", "stimulus");
+  // Short pulses & fractional multi-bin tail pulses
+  if (cfg.stimId === "light_off_startle" || cfg.stimId === "light_on_pulse") {
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const pulseDur = Math.max(cfg.stimId === "light_off_startle" ? 0.1 : 0.05, parseFloat(sp.pulseDurSec) || 1);
+    if (pulseDur < bin) {
+      add("info", `Pulse (${pulseDur} s) is shorter than the time bin (${bin} s)`,
+        "Each pulse is recorded inside a single time bin, so its effect is averaged over the whole bin.", "stimulus");
+    } else {
+      const fullPulseBins = Math.floor((pulseDur + 1e-9) / bin);
+      const remPulse = Number((pulseDur - fullPulseBins * bin).toFixed(3));
+      if (fullPulseBins >= 1 && remPulse >= 0.001) {
+        const postWait = Number((bin - remPulse).toFixed(3));
+        add("info", `Pulse (${pulseDur} s) ends mid-bin in bin ${fullPulseBins + 1}`,
+          `Exact ${pulseDur} s pulse duration is preserved across ${fullPulseBins} full ${bin} s bin${fullPulseBins === 1 ? "" : "s"} plus a final bin sharing ${remPulse} s pulse + ${postWait} s recovery.`,
+          "stimulus");
+      }
+    }
+  }
+
+  // Phase / hold duration bin rounding (L/D transitions & Temperature Ramp)
+  if (cfg.stimId === "ld_transitions") {
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const phaseRaw = Math.max(bin, parseInt(sp.ldPhaseSec, 10) || 300);
+    const actualPhaseSec = Math.max(1, Math.round(phaseRaw / bin)) * bin;
+    if (Math.abs(actualPhaseSec - phaseRaw) > 1e-6) {
+      add("info", `Phase duration adjusted from ${phaseRaw} s to ${actualPhaseSec} s`,
+        `Requested L/D phase (${phaseRaw} s) is rounded to ${actualPhaseSec / bin} x ${bin} s bins.`,
+        "stimulus");
+    }
+  } else if (cfg.stimId === "temp_ramp") {
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const holdRaw = Math.max(bin, parseInt(sp.rampHoldSec, 10) || 300);
+    const actualHoldSec = Math.max(1, Math.round(holdRaw / bin)) * bin;
+    if (Math.abs(actualHoldSec - holdRaw) > 1e-6) {
+      add("info", `Temperature hold adjusted from ${holdRaw} s to ${actualHoldSec} s`,
+        `Requested hold duration (${holdRaw} s) is rounded to ${actualHoldSec / bin} x ${bin} s bins.`,
+        "stimulus");
+    }
+  }
+
+  // Pre-stimulus baseline bin alignment across all 5 startle & PPI protocols
+  if (["light_off_startle", "light_on_pulse", "vibration_startle", "acoustic_startle", "ppi"].includes(cfg.stimId)) {
+    const bin = Math.max(1, parseFloat(sp.timeBinSec) || 1);
+    const preSec = Math.max(0, parseIntOr(sp.preBaselineSec, 60));
+    const preBins = preSec > 0 ? Math.max(1, Math.round(preSec / bin)) : 0;
+    const actualPreSec = preBins * bin;
+    if (preSec > 0 && Math.abs(actualPreSec - preSec) > 1e-6) {
+      add("info", `Pre-stimulus baseline adjusted from ${preSec} s to ${actualPreSec} s`,
+        `Aligned to ${preBins} x ${bin} s time bin${preBins === 1 ? "" : "s"} so the baseline phase is preserved in the summary CSV.`,
+        "stimulus");
+    }
+  }
+
+  // PPI short-ISI host dispatch timing note
+  if (cfg.stimId === "ppi") {
+    const isiMs = Math.min(2000, Math.max(50, parseInt(sp.ppiIsiMs, 10) || 300));
+    const isiSec = Number((isiMs / 1000).toFixed(3));
+    if (isiMs < 150) {
+      add("info", `Short PPI ISI (${isiMs} ms) uses host WAIT(${isiSec})`,
+        "Split two-command PPI aligns PULSE_ALONE and PPI_TRIAL snapshots to main-pulse onset, but host WAIT(ISI_SEC) + two serial ZCOMMAND dispatches can add ~10-30 ms jitter below 150 ms. Run a quick dry-run and inspect PPI_TRIAL CSV RUNTIME spacing.",
+        "stimulus");
+    }
   }
 
   // Acclimation

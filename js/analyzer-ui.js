@@ -571,12 +571,25 @@
   }
 
   function getExportBasename() {
-    if (ui.runs.length > 1 && ui.scope === "pooled") {
+    const core = getCore();
+    const isPooled = ui.runs.length > 1 && ui.scope === "pooled";
+    const run = getActiveRun();
+    if (core && typeof core.computeExportBasename === "function") {
+      return core.computeExportBasename({
+        scope: isPooled ? "pooled" : "active",
+        runs: ui.runs,
+        activeRunId: ui.activeRunId,
+        filename: run && run.filename ? run.filename : ""
+      });
+    }
+    if (isPooled) {
       return `zantiks_pooled_${ui.runs.length}runs`;
     }
-    const run = getActiveRun();
     if (run && run.filename) {
-      return run.filename.replace(/\.csv$/i, "").replace(/[^A-Za-z0-9_-]+/g, "_");
+      return run.filename
+        .replace(/\.csv$/i, "")
+        .replace(/[^A-Za-z0-9_-]+/g, "_")
+        .replace(/^_+|_+$/g, "") || "zantiks_analysis";
     }
     return "zantiks_analysis";
   }
@@ -941,21 +954,98 @@
     if (!(opts && opts.silent)) toast("Cleared analyzer workspace");
   }
 
-  function matchCompanionToRun(filename) {
-    if (!ui.runs.length) return null;
-    const normStem = String(filename || "")
-      .replace(/\.[^.]+$/, "")
-      .replace(/(_ZCHANGE|_XY|_SUMMARY)$/i, "")
-      .toLowerCase();
-    for (const r of ui.runs) {
-      const rStem = String(r.filename || "").replace(/\.[^.]+$/, "").toLowerCase();
-      if (rStem && (normStem === rStem || normStem.startsWith(rStem) || rStem.startsWith(normStem))) {
-        return r;
-      }
-      const rId = String(r.runId || "").toLowerCase();
-      if (rId && normStem.includes(rId)) return r;
+  function matchCompanionToRun(filename, compKind) {
+    if (!ui.runs.length) {
+      return { run: null, matchKind: "no_runs", warning: "" };
     }
-    return getActiveRun();
+    const rawName = String(filename || "");
+    const rawStem = rawName.replace(/\.[^.]+$/, "").toLowerCase();
+    const normStem = rawStem.replace(/(?:_zchange|_xy|_summary)$/i, "");
+
+    const runEntries = ui.runs.map(r => {
+      const rStemRaw = String(r.filename || "").replace(/\.[^.]+$/, "").toLowerCase();
+      const rStem = rStemRaw.replace(/(?:_summary)$/i, "");
+      const rId = String(r.runId || "").trim().toLowerCase();
+      return { run: r, rStemRaw, rStem, rId };
+    });
+
+    // 1. Exact stem match
+    const exactStem = runEntries.filter(e =>
+      normStem && (e.rStem === normStem || e.rStemRaw === normStem || e.rStem === rawStem || e.rStemRaw === rawStem)
+    );
+    if (exactStem.length === 1) {
+      return { run: exactStem[0].run, matchKind: "exact", warning: "" };
+    }
+    if (exactStem.length > 1) {
+      return {
+        run: null,
+        matchKind: "ambiguous",
+        warning: `Ambiguous companion "${rawName}": matches multiple runs (${exactStem.map(e => e.run.runId).join(", ")}). Not attached.`
+      };
+    }
+
+    // 2. Exact normalized runId match
+    const exactId = runEntries.filter(e =>
+      e.rId && (normStem === e.rId || rawStem === e.rId)
+    );
+    if (exactId.length === 1) {
+      return { run: exactId[0].run, matchKind: "runId", warning: "" };
+    }
+    if (exactId.length > 1) {
+      return {
+        run: null,
+        matchKind: "ambiguous",
+        warning: `Ambiguous companion "${rawName}": matches multiple run IDs (${exactId.map(e => e.run.runId).join(", ")}). Not attached.`
+      };
+    }
+
+    // 3. Longest delimiter-bounded prefix match (next char must be [-_.\s], never alphanumeric)
+    const isDelimitedPrefix = (str, prefix) => {
+      if (!str || !prefix || str.length <= prefix.length || !str.startsWith(prefix)) return false;
+      const nextCh = str.charAt(prefix.length);
+      return nextCh === "_" || nextCh === "-" || nextCh === "." || /\s/.test(nextCh);
+    };
+
+    const prefixMatches = [];
+    for (const e of runEntries) {
+      let bestLen = 0;
+      const candidates = [e.rStem, e.rStemRaw, e.rId].filter(Boolean);
+      for (const cand of candidates) {
+        if (isDelimitedPrefix(normStem, cand)) bestLen = Math.max(bestLen, cand.length);
+        if (isDelimitedPrefix(cand, normStem)) bestLen = Math.max(bestLen, normStem.length);
+      }
+      if (bestLen > 0) prefixMatches.push({ run: e.run, len: bestLen });
+    }
+    if (prefixMatches.length > 0) {
+      prefixMatches.sort((a, b) => b.len - a.len);
+      const topLen = prefixMatches[0].len;
+      const topRuns = prefixMatches.filter(m => m.len === topLen);
+      if (topRuns.length === 1) {
+        return { run: topRuns[0].run, matchKind: "prefix", warning: "" };
+      }
+      return {
+        run: null,
+        matchKind: "ambiguous",
+        warning: `Ambiguous companion "${rawName}": tied prefix match across ${topRuns.map(m => m.run.runId).join(", ")}. Not attached.`
+      };
+    }
+
+    // 4. Fallback ONLY for single loaded run or generic experiment context JSON
+    if (ui.runs.length === 1) {
+      return { run: ui.runs[0], matchKind: "single_run", warning: "" };
+    }
+    const isGenericContext = (compKind === "context" || /\.json$/i.test(rawName)) &&
+      /^(?:experiment|experiment_context)$/i.test(rawStem);
+    if (isGenericContext) {
+      return { run: getActiveRun(), matchKind: "generic", warning: "" };
+    }
+
+    // 5. Unmatched in multi-run mode: never silently overwrite any run
+    return {
+      run: null,
+      matchKind: "unmatched",
+      warning: `Unmatched companion "${rawName}": no loaded run matched (${ui.runs.map(r => r.runId).join(", ")}). Not attached.`
+    };
   }
 
   async function handleIncomingFiles(fileList, opts) {
@@ -1093,8 +1183,15 @@
       loadedAny = true;
     }
 
+    const warnings = [];
     for (const comp of companions) {
-      const targetRun = matchCompanionToRun(comp.name);
+      const match = matchCompanionToRun(comp.name, comp.kind);
+      const targetRun = match.run;
+      if (!targetRun && match.matchKind !== "no_runs") {
+        if (match.warning) warnings.push(match.warning);
+        continue;
+      }
+      const destTag = targetRun ? ` → ${targetRun.runId}` : "";
       if (comp.kind === "context") {
         if (targetRun) {
           targetRun.context = comp.data;
@@ -1104,17 +1201,17 @@
           ui.pendingContextFilename = comp.name;
         }
         syncQcPresetFromContext(comp.data);
-        msgs.push(`Context (${comp.name})`);
+        msgs.push(`Context (${comp.name}${destTag})`);
         loadedAny = true;
       } else if (comp.kind === "zchange") {
         if (targetRun) targetRun.zchangeParsed = comp.data;
         else ui.pendingZchange = comp.data;
-        msgs.push(`_ZCHANGE (${comp.data.events ? comp.data.events.length : comp.data.rowCount} events)`);
+        msgs.push(`_ZCHANGE (${comp.data.events ? comp.data.events.length : comp.data.rowCount} events${destTag})`);
         loadedAny = true;
       } else if (comp.kind === "xy") {
         if (targetRun) targetRun.xyParsed = comp.data;
         else ui.pendingXy = comp.data;
-        msgs.push(`_XY (${comp.data.rowCount} frames)`);
+        msgs.push(`_XY (${comp.data.rowCount} frames${destTag})`);
         loadedAny = true;
       }
     }
@@ -1129,7 +1226,13 @@
       syncLegacyStateAliases();
       if (ui.runs.length > 0) recomputeAndRender({ onDatasetLoad: summaries.length > 0 });
       else renderAll();
-      if (msgs.length) toast(`Loaded: ${msgs.join(" · ")}`);
+    }
+    if (msgs.length && warnings.length) {
+      toast(`Loaded: ${msgs.join(" · ")} · Warning: ${warnings.join(" · ")}`);
+    } else if (warnings.length) {
+      toast(`Warning: ${warnings.join(" · ")}`);
+    } else if (msgs.length) {
+      toast(`Loaded: ${msgs.join(" · ")}`);
     }
   }
 
@@ -1263,6 +1366,7 @@
 
   function buildExportPayload() {
     return {
+      exportBasename: getExportBasename(),
       analysis: ui.analysis,
       scope: ui.runs.length > 1 ? ui.scope : "active",
       unitOfAnalysis: ui.runs.length > 1 && ui.scope === "pooled" ? ui.unitOfAnalysis : "wells",
@@ -3179,24 +3283,32 @@
       const col = getGroupColor(s.group);
       const vals = s.values || [];
       if (ui.tsShowSem && s.n > 1) {
-        const up = [], lo = [];
+        let segUp = [], segLo = [];
+        const flushRibbon = () => {
+          if (segUp.length >= 2) {
+            const rd = "M " + segUp.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L ") +
+              " L " + segLo.reverse().map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L ") + " Z";
+            out += `<path d="${rd}" fill="${col}" fill-opacity="0.16"/>`;
+          }
+          segUp = []; segLo = [];
+        };
         offsets.forEach((t, i) => {
           const v = vals[i];
-          if (!v || !Number.isFinite(v.mean)) return;
-          up.push([sx(t), sy(v.mean + (v.sem || 0))]);
-          lo.push([sx(t), sy(Math.max(yMin, v.mean - (v.sem || 0)))]);
+          if (!v || !Number.isFinite(v.mean)) { flushRibbon(); return; }
+          const sem = Number.isFinite(v.sem) ? v.sem : 0;
+          segUp.push([sx(t), sy(v.mean + sem)]);
+          segLo.push([sx(t), sy(Math.max(yMin, v.mean - sem))]);
         });
-        if (up.length >= 2) {
-          const d = "M " + up.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L ") +
-            " L " + lo.reverse().map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L ") + " Z";
-          out += `<path d="${d}" fill="${col}" fill-opacity="0.16"/>`;
-        }
+        flushRibbon();
       }
-      const d = offsets.map((t, i) => {
+      let d = "", open = false;
+      offsets.forEach((t, i) => {
         const v = vals[i];
-        return (v && Number.isFinite(v.mean)) ? `${i === 0 ? "M" : "L"} ${sx(t).toFixed(1)} ${sy(v.mean).toFixed(1)}` : "";
-      }).filter(Boolean).join(" ");
-      if (d) out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2.2"/>`;
+        if (!v || !Number.isFinite(v.mean)) { open = false; return; }
+        d += (open ? " L " : " M ") + `${sx(t).toFixed(1)} ${sy(v.mean).toFixed(1)}`;
+        open = true;
+      });
+      if (d) out += `<path d="${d.trim()}" fill="none" stroke="${col}" stroke-width="2.2"/>`;
       offsets.forEach((t, i) => {
         const v = vals[i];
         if (v && Number.isFinite(v.mean)) {
@@ -3266,8 +3378,13 @@
     for (const g of visGroups) {
       const col = getGroupColor(g);
       const pts = hByG[g].trialSeries || [];
-      const d = pts.map((pt, i) => (pt && Number.isFinite(pt.mean)) ? `${i === 0 ? "M" : "L"} ${sx(i).toFixed(1)} ${sy(pt.mean).toFixed(1)}` : "").filter(Boolean).join(" ");
-      if (d) out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2.2"/>`;
+      let d = "", open = false;
+      pts.forEach((pt, i) => {
+        if (!pt || !Number.isFinite(pt.mean)) { open = false; return; }
+        d += (open ? " L " : " M ") + `${sx(i).toFixed(1)} ${sy(pt.mean).toFixed(1)}`;
+        open = true;
+      });
+      if (d) out += `<path d="${d.trim()}" fill="none" stroke="${col}" stroke-width="2.2"/>`;
       pts.forEach((pt, i) => {
         if (!pt || !Number.isFinite(pt.mean)) return;
         const xx = sx(i), yy = sy(pt.mean);
@@ -5208,7 +5325,9 @@
       goToPage,
       recomputeAndRender,
       switchActiveRun,
-      buildExportPayload
+      buildExportPayload,
+      getExportBasename,
+      matchCompanionToRun
     };
   }
 
